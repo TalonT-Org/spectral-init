@@ -17,6 +17,7 @@ from typing import Callable
 import numpy as np
 import scipy.sparse
 import scipy.sparse.csgraph
+import scipy.sparse.linalg
 from numpy.random import RandomState
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -219,18 +220,100 @@ def generate_comp_c_components(
     return int(n_components), labels
 
 
-# ---------------------------------------------------------------------------
-# Downstream pipeline stubs (implemented in later issues)
-# ---------------------------------------------------------------------------
+def generate_comp_d_eigensolver(
+    L: scipy.sparse.csr_matrix,
+    dim: int,
+    outdir: Path,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Compute the dim+1 smallest eigenpairs of the normalized Laplacian via ARPACK.
 
-def step_compute_eigenvectors(laplacian: scipy.sparse.csr_matrix | None, name: str, outdir: Path, params: dict) -> None:
-    """Compute leading eigenvectors via solver escalation chain. (stub)"""
-    print("  [step_compute_eigenvectors] not implemented")
+    Uses Python UMAP's exact parameters:
+      k   = dim + 1  (extra for the trivial zero eigenvector)
+      ncv = max(2*k + 1, int(sqrt(n)))  (number of Lanczos vectors)
+      tol = 1e-4, v0 = ones(n), maxiter = n * 5
+
+    eigsh returns eigenvalues in ascending order.
+    Residuals are ||L·v − λ·v|| / ||v|| per eigenpair.
+    """
+    n = L.shape[0]
+    k = dim + 1
+    ncv = max(2 * k + 1, int(np.sqrt(n)))
+    v0 = np.ones(n, dtype=np.float64)
+
+    eigenvalues, eigenvectors = scipy.sparse.linalg.eigsh(
+        L, k=k, which="SM", ncv=ncv, tol=1e-4, v0=v0, maxiter=n * 5
+    )
+
+    residuals = np.array([
+        np.linalg.norm(L @ eigenvectors[:, i] - eigenvalues[i] * eigenvectors[:, i])
+        / np.linalg.norm(eigenvectors[:, i])
+        for i in range(k)
+    ])
+
+    np.savez(
+        outdir / "comp_d_eigensolver",
+        eigenvalues=eigenvalues,
+        eigenvectors=eigenvectors,
+        residuals=residuals,
+        k=np.int32(k),
+    )
+    return eigenvalues, eigenvectors
 
 
-def step_compute_embedding(eigenvectors: None, name: str, outdir: Path, params: dict) -> None:
-    """Scale and noise-inject eigenvectors to UMAP embedding. (stub)"""
-    print("  [step_compute_embedding] not implemented")
+def generate_comp_e_selection(
+    eigenvalues: np.ndarray,
+    eigenvectors: np.ndarray,
+    dim: int,
+    outdir: Path,
+) -> np.ndarray:
+    """
+    Select the dim non-trivial eigenvectors by sorting eigenvalues and skipping index 0.
+
+    order = argsort(eigenvalues)[1 : dim+1]   — skips the trivial (smallest) eigenvector
+    embedding = eigenvectors[:, order]         — shape (n, dim)
+    """
+    order = np.argsort(eigenvalues)[1 : dim + 1]
+    embedding = eigenvectors[:, order]
+
+    np.savez(
+        outdir / "comp_e_selection",
+        order=order.astype(np.int32),
+        embedding=embedding,
+    )
+    return embedding
+
+
+def generate_comp_f_scaling(
+    embedding: np.ndarray,
+    outdir: Path,
+) -> np.ndarray:
+    """
+    Scale embedding to max absolute value 10, cast to f32, add seeded Gaussian noise.
+
+    expansion = 10.0 / max(|embedding|)
+    pre_noise = (embedding * expansion).astype(f32)
+    noise     = RandomState(42).normal(scale=0.0001, size=pre_noise.shape).astype(f32)
+    final     = pre_noise + noise
+
+    RandomState(42) is re-created from scratch each call so output is byte-identical
+    across runs on the same platform.
+    """
+    expansion = 10.0 / np.abs(embedding).max()
+    pre_noise = (embedding * expansion).astype(np.float32)
+    noise = np.random.RandomState(42).normal(
+        scale=0.0001, size=pre_noise.shape
+    ).astype(np.float32)
+    final = pre_noise + noise
+
+    np.savez(
+        outdir / "comp_f_scaling",
+        pre_noise=pre_noise,
+        noise=noise,
+        final=final,
+        expansion=np.float64(expansion),
+    )
+    return final
 
 
 # ---------------------------------------------------------------------------
@@ -244,6 +327,7 @@ def generate_all_for_dataset(
     outdir: Path,
     verify: bool = False,
     n_neighbors: int = 15,
+    n_components: int = 2,
 ) -> dict:
     """Run all pipeline steps for a single dataset, return manifest entry."""
     dataset_dir = outdir / name
@@ -293,11 +377,17 @@ def generate_all_for_dataset(
     L = generate_comp_b_laplacian(pruned, sqrt_deg, dataset_dir)
     print(f"  comp_b_laplacian.npz written")
 
-    n_components, labels = generate_comp_c_components(pruned, dataset_dir)
-    print(f"  comp_c_components.npz written ({n_components} component(s))")
+    n_conn_components, labels = generate_comp_c_components(pruned, dataset_dir)
+    print(f"  comp_c_components.npz written ({n_conn_components} component(s))")
 
-    eigs  = step_compute_eigenvectors(L, name, dataset_dir, params)
-    _emb  = step_compute_embedding(eigs, name, dataset_dir, params)
+    eigenvalues, eigenvectors = generate_comp_d_eigensolver(L, n_components, dataset_dir)
+    print(f"  comp_d_eigensolver.npz written")
+
+    embedding = generate_comp_e_selection(eigenvalues, eigenvectors, n_components, dataset_dir)
+    print(f"  comp_e_selection.npz written")
+
+    generate_comp_f_scaling(embedding, dataset_dir)
+    print(f"  comp_f_scaling.npz written")
 
     return {"name": name, "shape": list(X.shape), "params": params, "n_neighbors": n_neighbors}
 
@@ -326,6 +416,10 @@ def main() -> None:
         "--n-neighbors", type=int, default=15,
         help="Number of nearest neighbors for KNN steps (default: 15)",
     )
+    parser.add_argument(
+        "--n-components", type=int, default=2,
+        help="Number of UMAP embedding dimensions (default: 2)",
+    )
     args = parser.parse_args()
 
     outdir = Path(args.output_dir)
@@ -348,6 +442,7 @@ def main() -> None:
         entry = generate_all_for_dataset(
             name, gen_fn, kwargs, outdir,
             verify=args.verify, n_neighbors=args.n_neighbors,
+            n_components=args.n_components,
         )
         manifest["datasets"].append(entry)
 
