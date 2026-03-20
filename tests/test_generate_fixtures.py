@@ -94,7 +94,7 @@ def test_pipeline_is_deterministic():
                 )
 
 
-def test_all_7_datasets_generate():
+def test_all_9_datasets_generate():
     with tempfile.TemporaryDirectory() as td:
         cmd = [sys.executable, str(SCRIPT), "--output-dir", td]
         result = subprocess.run(cmd, capture_output=True, text=True)
@@ -102,6 +102,7 @@ def test_all_7_datasets_generate():
         expected_datasets = [
             "blobs_50", "blobs_500", "moons_200", "blobs_5000",
             "circles_300", "near_dupes_100", "disconnected_200",
+            "blobs_connected_200", "blobs_connected_2000",
         ]
         for name in expected_datasets:
             for fname in (
@@ -177,14 +178,15 @@ def test_comp_b_laplacian_output(blobs_50_outdir: Path):
     assert eigvals.max() <= 2.0 + 1e-10, f"Eigenvalue above 2: {eigvals.max()}"
 
 
-def test_comp_c_components_connected(blobs_50_outdir: Path):
+def test_comp_c_components_blobs_50_disconnected(blobs_50_outdir: Path):
     d = np.load(blobs_50_outdir / "blobs_50" / "comp_c_components.npz")
     assert set(d.files) >= {"n_components", "labels"}
-    assert int(d["n_components"]) == 1, "blobs_50 must be a single connected component"
+    assert int(d["n_components"]) > 1, (
+        "blobs_50 must be disconnected (multiple components after graph construction)"
+    )
     labels = d["labels"]
     assert labels.dtype == np.int32
     assert labels.shape == (50,)
-    assert (labels == 0).all(), "all nodes in a single component must have label 0"
 
 
 def test_comp_c_components_disconnected(disconnected_200_outdir: Path):
@@ -203,6 +205,7 @@ def test_step3_membership_no_explicit_zeros():
     datasets = [
         "blobs_50", "blobs_500", "moons_200", "blobs_5000",
         "circles_300", "near_dupes_100", "disconnected_200",
+        "blobs_connected_200", "blobs_connected_2000",
     ]
     with tempfile.TemporaryDirectory() as td:
         _run(datasets, td)

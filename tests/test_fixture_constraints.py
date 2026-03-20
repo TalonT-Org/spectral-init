@@ -3,8 +3,12 @@ import numpy as np
 import pytest
 from pathlib import Path
 
-DATASETS = ["blobs_50", "disconnected_200", "near_dupes_100",
-            "blobs_connected_200", "blobs_connected_2000"]
+CONNECTED_DATASETS = [
+    "moons_200", "circles_300", "near_dupes_100",
+    "blobs_connected_200", "blobs_connected_2000",
+]
+DISCONNECTED_DATASETS = ["blobs_50", "blobs_500", "blobs_5000", "disconnected_200"]
+ALL_DATASETS = CONNECTED_DATASETS + DISCONNECTED_DATASETS
 SCRIPT = Path(__file__).parent / "generate_fixtures.py"
 
 
@@ -20,12 +24,12 @@ def _run(datasets: list[str], outdir: str, extra_args: list[str] | None = None) 
 
 @pytest.fixture(scope="session")
 def comp_d_e_f_outdir(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """Generate comp_d/e/f artifacts for three representative datasets once per session.
+    """Generate comp_d/e/f artifacts for all datasets once per session.
 
     Note: pytest-xdist (``-n auto``) is not supported; run without ``-n`` flag.
     """
     td = tmp_path_factory.mktemp("comp_d_e_f")
-    _run(DATASETS, str(td))
+    _run(ALL_DATASETS, str(td))
     return td
 
 
@@ -37,38 +41,50 @@ def load(base: Path, name: str, fname: str):
 
 # ── Component D ───────────────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("name", DATASETS)
+@pytest.mark.parametrize("name", ALL_DATASETS)
 def test_comp_d_eigenvalues_range(name, comp_d_e_f_outdir):
     d = load(comp_d_e_f_outdir, name, "comp_d_eigensolver.npz")
     lam = d["eigenvalues"]
     assert np.all(lam >= -1e-12) and np.all(lam <= 2.0 + 1e-12)
 
-@pytest.mark.parametrize("name", DATASETS)
+@pytest.mark.parametrize("name", ALL_DATASETS)
 def test_comp_d_eigenvalues_sorted(name, comp_d_e_f_outdir):
     d = load(comp_d_e_f_outdir, name, "comp_d_eigensolver.npz")
     lam = d["eigenvalues"]
     assert np.all(np.diff(lam) >= -1e-12)   # non-decreasing
 
-@pytest.mark.parametrize("name", ["blobs_50", "near_dupes_100",
-                                   "blobs_connected_200", "blobs_connected_2000"])
+@pytest.mark.parametrize("name", CONNECTED_DATASETS)
 def test_comp_d_first_eigenvalue_near_zero_connected(name, comp_d_e_f_outdir):
     """For connected graphs, smallest eigenvalue of normalized Laplacian is 0."""
     d = load(comp_d_e_f_outdir, name, "comp_d_eigensolver.npz")
     assert d["eigenvalues"][0] < 1e-6
 
-@pytest.mark.parametrize("name", DATASETS)
+
+@pytest.mark.parametrize("name", DISCONNECTED_DATASETS)
+def test_comp_d_n_components_near_zero_eigenvalues(name, comp_d_e_f_outdir):
+    """Disconnected graphs have exactly n_components near-zero eigenvalues."""
+    c = load(comp_d_e_f_outdir, name, "comp_c_components.npz")
+    d = load(comp_d_e_f_outdir, name, "comp_d_eigensolver.npz")
+    n_components = int(c["n_components"])
+    near_zero = int(np.sum(d["eigenvalues"] < 1e-6))
+    assert near_zero == n_components, (
+        f"{name}: expected {n_components} near-zero eigenvalues (one per component), "
+        f"got {near_zero}"
+    )
+
+@pytest.mark.parametrize("name", ALL_DATASETS)
 def test_comp_d_residuals_small(name, comp_d_e_f_outdir):
     d = load(comp_d_e_f_outdir, name, "comp_d_eigensolver.npz")
     assert np.all(d["residuals"] < 1e-3)
 
-@pytest.mark.parametrize("name", DATASETS)
+@pytest.mark.parametrize("name", ALL_DATASETS)
 def test_comp_d_eigenvectors_orthonormal(name, comp_d_e_f_outdir):
     d = load(comp_d_e_f_outdir, name, "comp_d_eigensolver.npz")
     V = d["eigenvectors"]
     VTV = V.T @ V
     assert np.allclose(VTV, np.eye(VTV.shape[0]), atol=1e-10)
 
-@pytest.mark.parametrize("name", DATASETS)
+@pytest.mark.parametrize("name", ALL_DATASETS)
 def test_comp_d_k_scalar(name, comp_d_e_f_outdir):
     d = load(comp_d_e_f_outdir, name, "comp_d_eigensolver.npz")
     e = load(comp_d_e_f_outdir, name, "comp_e_selection.npz")
@@ -78,7 +94,7 @@ def test_comp_d_k_scalar(name, comp_d_e_f_outdir):
 
 # ── Component E ───────────────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("name", DATASETS)
+@pytest.mark.parametrize("name", ALL_DATASETS)
 def test_comp_e_order_skips_trivial(name, comp_d_e_f_outdir):
     e = load(comp_d_e_f_outdir, name, "comp_e_selection.npz")
     d = load(comp_d_e_f_outdir, name, "comp_d_eigensolver.npz")
@@ -86,7 +102,7 @@ def test_comp_e_order_skips_trivial(name, comp_d_e_f_outdir):
     trivial_col = np.argsort(d["eigenvalues"])[0]
     assert trivial_col not in order
 
-@pytest.mark.parametrize("name", DATASETS)
+@pytest.mark.parametrize("name", ALL_DATASETS)
 def test_comp_e_embedding_shape(name, comp_d_e_f_outdir):
     e = load(comp_d_e_f_outdir, name, "comp_e_selection.npz")
     raw = np.load(comp_d_e_f_outdir / name / "step0_raw_data.npz")
@@ -96,17 +112,17 @@ def test_comp_e_embedding_shape(name, comp_d_e_f_outdir):
 
 # ── Component F ───────────────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("name", DATASETS)
+@pytest.mark.parametrize("name", ALL_DATASETS)
 def test_comp_f_pre_noise_max_abs_10(name, comp_d_e_f_outdir):
     f = load(comp_d_e_f_outdir, name, "comp_f_scaling.npz")
     assert abs(np.abs(f["pre_noise"]).max() - 10.0) < 1e-5   # f32 precision
 
-@pytest.mark.parametrize("name", DATASETS)
+@pytest.mark.parametrize("name", ALL_DATASETS)
 def test_comp_f_final_equals_pre_plus_noise(name, comp_d_e_f_outdir):
     f = load(comp_d_e_f_outdir, name, "comp_f_scaling.npz")
     assert np.allclose(f["final"], f["pre_noise"] + f["noise"], atol=1e-7)
 
-@pytest.mark.parametrize("name", DATASETS)
+@pytest.mark.parametrize("name", ALL_DATASETS)
 def test_comp_f_noise_statistics(name, comp_d_e_f_outdir):
     f = load(comp_d_e_f_outdir, name, "comp_f_scaling.npz")
     noise = f["noise"].astype(np.float64)
@@ -114,7 +130,7 @@ def test_comp_f_noise_statistics(name, comp_d_e_f_outdir):
     assert abs(noise.mean()) < tol
     assert abs(noise.std() - 0.0001) < tol
 
-@pytest.mark.parametrize("name", DATASETS)
+@pytest.mark.parametrize("name", ALL_DATASETS)
 def test_comp_f_dtypes(name, comp_d_e_f_outdir):
     f = load(comp_d_e_f_outdir, name, "comp_f_scaling.npz")
     assert f["pre_noise"].dtype == np.float32
@@ -144,12 +160,12 @@ def test_blobs_connected_2000_min_n(comp_d_e_f_outdir):
 
 # --- REQ-META-001: solver_name ---
 
-@pytest.mark.parametrize("name", DATASETS)
+@pytest.mark.parametrize("name", ALL_DATASETS)
 def test_comp_d_solver_name_present(name, comp_d_e_f_outdir):
     d = load(comp_d_e_f_outdir, name, "comp_d_eigensolver.npz")
     assert "solver_name" in d.files
 
-@pytest.mark.parametrize("name", DATASETS)
+@pytest.mark.parametrize("name", ALL_DATASETS)
 def test_comp_d_solver_name_value(name, comp_d_e_f_outdir):
     d = load(comp_d_e_f_outdir, name, "comp_d_eigensolver.npz")
     val = d["solver_name"].item()
@@ -157,19 +173,19 @@ def test_comp_d_solver_name_value(name, comp_d_e_f_outdir):
 
 # --- REQ-META-002: converged ---
 
-@pytest.mark.parametrize("name", DATASETS)
+@pytest.mark.parametrize("name", ALL_DATASETS)
 def test_comp_d_converged_present(name, comp_d_e_f_outdir):
     d = load(comp_d_e_f_outdir, name, "comp_d_eigensolver.npz")
     assert "converged" in d.files
 
-@pytest.mark.parametrize("name", DATASETS)
+@pytest.mark.parametrize("name", ALL_DATASETS)
 def test_comp_d_converged_dtype(name, comp_d_e_f_outdir):
     d = load(comp_d_e_f_outdir, name, "comp_d_eigensolver.npz")
     assert d["converged"].dtype == np.bool_, (
         f"converged dtype {d['converged'].dtype!r} is not bool"
     )
 
-@pytest.mark.parametrize("name", DATASETS)
+@pytest.mark.parametrize("name", ALL_DATASETS)
 def test_comp_d_metadata_consistency(name, comp_d_e_f_outdir):
     """converged must be True iff solver_name is b'eigsh'."""
     d = load(comp_d_e_f_outdir, name, "comp_d_eigensolver.npz")
@@ -181,12 +197,12 @@ def test_comp_d_metadata_consistency(name, comp_d_e_f_outdir):
 
 # --- REQ-META-003: eigenvalue_gaps ---
 
-@pytest.mark.parametrize("name", DATASETS)
+@pytest.mark.parametrize("name", ALL_DATASETS)
 def test_comp_d_eigenvalue_gaps_present(name, comp_d_e_f_outdir):
     d = load(comp_d_e_f_outdir, name, "comp_d_eigensolver.npz")
     assert "eigenvalue_gaps" in d.files
 
-@pytest.mark.parametrize("name", DATASETS)
+@pytest.mark.parametrize("name", ALL_DATASETS)
 def test_comp_d_eigenvalue_gaps_dtype_shape(name, comp_d_e_f_outdir):
     d = load(comp_d_e_f_outdir, name, "comp_d_eigensolver.npz")
     gaps = d["eigenvalue_gaps"]
@@ -194,12 +210,12 @@ def test_comp_d_eigenvalue_gaps_dtype_shape(name, comp_d_e_f_outdir):
     assert gaps.dtype == np.float64, f"eigenvalue_gaps dtype {gaps.dtype!r} != float64"
     assert gaps.shape == (k - 1,), f"eigenvalue_gaps shape {gaps.shape} != ({k-1},)"
 
-@pytest.mark.parametrize("name", DATASETS)
+@pytest.mark.parametrize("name", ALL_DATASETS)
 def test_comp_d_eigenvalue_gaps_match_diff(name, comp_d_e_f_outdir):
     d = load(comp_d_e_f_outdir, name, "comp_d_eigensolver.npz")
     assert np.allclose(d["eigenvalue_gaps"], np.diff(d["eigenvalues"]), atol=1e-15)
 
-@pytest.mark.parametrize("name", DATASETS)
+@pytest.mark.parametrize("name", ALL_DATASETS)
 def test_comp_d_eigenvalue_gaps_nonneg(name, comp_d_e_f_outdir):
     """Gaps must be >= 0 because eigenvalues are sorted ascending."""
     d = load(comp_d_e_f_outdir, name, "comp_d_eigensolver.npz")
@@ -209,7 +225,7 @@ def test_comp_d_eigenvalue_gaps_nonneg(name, comp_d_e_f_outdir):
 
 # --- REQ-VER-003: comparison method reporting ---
 
-@pytest.mark.parametrize("name", DATASETS)
+@pytest.mark.parametrize("name", ALL_DATASETS)
 def test_comp_d_e_gap_aware_comparison_reports_method(name, comp_d_e_f_outdir):
     """Gap-aware comparison must report the method used for each column/cluster."""
     import sys
