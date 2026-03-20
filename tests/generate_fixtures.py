@@ -140,6 +140,7 @@ def generate_step3_membership(
         np.ascontiguousarray(rhos.astype(np.float32)),
     )
     directed = scipy.sparse.coo_matrix((vals, (rows, cols)), shape=(n, n))
+    directed.eliminate_zeros()
     scipy.sparse.save_npz(str(outdir / f"step3_membership{suffix}"), directed)
     return directed
 
