@@ -37,19 +37,19 @@ def test_registry_has_9_datasets():
 
 def test_blobs_connected_shapes():
     """blobs_connected datasets return correct (n, n_features) shapes."""
-    X, params = make_blobs_dataset(n=200, n_features=2, n_centers=3, cluster_std=2.0, seed=42)
+    X, params = make_blobs_dataset(n=200, n_features=2, n_centers=3, cluster_std=3.0, seed=42)
     assert X.shape == (200, 2)
-    assert params["cluster_std"] == 2.0
+    assert params["cluster_std"] == 3.0
 
-    X, params = make_blobs_dataset(n=2000, n_features=10, n_centers=5, cluster_std=3.0, seed=42)
+    X, params = make_blobs_dataset(n=2000, n_features=10, n_centers=5, cluster_std=5.0, seed=42)
     assert X.shape == (2000, 10)
     assert params["n_features"] == 10
 
 
 def test_blobs_connected_deterministic():
     """blobs_connected generators are deterministic with same seed."""
-    X1, _ = make_blobs_dataset(n=200, n_features=2, n_centers=3, cluster_std=2.0, seed=42)
-    X2, _ = make_blobs_dataset(n=200, n_features=2, n_centers=3, cluster_std=2.0, seed=42)
+    X1, _ = make_blobs_dataset(n=200, n_features=2, n_centers=3, cluster_std=3.0, seed=42)
+    X2, _ = make_blobs_dataset(n=200, n_features=2, n_centers=3, cluster_std=3.0, seed=42)
     np.testing.assert_array_equal(X1, X2)
 
 

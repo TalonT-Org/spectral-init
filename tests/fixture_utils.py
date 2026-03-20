@@ -109,8 +109,8 @@ DATASETS: list[tuple[str, Any, dict]] = [
     ("circles_300",      make_circles_dataset,      {"n": 300,  "noise": 0.05,   "factor": 0.5,   "seed": 42}),
     ("near_dupes_100",   make_near_dupes_dataset,   {"n": 100,  "n_dupes": 10,   "jitter": 3e-7,  "seed": 42}),
     ("disconnected_200",      make_disconnected_dataset, {"n": 200,  "n_groups": 4,   "separation": 100.0, "seed": 42}),
-    ("blobs_connected_200",   make_blobs_dataset,        {"n": 200,  "n_features": 2,  "n_centers": 3, "cluster_std": 2.0, "seed": 42}),
-    ("blobs_connected_2000",  make_blobs_dataset,        {"n": 2000, "n_features": 10, "n_centers": 5, "cluster_std": 3.0, "seed": 42}),
+    ("blobs_connected_200",   make_blobs_dataset,        {"n": 200,  "n_features": 2,  "n_centers": 3, "cluster_std": 3.0, "seed": 42}),
+    ("blobs_connected_2000",  make_blobs_dataset,        {"n": 2000, "n_features": 10, "n_centers": 5, "cluster_std": 5.0, "seed": 42}),
 ]
 
 
