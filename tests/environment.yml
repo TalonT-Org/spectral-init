@@ -11,4 +11,4 @@ dependencies:
   - pynndescent=0.5.*
   - umap-learn=0.5.11
   - matplotlib=3.10.*
-  - tqdm
+  - tqdm=4.*
