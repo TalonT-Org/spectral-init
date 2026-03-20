@@ -248,6 +248,11 @@ def generate_comp_d_eigensolver(
     except scipy.sparse.linalg.ArpackNoConvergence:
         # Dense fallback for graphs with degenerate near-zero eigenvalues
         # (e.g. disconnected graphs where #components >= k).
+        print(
+            f"  [WARNING] ARPACK did not converge (k={k}, n={n}); "
+            "falling back to dense numpy.linalg.eigh",
+            file=sys.stderr,
+        )
         L_dense = L.toarray()
         all_eigenvalues, all_eigenvectors = np.linalg.eigh(L_dense)
         eigenvalues = all_eigenvalues[:k]
@@ -260,6 +265,14 @@ def generate_comp_d_eigensolver(
         / np.linalg.norm(eigenvectors[:, i])
         for i in range(k)
     ])
+
+    max_residual = residuals.max()
+    if max_residual >= 1e-4:
+        print(
+            f"  [WARNING] Poor eigensolver quality: max residual={max_residual:.2e} "
+            f"(threshold=1e-4); fixture saved but quality may be insufficient",
+            file=sys.stderr,
+        )
 
     np.savez(
         outdir / "comp_d_eigensolver",
@@ -309,7 +322,12 @@ def generate_comp_f_scaling(
     RandomState(42) is re-created from scratch each call so output is byte-identical
     across runs on the same platform.
     """
-    expansion = 10.0 / np.abs(embedding).max()
+    max_abs = np.abs(embedding).max()
+    if max_abs == 0.0:
+        raise ValueError(
+            "generate_comp_f_scaling: embedding is all-zero; cannot scale to max=10"
+        )
+    expansion = 10.0 / max_abs
     pre_noise = (embedding * expansion).astype(np.float32)
     noise = np.random.RandomState(42).normal(
         scale=0.0001, size=pre_noise.shape
