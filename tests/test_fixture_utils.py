@@ -8,10 +8,8 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
-import pytest
 from scipy.spatial.distance import cdist, pdist
 
-sys.path.insert(0, str(Path(__file__).parent))
 from fixture_utils import (
     DATASETS,
     make_blobs_dataset,
