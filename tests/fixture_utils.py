@@ -19,14 +19,16 @@ from sklearn.datasets import make_blobs, make_circles, make_moons
 # ---------------------------------------------------------------------------
 
 def make_blobs_dataset(
-    n: int, n_features: int = 2, n_centers: int = 5, seed: int = 42
+    n: int, n_features: int = 2, n_centers: int = 5,
+    cluster_std: float = 1.0, seed: int = 42
 ) -> tuple[np.ndarray, dict]:
     X, _ = make_blobs(
-        n_samples=n, n_features=n_features, centers=n_centers, random_state=seed
+        n_samples=n, n_features=n_features, centers=n_centers,
+        cluster_std=cluster_std, random_state=seed
     )
     return X.astype(np.float64), {
         "type": "blobs", "n": n, "n_features": n_features,
-        "n_centers": n_centers, "seed": seed,
+        "n_centers": n_centers, "cluster_std": cluster_std, "seed": seed,
     }
 
 
@@ -106,7 +108,9 @@ DATASETS: list[tuple[str, Any, dict]] = [
     ("blobs_5000",       make_blobs_dataset,        {"n": 5000, "n_features": 2, "n_centers": 10, "seed": 42}),
     ("circles_300",      make_circles_dataset,      {"n": 300,  "noise": 0.05,   "factor": 0.5,   "seed": 42}),
     ("near_dupes_100",   make_near_dupes_dataset,   {"n": 100,  "n_dupes": 10,   "jitter": 3e-7,  "seed": 42}),
-    ("disconnected_200", make_disconnected_dataset, {"n": 200,  "n_groups": 4,   "separation": 100.0, "seed": 42}),
+    ("disconnected_200",      make_disconnected_dataset, {"n": 200,  "n_groups": 4,   "separation": 100.0, "seed": 42}),
+    ("blobs_connected_200",   make_blobs_dataset,        {"n": 200,  "n_features": 2,  "n_centers": 3, "cluster_std": 2.0, "seed": 42}),
+    ("blobs_connected_2000",  make_blobs_dataset,        {"n": 2000, "n_features": 10, "n_centers": 5, "cluster_std": 3.0, "seed": 42}),
 ]
 
 
