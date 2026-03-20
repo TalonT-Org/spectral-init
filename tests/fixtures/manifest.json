@@ -1,0 +1,113 @@
+{
+  "generated_at": "2026-03-20T04:46:07.236232+00:00",
+  "datasets": [
+    {
+      "name": "blobs_50",
+      "shape": [
+        50,
+        2
+      ],
+      "params": {
+        "type": "blobs",
+        "n": 50,
+        "n_features": 2,
+        "n_centers": 3,
+        "seed": 42
+      },
+      "n_neighbors": 15
+    },
+    {
+      "name": "blobs_500",
+      "shape": [
+        500,
+        2
+      ],
+      "params": {
+        "type": "blobs",
+        "n": 500,
+        "n_features": 2,
+        "n_centers": 5,
+        "seed": 42
+      },
+      "n_neighbors": 15
+    },
+    {
+      "name": "moons_200",
+      "shape": [
+        200,
+        2
+      ],
+      "params": {
+        "type": "moons",
+        "n": 200,
+        "noise": 0.1,
+        "seed": 42
+      },
+      "n_neighbors": 15
+    },
+    {
+      "name": "blobs_5000",
+      "shape": [
+        5000,
+        2
+      ],
+      "params": {
+        "type": "blobs",
+        "n": 5000,
+        "n_features": 2,
+        "n_centers": 10,
+        "seed": 42
+      },
+      "n_neighbors": 15
+    },
+    {
+      "name": "circles_300",
+      "shape": [
+        300,
+        2
+      ],
+      "params": {
+        "type": "circles",
+        "n": 300,
+        "noise": 0.05,
+        "factor": 0.5,
+        "seed": 42
+      },
+      "n_neighbors": 15
+    },
+    {
+      "name": "near_dupes_100",
+      "shape": [
+        100,
+        2
+      ],
+      "params": {
+        "type": "near_dupes",
+        "n": 100,
+        "n_dupes": 10,
+        "jitter": 3e-07,
+        "dupe_center": [
+          50.0,
+          50.0
+        ],
+        "seed": 42
+      },
+      "n_neighbors": 15
+    },
+    {
+      "name": "disconnected_200",
+      "shape": [
+        200,
+        2
+      ],
+      "params": {
+        "type": "disconnected",
+        "n": 200,
+        "n_groups": 4,
+        "separation": 100.0,
+        "seed": 42
+      },
+      "n_neighbors": 15
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "dataset": "circles_300",
+  "params": {
+    "type": "circles",
+    "n": 300,
+    "noise": 0.05,
+    "factor": 0.5,
+    "seed": 42
+  },
+  "generated_at": "2026-03-20T04:46:18.158776+00:00",
+  "env": {
+    "python": "3.11.15",
+    "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "numpy": "2.2.6",
+    "scipy": "1.15.2",
+    "sklearn": "1.8.0",
+    "umap": "0.5.11"
+  }
+}
