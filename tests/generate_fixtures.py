@@ -480,7 +480,7 @@ def generate_all_for_dataset(
     generate_full_umap_e2e(X, n_components, dataset_dir)
     print(f"  full_umap_e2e.npz written")
 
-    STEP_FILES = [
+    step_files = [
         "step0_raw_data.npz",
         "step1_knn.npz",
         "step2_smooth_knn.npz",
@@ -501,7 +501,7 @@ def generate_all_for_dataset(
         "shape": list(X.shape),
         "params": params,
         "n_neighbors": n_neighbors,
-        "step_files": STEP_FILES,
+        "step_files": step_files,
     }
 
 
