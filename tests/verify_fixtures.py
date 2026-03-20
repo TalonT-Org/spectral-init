@@ -35,7 +35,9 @@ def check_step0(d: Any, n: int) -> list[str]:
             errors.append(f"X.shape[0] {d['X'].shape[0]} != n={n}")
         if not np.all(np.isfinite(d["X"])):
             errors.append("X contains non-finite values")
-    if int(d["n_samples"]) != n:
+    if "n_samples" not in d.files:
+        errors.append("missing key 'n_samples'")
+    elif int(d["n_samples"]) != n:
         errors.append(f"n_samples {d['n_samples']} != {n}")
     return errors
 
@@ -126,7 +128,7 @@ def check_step5a(A5: scipy.sparse.spmatrix, A4: scipy.sparse.spmatrix, n: int) -
         errors.append(f"not symmetric: max|A-A^T|={diff.max():.2e}")
     if A5.nnz > 0:
         n_epochs = 500 if n <= 10000 else 200
-        threshold = A4.data.max() / float(n_epochs)
+        threshold = A4.tocsr().data.max() / float(n_epochs)
         if A5.data.min() < threshold - 1e-12:
             errors.append(f"min nonzero {A5.data.min():.6f} below threshold {threshold:.6f}")
     return errors
@@ -236,8 +238,9 @@ def check_comp_e(d: Any, d_d: Any, n: int, dim: int) -> list[str]:
     # Cross-step: embedding columns must equal eigenvectors[:, order]
     V = d_d["eigenvectors"]
     for i, col in enumerate(order.tolist()):
-        if not np.allclose(emb[:, i], V[:, col], atol=1e-14):
-            errors.append(f"comp_e column {i} != comp_d eigenvectors[:, {col}]")
+        if not (np.allclose(emb[:, i], V[:, col], atol=1e-14) or
+                np.allclose(emb[:, i], -V[:, col], atol=1e-14)):
+            errors.append(f"comp_e column {i} != ±comp_d eigenvectors[:, {col}]")
             break  # one is enough to flag the issue
     return errors
 
@@ -450,8 +453,8 @@ def main(
         if failures:
             all_pass = False
             print(f"  FAIL ({len(failures)} error(s)):")
-            for f in failures:
-                print(f)
+            for msg in failures:
+                print(msg)
         else:
             print(f"  PASS — all checks OK")
 
