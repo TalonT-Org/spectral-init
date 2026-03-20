@@ -24,6 +24,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 from fixture_utils import DATASETS, get_env_metadata, save_dense, save_metadata
 
 
+EXACT_KNN_THRESHOLD = 4096
+
+
 # ---------------------------------------------------------------------------
 # Pipeline step functions — steps 0–2
 # ---------------------------------------------------------------------------
@@ -67,18 +70,45 @@ def generate_step1_knn(
     return knn_indices, knn_dists
 
 
-def generate_step2_smooth_knn(
-    knn_dists: np.ndarray, outdir: Path, n_neighbors: int
+def generate_step1_knn_exact(
+    X: np.ndarray, outdir: Path, n_neighbors: int
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Run UMAP smooth_knn_dist and save step2_smooth_knn.npz.
+    Compute exact KNN via full pairwise distance matrix and save step1_knn_exact.npz.
+
+    Uses sklearn.metrics.pairwise_distances(X, metric="euclidean") — matching
+    UMAP.fit()'s internal behavior for n < EXACT_KNN_THRESHOLD.
+
+    Self (distance 0, argsort column 0) is excluded from output so shape
+    matches the PyNNDescent fixture: knn_indices (i32, n×k), knn_dists (f32, n×k).
+    """
+    from sklearn.metrics import pairwise_distances
+
+    D = pairwise_distances(X, metric="euclidean")
+    sorted_idx = np.argsort(D, axis=1)
+    knn_indices = sorted_idx[:, 1 : n_neighbors + 1].astype(np.int32)
+    knn_dists = D[np.arange(len(X))[:, None], knn_indices].astype(np.float32)
+    np.savez(
+        outdir / "step1_knn_exact",
+        knn_indices=knn_indices,
+        knn_dists=knn_dists,
+        n_neighbors=np.int32(n_neighbors),
+    )
+    return knn_indices, knn_dists
+
+
+def generate_step2_smooth_knn(
+    knn_dists: np.ndarray, outdir: Path, n_neighbors: int, suffix: str = ""
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Run UMAP smooth_knn_dist and save step2_smooth_knn{suffix}.npz.
     Returns (sigmas, rhos) for downstream steps.
     """
     from umap.umap_ import smooth_knn_dist
 
     sigmas, rhos = smooth_knn_dist(knn_dists.astype(np.float32), float(n_neighbors))
     np.savez(
-        outdir / "step2_smooth_knn",
+        outdir / f"step2_smooth_knn{suffix}",
         sigmas=sigmas.astype(np.float32),
         rhos=rhos.astype(np.float32),
         n_neighbors=np.int32(n_neighbors),
@@ -93,9 +123,10 @@ def generate_step3_membership(
     rhos: np.ndarray,
     outdir: Path,
     n: int,
+    suffix: str = "",
 ) -> scipy.sparse.coo_matrix:
     """
-    Compute directed membership-strength graph and save step3_membership.npz.
+    Compute directed membership-strength graph and save step3_membership{suffix}.npz.
 
     Calls compute_membership_strengths with C-contiguous float32 inputs.
     Returns the COO matrix for use by generate_step4_symmetrized.
@@ -109,16 +140,17 @@ def generate_step3_membership(
         np.ascontiguousarray(rhos.astype(np.float32)),
     )
     directed = scipy.sparse.coo_matrix((vals, (rows, cols)), shape=(n, n))
-    scipy.sparse.save_npz(str(outdir / "step3_membership"), directed)
+    scipy.sparse.save_npz(str(outdir / f"step3_membership{suffix}"), directed)
     return directed
 
 
 def generate_step4_symmetrized(
     directed: scipy.sparse.coo_matrix,
     outdir: Path,
+    suffix: str = "",
 ) -> scipy.sparse.csr_matrix:
     """
-    Compute symmetric fuzzy union A + A^T - A∘A^T and save step4_symmetrized.npz.
+    Compute symmetric fuzzy union A + A^T - A∘A^T and save step4_symmetrized{suffix}.npz.
 
     Uses element-wise multiply (.multiply) for the A∘A^T term (NOT matrix multiply).
     Returns the symmetric CSR matrix for use by generate_step5a_prune.
@@ -127,7 +159,7 @@ def generate_step4_symmetrized(
     symmetric = A + A.T - A.multiply(A.T)
     symmetric.sum_duplicates()
     symmetric.eliminate_zeros()
-    scipy.sparse.save_npz(str(outdir / "step4_symmetrized"), symmetric)
+    scipy.sparse.save_npz(str(outdir / f"step4_symmetrized{suffix}"), symmetric)
     return symmetric
 
 
@@ -135,9 +167,10 @@ def generate_step5a_prune(
     symmetric: scipy.sparse.csr_matrix,
     outdir: Path,
     n: int,
+    suffix: str = "",
 ) -> scipy.sparse.csr_matrix:
     """
-    Prune edges below threshold = max(data) / n_epochs and save step5a_pruned.npz.
+    Prune edges below threshold = max(data) / n_epochs and save step5a_pruned{suffix}.npz.
 
     n_epochs: 500 for n <= 10000, 200 for larger datasets.
     Returns the pruned CSR matrix for downstream use.
@@ -147,8 +180,29 @@ def generate_step5a_prune(
     threshold = graph.data.max() / float(n_epochs)
     graph.data[graph.data < threshold] = 0.0
     graph.eliminate_zeros()
-    scipy.sparse.save_npz(str(outdir / "step5a_pruned"), graph)
+    scipy.sparse.save_npz(str(outdir / f"step5a_pruned{suffix}"), graph)
     return graph
+
+
+def generate_exact_pipeline_for_dataset(
+    X: np.ndarray,
+    dataset_dir: Path,
+    n_neighbors: int,
+) -> None:
+    """
+    Run the exact-distance KNN pipeline (steps 1–5a) with _exact suffix.
+
+    Called automatically for datasets with n < EXACT_KNN_THRESHOLD.
+    Produces step1_knn_exact.npz through step5a_pruned_exact.npz.
+    """
+    n = X.shape[0]
+    knn_indices, knn_dists = generate_step1_knn_exact(X, dataset_dir, n_neighbors)
+    sigmas, rhos = generate_step2_smooth_knn(knn_dists, dataset_dir, n_neighbors, suffix="_exact")
+    directed = generate_step3_membership(
+        knn_indices, knn_dists, sigmas, rhos, dataset_dir, n, suffix="_exact"
+    )
+    symmetric = generate_step4_symmetrized(directed, dataset_dir, suffix="_exact")
+    generate_step5a_prune(symmetric, dataset_dir, n, suffix="_exact")
 
 
 # ---------------------------------------------------------------------------
@@ -413,6 +467,7 @@ def generate_all_for_dataset(
     outdir: Path,
     n_neighbors: int = 15,
     n_components: int = 2,
+    knn_method: str = "both",
 ) -> dict:
     """Run all pipeline steps for a single dataset, return manifest entry."""
     dataset_dir = outdir / name
@@ -422,80 +477,86 @@ def generate_all_for_dataset(
     X, params = gen_fn(**kwargs)
     print(f"  shape: {X.shape}, dtype: {X.dtype}")
 
-    # Step 0: raw data (replaces the former X.npz save)
+    # Step 0: raw data (always generated)
     generate_step0_raw_data(X, dataset_dir)
     print(f"  step0_raw_data.npz written")
 
-    # Step 1: nearest neighbors (triggers numba JIT on first call)
-    knn_indices, knn_dists = generate_step1_knn(X, dataset_dir, params, n_neighbors)
-    print(f"  step1_knn.npz written")
-
-    # Step 2: smooth KNN distances
-    sigmas, rhos = generate_step2_smooth_knn(knn_dists, dataset_dir, n_neighbors)
-    print(f"  step2_smooth_knn.npz written")
-
-    # Write meta.json
-    meta = {
-        "dataset": name,
-        "params": params,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "env": get_env_metadata(),
-    }
-    save_metadata(dataset_dir / "meta.json", meta)
-    print(f"  meta.json written")
-
-    # Steps 3–5a: membership strengths, fuzzy union, edge pruning
     n = X.shape[0]
 
-    directed = generate_step3_membership(knn_indices, knn_dists, sigmas, rhos, dataset_dir, n)
-    print(f"  step3_membership.npz written")
+    if knn_method in ("both", "approx"):
+        # Step 1: nearest neighbors (triggers numba JIT on first call)
+        knn_indices, knn_dists = generate_step1_knn(X, dataset_dir, params, n_neighbors)
+        print(f"  step1_knn.npz written")
 
-    symmetric = generate_step4_symmetrized(directed, dataset_dir)
-    print(f"  step4_symmetrized.npz written")
+        # Step 2: smooth KNN distances
+        sigmas, rhos = generate_step2_smooth_knn(knn_dists, dataset_dir, n_neighbors)
+        print(f"  step2_smooth_knn.npz written")
 
-    pruned = generate_step5a_prune(symmetric, dataset_dir, n)
-    print(f"  step5a_pruned.npz written")
+        # Write meta.json
+        meta = {
+            "dataset": name,
+            "params": params,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "env": get_env_metadata(),
+        }
+        save_metadata(dataset_dir / "meta.json", meta)
+        print(f"  meta.json written")
 
-    degrees, sqrt_deg = generate_comp_a_degrees(pruned, dataset_dir)
-    print(f"  comp_a_degrees.npz written")
+        # Steps 3–5a: membership strengths, fuzzy union, edge pruning
+        directed = generate_step3_membership(knn_indices, knn_dists, sigmas, rhos, dataset_dir, n)
+        print(f"  step3_membership.npz written")
 
-    L = generate_comp_b_laplacian(pruned, sqrt_deg, dataset_dir)
-    print(f"  comp_b_laplacian.npz written")
+        symmetric = generate_step4_symmetrized(directed, dataset_dir)
+        print(f"  step4_symmetrized.npz written")
 
-    n_conn_components, labels = generate_comp_c_components(pruned, dataset_dir)
-    print(f"  comp_c_components.npz written ({n_conn_components} component(s))")
+        pruned = generate_step5a_prune(symmetric, dataset_dir, n)
+        print(f"  step5a_pruned.npz written")
 
-    eigenvalues, eigenvectors = generate_comp_d_eigensolver(L, n_components, dataset_dir)
-    print(f"  comp_d_eigensolver.npz written")
+        degrees, sqrt_deg = generate_comp_a_degrees(pruned, dataset_dir)
+        print(f"  comp_a_degrees.npz written")
 
-    embedding = generate_comp_e_selection(eigenvalues, eigenvectors, n_components, dataset_dir)
-    print(f"  comp_e_selection.npz written")
+        L = generate_comp_b_laplacian(pruned, sqrt_deg, dataset_dir)
+        print(f"  comp_b_laplacian.npz written")
 
-    generate_comp_f_scaling(embedding, dataset_dir)
-    print(f"  comp_f_scaling.npz written")
+        n_conn_components, labels = generate_comp_c_components(pruned, dataset_dir)
+        print(f"  comp_c_components.npz written ({n_conn_components} component(s))")
 
-    generate_full_spectral(pruned, X, n_conn_components, n_components, dataset_dir)
-    print(f"  full_spectral.npz written")
+        eigenvalues, eigenvectors = generate_comp_d_eigensolver(L, n_components, dataset_dir)
+        print(f"  comp_d_eigensolver.npz written")
 
-    generate_full_umap_e2e(X, n_components, dataset_dir)
-    print(f"  full_umap_e2e.npz written")
+        embedding = generate_comp_e_selection(eigenvalues, eigenvectors, n_components, dataset_dir)
+        print(f"  comp_e_selection.npz written")
 
-    step_files = [
-        "step0_raw_data.npz",
-        "step1_knn.npz",
-        "step2_smooth_knn.npz",
-        "step3_membership.npz",
-        "step4_symmetrized.npz",
-        "step5a_pruned.npz",
-        "comp_a_degrees.npz",
-        "comp_b_laplacian.npz",
-        "comp_c_components.npz",
-        "comp_d_eigensolver.npz",
-        "comp_e_selection.npz",
-        "comp_f_scaling.npz",
-        "full_spectral.npz",
-        "full_umap_e2e.npz",
-    ]
+        generate_comp_f_scaling(embedding, dataset_dir)
+        print(f"  comp_f_scaling.npz written")
+
+        generate_full_spectral(pruned, X, n_conn_components, n_components, dataset_dir)
+        print(f"  full_spectral.npz written")
+
+        generate_full_umap_e2e(X, n_components, dataset_dir)
+        print(f"  full_umap_e2e.npz written")
+
+    if knn_method in ("both", "exact") and n < EXACT_KNN_THRESHOLD:
+        generate_exact_pipeline_for_dataset(X, dataset_dir, n_neighbors)
+        print(f"  exact pipeline (steps 1–5a _exact) written")
+
+    step_files = ["step0_raw_data.npz"]
+    if knn_method in ("both", "approx"):
+        step_files += [
+            "step1_knn.npz", "step2_smooth_knn.npz", "step3_membership.npz",
+            "step4_symmetrized.npz", "step5a_pruned.npz",
+            "comp_a_degrees.npz", "comp_b_laplacian.npz", "comp_c_components.npz",
+            "comp_d_eigensolver.npz", "comp_e_selection.npz", "comp_f_scaling.npz",
+            "full_spectral.npz", "full_umap_e2e.npz",
+        ]
+    if knn_method in ("both", "exact") and n < EXACT_KNN_THRESHOLD:
+        step_files += [
+            "step1_knn_exact.npz",
+            "step2_smooth_knn_exact.npz",
+            "step3_membership_exact.npz",
+            "step4_symmetrized_exact.npz",
+            "step5a_pruned_exact.npz",
+        ]
     return {
         "name": name,
         "shape": list(X.shape),
@@ -533,6 +594,18 @@ def main() -> None:
         "--n-components", type=int, default=2,
         help="Number of UMAP embedding dimensions (default: 2)",
     )
+    parser.add_argument(
+        "--knn-method",
+        choices=["both", "approx", "exact"],
+        default="both",
+        help=(
+            "KNN method to use for fixture generation. "
+            "'both' generates PyNNDescent and exact-distance fixtures (default). "
+            "'approx' generates only PyNNDescent fixtures. "
+            "'exact' generates only exact-distance fixtures (n < "
+            f"{EXACT_KNN_THRESHOLD} datasets only)."
+        ),
+    )
     args = parser.parse_args()
 
     outdir = Path(args.output_dir)
@@ -556,6 +629,7 @@ def main() -> None:
             name, gen_fn, kwargs, outdir,
             n_neighbors=args.n_neighbors,
             n_components=args.n_components,
+            knn_method=args.knn_method,
         )
         manifest["datasets"].append(entry)
 
