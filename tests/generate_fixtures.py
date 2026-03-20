@@ -12,6 +12,9 @@ import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Callable
+
+import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent))
 from fixture_utils import DATASETS, get_env_metadata, save_dense, save_metadata
@@ -21,28 +24,24 @@ from fixture_utils import DATASETS, get_env_metadata, save_dense, save_metadata
 # Pipeline stub functions — each returns None and prints "not implemented"
 # ---------------------------------------------------------------------------
 
-def step_build_knn_graph(X, name: str, outdir: Path, params: dict):
+def step_build_knn_graph(X: np.ndarray, name: str, outdir: Path, params: dict) -> None:
     """Build k-NN graph from X. (stub — implemented in later issue)"""
-    print(f"  [step_build_knn_graph] not implemented")
-    return None
+    print("  [step_build_knn_graph] not implemented")
 
 
-def step_compute_laplacian(knn_graph, name: str, outdir: Path, params: dict):
+def step_compute_laplacian(knn_graph: None, name: str, outdir: Path, params: dict) -> None:
     """Compute symmetric normalized Laplacian. (stub — implemented in later issue)"""
-    print(f"  [step_compute_laplacian] not implemented")
-    return None
+    print("  [step_compute_laplacian] not implemented")
 
 
-def step_compute_eigenvectors(laplacian, name: str, outdir: Path, params: dict):
+def step_compute_eigenvectors(laplacian: None, name: str, outdir: Path, params: dict) -> None:
     """Compute leading eigenvectors via solver escalation chain. (stub)"""
-    print(f"  [step_compute_eigenvectors] not implemented")
-    return None
+    print("  [step_compute_eigenvectors] not implemented")
 
 
-def step_compute_embedding(eigenvectors, name: str, outdir: Path, params: dict):
+def step_compute_embedding(eigenvectors: None, name: str, outdir: Path, params: dict) -> None:
     """Scale and noise-inject eigenvectors to UMAP embedding. (stub)"""
-    print(f"  [step_compute_embedding] not implemented")
-    return None
+    print("  [step_compute_embedding] not implemented")
 
 
 # ---------------------------------------------------------------------------
@@ -50,7 +49,11 @@ def step_compute_embedding(eigenvectors, name: str, outdir: Path, params: dict):
 # ---------------------------------------------------------------------------
 
 def generate_all_for_dataset(
-    name: str, gen_fn, kwargs: dict, outdir: Path, verify: bool = False
+    name: str,
+    gen_fn: Callable[..., tuple[np.ndarray, dict]],
+    kwargs: dict,
+    outdir: Path,
+    verify: bool = False,
 ) -> dict:
     """Run all pipeline steps for a single dataset, return manifest entry."""
     dataset_dir = outdir / name
