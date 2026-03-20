@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Callable
 
 import numpy as np
+import scipy.sparse
 from numpy.random import RandomState
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -83,16 +84,76 @@ def generate_step2_smooth_knn(
     return sigmas, rhos
 
 
+def generate_step3_membership(
+    knn_indices: np.ndarray,
+    knn_dists: np.ndarray,
+    sigmas: np.ndarray,
+    rhos: np.ndarray,
+    outdir: Path,
+    n: int,
+) -> scipy.sparse.coo_matrix:
+    """
+    Compute directed membership-strength graph and save step3_membership.npz.
+
+    Calls compute_membership_strengths with C-contiguous float32 inputs.
+    Returns the COO matrix for use by generate_step4_symmetrized.
+    """
+    from umap.umap_ import compute_membership_strengths
+
+    rows, cols, vals, _ = compute_membership_strengths(
+        knn_indices.astype(np.int32),
+        np.ascontiguousarray(knn_dists.astype(np.float32)),
+        np.ascontiguousarray(sigmas.astype(np.float32)),
+        np.ascontiguousarray(rhos.astype(np.float32)),
+    )
+    directed = scipy.sparse.coo_matrix((vals, (rows, cols)), shape=(n, n))
+    scipy.sparse.save_npz(str(outdir / "step3_membership"), directed)
+    return directed
+
+
+def generate_step4_symmetrized(
+    directed: scipy.sparse.coo_matrix,
+    outdir: Path,
+) -> scipy.sparse.csr_matrix:
+    """
+    Compute symmetric fuzzy union A + A^T - A∘A^T and save step4_symmetrized.npz.
+
+    Uses element-wise multiply (.multiply) for the A∘A^T term (NOT matrix multiply).
+    Returns the symmetric CSR matrix for use by generate_step5a_prune.
+    """
+    A = directed.tocsr()
+    symmetric = A + A.T - A.multiply(A.T)
+    symmetric.sum_duplicates()
+    symmetric.eliminate_zeros()
+    scipy.sparse.save_npz(str(outdir / "step4_symmetrized"), symmetric)
+    return symmetric
+
+
+def generate_step5a_prune(
+    symmetric: scipy.sparse.csr_matrix,
+    outdir: Path,
+    n: int,
+) -> scipy.sparse.csr_matrix:
+    """
+    Prune edges below threshold = max(data) / n_epochs and save step5a_pruned.npz.
+
+    n_epochs: 500 for n <= 10000, 200 for larger datasets.
+    Returns the pruned CSR matrix for downstream use.
+    """
+    n_epochs = 500 if n <= 10000 else 200
+    graph = symmetric.copy()
+    threshold = graph.data.max() / float(n_epochs)
+    graph.data[graph.data < threshold] = 0.0
+    graph.eliminate_zeros()
+    scipy.sparse.save_npz(str(outdir / "step5a_pruned"), graph)
+    return graph
+
+
 # ---------------------------------------------------------------------------
-# Pipeline stub functions — each returns None and prints "not implemented"
+# Downstream pipeline stubs (implemented in later issues)
 # ---------------------------------------------------------------------------
 
-def step_build_knn_graph(X: np.ndarray, name: str, outdir: Path, params: dict) -> None:
-    """Build k-NN graph from X. (stub — implemented in later issue)"""
-    print("  [step_build_knn_graph] not implemented")
-
-
-def step_compute_laplacian(knn_graph: None, name: str, outdir: Path, params: dict) -> None:
+def step_compute_laplacian(pruned_graph: scipy.sparse.csr_matrix, name: str, outdir: Path, params: dict) -> None:
     """Compute symmetric normalized Laplacian. (stub — implemented in later issue)"""
     print("  [step_compute_laplacian] not implemented")
 
@@ -136,7 +197,7 @@ def generate_all_for_dataset(
     print(f"  step1_knn.npz written")
 
     # Step 2: smooth KNN distances
-    generate_step2_smooth_knn(knn_dists, dataset_dir, n_neighbors)
+    sigmas, rhos = generate_step2_smooth_knn(knn_dists, dataset_dir, n_neighbors)
     print(f"  step2_smooth_knn.npz written")
 
     # Write meta.json
@@ -149,9 +210,19 @@ def generate_all_for_dataset(
     save_metadata(dataset_dir / "meta.json", meta)
     print(f"  meta.json written")
 
-    # Pipeline stubs — future issues will fill these in
-    knn   = step_build_knn_graph(X, name, dataset_dir, params)
-    lap   = step_compute_laplacian(knn, name, dataset_dir, params)
+    # Steps 3–5a: membership strengths, fuzzy union, edge pruning
+    n = X.shape[0]
+
+    directed = generate_step3_membership(knn_indices, knn_dists, sigmas, rhos, dataset_dir, n)
+    print(f"  step3_membership.npz written")
+
+    symmetric = generate_step4_symmetrized(directed, dataset_dir)
+    print(f"  step4_symmetrized.npz written")
+
+    pruned = generate_step5a_prune(symmetric, dataset_dir, n)
+    print(f"  step5a_pruned.npz written")
+
+    lap   = step_compute_laplacian(pruned, name, dataset_dir, params)
     eigs  = step_compute_eigenvectors(lap, name, dataset_dir, params)
     _emb  = step_compute_embedding(eigs, name, dataset_dir, params)
 
