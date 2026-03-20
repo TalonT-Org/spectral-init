@@ -21,3 +21,6 @@ tests/fixtures/*.npz
 
 # Python environment (micromamba prefix, never commit)
 /envs/
+
+# Secrets
+.secrets.yaml
