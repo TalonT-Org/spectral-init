@@ -1,0 +1,8 @@
+[package]
+name = "spectral-init"
+version = "0.1.0"
+edition = "2021"
+description = "Spectral initialization for UMAP embeddings"
+license = "MIT"
+
+[dependencies]
