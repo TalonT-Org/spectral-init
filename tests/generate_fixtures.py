@@ -96,7 +96,7 @@ def generate_step3_membership(
     Compute directed membership-strength graph and save step3_membership.npz.
 
     Calls compute_membership_strengths with C-contiguous float32 inputs.
-    Returns the COO matrix for use by generate_step4_symmetrize.
+    Returns the COO matrix for use by generate_step4_symmetrized.
     """
     from umap.umap_ import compute_membership_strengths
 
@@ -111,7 +111,7 @@ def generate_step3_membership(
     return directed
 
 
-def generate_step4_symmetrize(
+def generate_step4_symmetrized(
     directed: scipy.sparse.coo_matrix,
     outdir: Path,
 ) -> scipy.sparse.csr_matrix:
@@ -150,10 +150,10 @@ def generate_step5a_prune(
 
 
 # ---------------------------------------------------------------------------
-# Pipeline stub functions — each returns None and prints "not implemented"
+# Downstream pipeline stubs (implemented in later issues)
 # ---------------------------------------------------------------------------
 
-def step_compute_laplacian(pruned_graph, name: str, outdir: Path, params: dict) -> None:
+def step_compute_laplacian(pruned_graph: scipy.sparse.csr_matrix, name: str, outdir: Path, params: dict) -> None:
     """Compute symmetric normalized Laplacian. (stub — implemented in later issue)"""
     print("  [step_compute_laplacian] not implemented")
 
@@ -216,7 +216,7 @@ def generate_all_for_dataset(
     directed = generate_step3_membership(knn_indices, knn_dists, sigmas, rhos, dataset_dir, n)
     print(f"  step3_membership.npz written")
 
-    symmetric = generate_step4_symmetrize(directed, dataset_dir)
+    symmetric = generate_step4_symmetrized(directed, dataset_dir)
     print(f"  step4_symmetrized.npz written")
 
     pruned = generate_step5a_prune(symmetric, dataset_dir, n)
