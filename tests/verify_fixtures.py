@@ -297,45 +297,44 @@ def check_full_umap_e2e(d: Any, n: int, dim: int) -> list[str]:
     return errors
 
 
-def cross_check_full_spectral_vs_comp_f(
+def cross_check_full_spectral_vs_comp_e(
     dataset_dir: Path, n: int, dim: int, n_conn_components: int
 ) -> list[str]:
     """
     For connected datasets (n_conn_components == 1): verify that full_spectral["embedding"]
-    matches comp_f_scaling["pre_noise"] up to sign per column (both scaled to max abs 10).
+    (f64 from umap.spectral.spectral_layout) matches comp_e_selection["embedding"] (f64
+    raw eigenvectors) up to per-column sign normalization.
 
-    Sign normalization: for each column i, if dot(v_full[:,i], v_comp[:,i]) < 0, flip v_full.
-    Uses atol=0.01 (generous: covers f32 precision, different ARPACK v0 random state, and any
-    trivial residual differences between ARPACK runs).
+    Sign normalization rule: flip a column so the element with the largest absolute value
+    is positive. This is applied independently to both vectors before comparison.
 
-    For disconnected datasets, UMAP's per-component stitching produces a different result
-    than our single-graph eigensolver chain; cross-check is skipped.
+    Uses atol=1e-3 — covers ARPACK convergence tolerance (tol=1e-4) and the slight
+    difference in v0 between the two ARPACK runs (ours uses ones(n); spectral_layout
+    uses RandomState(42)).
+
+    For disconnected datasets, UMAP uses per-component stitching (a different algorithm
+    branch); cross-check is skipped (REQ-XCHK-003).
     """
     if n_conn_components != 1:
         return []  # skip: different algorithm branch for multi-component graphs
 
     errors = []
-    full_emb = np.load(dataset_dir / "full_spectral.npz", allow_pickle=False)["embedding"]
-    pre_noise = np.load(dataset_dir / "comp_f_scaling.npz", allow_pickle=False)["pre_noise"]
-    full_f64 = full_emb.astype(np.float64)
-
-    # Normalize full_spectral to max abs 10 to match comp_f pre_noise scale.
-    # spectral_layout may return unscaled embeddings depending on UMAP version.
-    full_max = np.abs(full_f64).max()
-    if full_max > 0:
-        full_f64 = full_f64 * (10.0 / full_max)
-    full_f32 = full_f64.astype(np.float32)
+    full_emb = np.load(dataset_dir / "full_spectral.npz", allow_pickle=False)["embedding"]   # f64
+    comp_e = np.load(dataset_dir / "comp_e_selection.npz", allow_pickle=False)["embedding"]  # f64
 
     for col in range(dim):
-        v_full = full_f32[:, col]
-        v_comp = pre_noise[:, col]
-        if np.dot(v_full.astype(np.float64), v_comp.astype(np.float64)) < 0:
+        v_full = full_emb[:, col].copy()
+        v_comp = comp_e[:, col].copy()
+        # Sign normalize: flip so element with largest absolute value is positive
+        if v_full[np.argmax(np.abs(v_full))] < 0:
             v_full = -v_full
-        if not np.allclose(v_full, v_comp, atol=0.01):
+        if v_comp[np.argmax(np.abs(v_comp))] < 0:
+            v_comp = -v_comp
+        if not np.allclose(v_full, v_comp, atol=1e-3):
             max_diff = float(np.abs(v_full - v_comp).max())
             errors.append(
-                f"full_spectral col {col} != comp_f pre_noise col {col} "
-                f"(max_diff={max_diff:.4f} > atol=0.01)"
+                f"full_spectral col {col} != comp_e_selection col {col} "
+                f"(max_diff={max_diff:.4f} > atol=1e-3)"
             )
     return errors
 
@@ -412,7 +411,7 @@ def verify_dataset(
 
     # Cross-step consistency
     n_conn = int(dc["n_components"])
-    cross = cross_check_full_spectral_vs_comp_f(dataset_dir, n, dim, n_conn)
+    cross = cross_check_full_spectral_vs_comp_e(dataset_dir, n, dim, n_conn)
     for e in cross:
         failures.append(f"  [cross_check] {e}")
 
