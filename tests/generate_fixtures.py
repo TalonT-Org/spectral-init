@@ -368,7 +368,7 @@ def generate_full_spectral(
     embedding = spectral_layout(
         data=data,
         graph=pruned_graph,
-        n_components=dim,
+        dim=dim,
         random_state=np.random.RandomState(42),
     )
     embedding = np.asarray(embedding, dtype=np.float64)

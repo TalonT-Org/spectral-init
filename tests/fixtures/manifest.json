@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-03-20T04:46:07.236232+00:00",
+  "generated_at": "2026-03-20T12:53:35.923270+00:00",
   "datasets": [
     {
       "name": "blobs_50",
@@ -14,7 +14,23 @@
         "n_centers": 3,
         "seed": 42
       },
-      "n_neighbors": 15
+      "n_neighbors": 15,
+      "step_files": [
+        "step0_raw_data.npz",
+        "step1_knn.npz",
+        "step2_smooth_knn.npz",
+        "step3_membership.npz",
+        "step4_symmetrized.npz",
+        "step5a_pruned.npz",
+        "comp_a_degrees.npz",
+        "comp_b_laplacian.npz",
+        "comp_c_components.npz",
+        "comp_d_eigensolver.npz",
+        "comp_e_selection.npz",
+        "comp_f_scaling.npz",
+        "full_spectral.npz",
+        "full_umap_e2e.npz"
+      ]
     },
     {
       "name": "blobs_500",
@@ -29,7 +45,23 @@
         "n_centers": 5,
         "seed": 42
       },
-      "n_neighbors": 15
+      "n_neighbors": 15,
+      "step_files": [
+        "step0_raw_data.npz",
+        "step1_knn.npz",
+        "step2_smooth_knn.npz",
+        "step3_membership.npz",
+        "step4_symmetrized.npz",
+        "step5a_pruned.npz",
+        "comp_a_degrees.npz",
+        "comp_b_laplacian.npz",
+        "comp_c_components.npz",
+        "comp_d_eigensolver.npz",
+        "comp_e_selection.npz",
+        "comp_f_scaling.npz",
+        "full_spectral.npz",
+        "full_umap_e2e.npz"
+      ]
     },
     {
       "name": "moons_200",
@@ -43,7 +75,23 @@
         "noise": 0.1,
         "seed": 42
       },
-      "n_neighbors": 15
+      "n_neighbors": 15,
+      "step_files": [
+        "step0_raw_data.npz",
+        "step1_knn.npz",
+        "step2_smooth_knn.npz",
+        "step3_membership.npz",
+        "step4_symmetrized.npz",
+        "step5a_pruned.npz",
+        "comp_a_degrees.npz",
+        "comp_b_laplacian.npz",
+        "comp_c_components.npz",
+        "comp_d_eigensolver.npz",
+        "comp_e_selection.npz",
+        "comp_f_scaling.npz",
+        "full_spectral.npz",
+        "full_umap_e2e.npz"
+      ]
     },
     {
       "name": "blobs_5000",
@@ -58,7 +106,23 @@
         "n_centers": 10,
         "seed": 42
       },
-      "n_neighbors": 15
+      "n_neighbors": 15,
+      "step_files": [
+        "step0_raw_data.npz",
+        "step1_knn.npz",
+        "step2_smooth_knn.npz",
+        "step3_membership.npz",
+        "step4_symmetrized.npz",
+        "step5a_pruned.npz",
+        "comp_a_degrees.npz",
+        "comp_b_laplacian.npz",
+        "comp_c_components.npz",
+        "comp_d_eigensolver.npz",
+        "comp_e_selection.npz",
+        "comp_f_scaling.npz",
+        "full_spectral.npz",
+        "full_umap_e2e.npz"
+      ]
     },
     {
       "name": "circles_300",
@@ -73,7 +137,23 @@
         "factor": 0.5,
         "seed": 42
       },
-      "n_neighbors": 15
+      "n_neighbors": 15,
+      "step_files": [
+        "step0_raw_data.npz",
+        "step1_knn.npz",
+        "step2_smooth_knn.npz",
+        "step3_membership.npz",
+        "step4_symmetrized.npz",
+        "step5a_pruned.npz",
+        "comp_a_degrees.npz",
+        "comp_b_laplacian.npz",
+        "comp_c_components.npz",
+        "comp_d_eigensolver.npz",
+        "comp_e_selection.npz",
+        "comp_f_scaling.npz",
+        "full_spectral.npz",
+        "full_umap_e2e.npz"
+      ]
     },
     {
       "name": "near_dupes_100",
@@ -92,7 +172,23 @@
         ],
         "seed": 42
       },
-      "n_neighbors": 15
+      "n_neighbors": 15,
+      "step_files": [
+        "step0_raw_data.npz",
+        "step1_knn.npz",
+        "step2_smooth_knn.npz",
+        "step3_membership.npz",
+        "step4_symmetrized.npz",
+        "step5a_pruned.npz",
+        "comp_a_degrees.npz",
+        "comp_b_laplacian.npz",
+        "comp_c_components.npz",
+        "comp_d_eigensolver.npz",
+        "comp_e_selection.npz",
+        "comp_f_scaling.npz",
+        "full_spectral.npz",
+        "full_umap_e2e.npz"
+      ]
     },
     {
       "name": "disconnected_200",
@@ -107,7 +203,23 @@
         "separation": 100.0,
         "seed": 42
       },
-      "n_neighbors": 15
+      "n_neighbors": 15,
+      "step_files": [
+        "step0_raw_data.npz",
+        "step1_knn.npz",
+        "step2_smooth_knn.npz",
+        "step3_membership.npz",
+        "step4_symmetrized.npz",
+        "step5a_pruned.npz",
+        "comp_a_degrees.npz",
+        "comp_b_laplacian.npz",
+        "comp_c_components.npz",
+        "comp_d_eigensolver.npz",
+        "comp_e_selection.npz",
+        "comp_f_scaling.npz",
+        "full_spectral.npz",
+        "full_umap_e2e.npz"
+      ]
     }
   ]
 }
