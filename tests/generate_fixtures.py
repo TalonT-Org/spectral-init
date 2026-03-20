@@ -109,6 +109,7 @@ def generate_step3_membership(
         np.ascontiguousarray(rhos.astype(np.float32)),
     )
     directed = scipy.sparse.coo_matrix((vals, (rows, cols)), shape=(n, n))
+    directed.eliminate_zeros()
     scipy.sparse.save_npz(str(outdir / "step3_membership"), directed)
     return directed
 
@@ -560,6 +561,15 @@ def main() -> None:
         manifest["datasets"].append(entry)
 
     manifest_path = outdir / "manifest.json"
+
+    if args.datasets and manifest_path.exists():
+        # Preserve entries for datasets that were NOT regenerated
+        with open(manifest_path) as f:
+            existing = json.load(f)
+        generated_names = {e["name"] for e in manifest["datasets"]}
+        preserved = [e for e in existing["datasets"] if e["name"] not in generated_names]
+        manifest["datasets"] = preserved + manifest["datasets"]
+
     with open(manifest_path, "w") as f:
         json.dump(manifest, f, indent=2, default=str)
 

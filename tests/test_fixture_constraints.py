@@ -3,7 +3,8 @@ import numpy as np
 import pytest
 from pathlib import Path
 
-DATASETS = ["blobs_50", "disconnected_200", "near_dupes_100"]
+DATASETS = ["blobs_50", "disconnected_200", "near_dupes_100",
+            "blobs_connected_200", "blobs_connected_2000"]
 SCRIPT = Path(__file__).parent / "generate_fixtures.py"
 
 
@@ -46,7 +47,8 @@ def test_comp_d_eigenvalues_sorted(name, comp_d_e_f_outdir):
     lam = d["eigenvalues"]
     assert np.all(np.diff(lam) >= -1e-12)   # non-decreasing
 
-@pytest.mark.parametrize("name", ["blobs_50", "near_dupes_100"])
+@pytest.mark.parametrize("name", ["blobs_50", "near_dupes_100",
+                                   "blobs_connected_200", "blobs_connected_2000"])
 def test_comp_d_first_eigenvalue_near_zero_connected(name, comp_d_e_f_outdir):
     """For connected graphs, smallest eigenvalue of normalized Laplacian is 0."""
     d = load(comp_d_e_f_outdir, name, "comp_d_eigensolver.npz")
@@ -117,6 +119,23 @@ def test_comp_f_dtypes(name, comp_d_e_f_outdir):
     assert f["noise"].dtype == np.float32
     assert f["final"].dtype == np.float32
     assert f["expansion"].dtype == np.float64
+
+
+# ── Connectivity assertions for new connected datasets ────────────────────────
+
+@pytest.mark.parametrize("name", ["blobs_connected_200", "blobs_connected_2000"])
+def test_connected_blobs_single_component(name, comp_d_e_f_outdir):
+    """Both connected blob datasets must have n_components == 1 after pruning."""
+    d = load(comp_d_e_f_outdir, name, "comp_c_components.npz")
+    assert int(d["n_components"]) == 1, (
+        f"{name}: expected 1 connected component, got {int(d['n_components'])}"
+    )
+
+
+def test_blobs_connected_2000_min_n(comp_d_e_f_outdir):
+    """blobs_connected_2000 must have at least 2000 samples."""
+    d = np.load(comp_d_e_f_outdir / "blobs_connected_2000" / "step0_raw_data.npz")
+    assert int(d["n_samples"]) >= 2000
 
 
 # ── Byte-identical repro ──────────────────────────────────────────────────────
