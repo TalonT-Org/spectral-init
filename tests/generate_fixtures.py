@@ -16,6 +16,7 @@ from typing import Callable
 
 import numpy as np
 import scipy.sparse
+import scipy.sparse.csgraph
 from numpy.random import RandomState
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -150,15 +151,79 @@ def generate_step5a_prune(
 
 
 # ---------------------------------------------------------------------------
+# Laplacian construction steps
+# ---------------------------------------------------------------------------
+
+def generate_comp_a_degrees(
+    pruned_graph: scipy.sparse.csr_matrix,
+    outdir: Path,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Compute degree vector and its square root from the pruned graph.
+
+    degrees = graph.sum(axis=0), squeezed to 1D, cast to f64.
+    sqrt_deg = sqrt(degrees).
+    Zero-degree nodes (isolated after pruning) are handled naturally: sqrt(0) = 0.
+    """
+    degrees = np.asarray(pruned_graph.sum(axis=0), dtype=np.float64).squeeze()
+    sqrt_deg = np.sqrt(degrees)
+    np.savez(
+        outdir / "comp_a_degrees",
+        degrees=degrees,
+        sqrt_deg=sqrt_deg,
+    )
+    return degrees, sqrt_deg
+
+
+def generate_comp_b_laplacian(
+    pruned_graph: scipy.sparse.csr_matrix,
+    sqrt_deg: np.ndarray,
+    outdir: Path,
+) -> scipy.sparse.csr_matrix:
+    """
+    Build symmetric normalized Laplacian L = I - D^{-1/2} A D^{-1/2} in f64.
+
+    Zero-degree nodes have inv_sqrt_deg = 0 (not inf), so their rows/columns
+    in D^{-1/2} A D^{-1/2} are zero, and L[i,i] = 1.0 for all i.
+    """
+    n = pruned_graph.shape[0]
+    inv_sqrt_deg = np.where(sqrt_deg > 0.0, 1.0 / sqrt_deg, 0.0)
+    D = scipy.sparse.diags(inv_sqrt_deg, dtype=np.float64, format="csr")
+    A = pruned_graph.astype(np.float64)
+    I = scipy.sparse.eye(n, dtype=np.float64, format="csr")
+    L = I - D @ A @ D
+    L.sum_duplicates()
+    L.eliminate_zeros()
+    scipy.sparse.save_npz(str(outdir / "comp_b_laplacian"), L)
+    return L
+
+
+def generate_comp_c_components(
+    pruned_graph: scipy.sparse.csr_matrix,
+    outdir: Path,
+) -> tuple[int, np.ndarray]:
+    """
+    Find connected components of the undirected pruned graph.
+
+    Uses scipy.sparse.csgraph.connected_components with directed=False.
+    Saves n_components (int32 scalar) and labels (int32 array of length n).
+    """
+    n_components, labels = scipy.sparse.csgraph.connected_components(
+        pruned_graph, directed=False
+    )
+    np.savez(
+        outdir / "comp_c_components",
+        n_components=np.int32(n_components),
+        labels=labels.astype(np.int32),
+    )
+    return int(n_components), labels
+
+
+# ---------------------------------------------------------------------------
 # Downstream pipeline stubs (implemented in later issues)
 # ---------------------------------------------------------------------------
 
-def step_compute_laplacian(pruned_graph: scipy.sparse.csr_matrix, name: str, outdir: Path, params: dict) -> None:
-    """Compute symmetric normalized Laplacian. (stub — implemented in later issue)"""
-    print("  [step_compute_laplacian] not implemented")
-
-
-def step_compute_eigenvectors(laplacian: None, name: str, outdir: Path, params: dict) -> None:
+def step_compute_eigenvectors(laplacian: scipy.sparse.csr_matrix | None, name: str, outdir: Path, params: dict) -> None:
     """Compute leading eigenvectors via solver escalation chain. (stub)"""
     print("  [step_compute_eigenvectors] not implemented")
 
@@ -222,8 +287,16 @@ def generate_all_for_dataset(
     pruned = generate_step5a_prune(symmetric, dataset_dir, n)
     print(f"  step5a_pruned.npz written")
 
-    lap   = step_compute_laplacian(pruned, name, dataset_dir, params)
-    eigs  = step_compute_eigenvectors(lap, name, dataset_dir, params)
+    degrees, sqrt_deg = generate_comp_a_degrees(pruned, dataset_dir)
+    print(f"  comp_a_degrees.npz written")
+
+    L = generate_comp_b_laplacian(pruned, sqrt_deg, dataset_dir)
+    print(f"  comp_b_laplacian.npz written")
+
+    n_components, labels = generate_comp_c_components(pruned, dataset_dir)
+    print(f"  comp_c_components.npz written ({n_components} component(s))")
+
+    eigs  = step_compute_eigenvectors(L, name, dataset_dir, params)
     _emb  = step_compute_embedding(eigs, name, dataset_dir, params)
 
     return {"name": name, "shape": list(X.shape), "params": params, "n_neighbors": n_neighbors}
