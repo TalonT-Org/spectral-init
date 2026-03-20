@@ -129,7 +129,7 @@ def test_generate_fixtures_cli_creates_outputs():
         result = subprocess.run(
             [
                 sys.executable,
-                "tests/generate_fixtures.py",
+                str(Path(__file__).parent / "generate_fixtures.py"),
                 "--output-dir", td,
                 "--datasets", "blobs_50",
             ],
