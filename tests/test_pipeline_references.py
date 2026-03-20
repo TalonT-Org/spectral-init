@@ -78,20 +78,44 @@ def test_full_umap_e2e_shape_dtype(pipeline_refs_outdir, dataset, n):
     assert np.all(np.isfinite(embedding)), "embedding contains non-finite values"
 
 
-def test_full_spectral_matches_comp_f_connected(pipeline_refs_outdir):
-    """For blobs_50 (connected): full_spectral embedding should match comp_f pre_noise up to sign."""
+def test_full_spectral_matches_comp_e_connected(pipeline_refs_outdir):
+    """For blobs_50 (connected): full_spectral embedding matches comp_e_selection up to
+    per-column sign normalization (largest-abs element positive)."""
     dataset_dir = pipeline_refs_outdir / "blobs_50"
     full_emb = np.load(dataset_dir / "full_spectral.npz", allow_pickle=False)["embedding"]
-    pre_noise = np.load(dataset_dir / "comp_f_scaling.npz", allow_pickle=False)["pre_noise"]
+    comp_e = np.load(dataset_dir / "comp_e_selection.npz", allow_pickle=False)["embedding"]
 
-    full_f32 = full_emb.astype(np.float32)
     for col in range(2):
-        v_full = full_f32[:, col]
-        v_comp = pre_noise[:, col]
-        if np.dot(v_full.astype(np.float64), v_comp.astype(np.float64)) < 0:
+        v_full = full_emb[:, col].copy()
+        v_comp = comp_e[:, col].copy()
+        if v_full[np.argmax(np.abs(v_full))] < 0:
             v_full = -v_full
-        assert np.allclose(v_full, v_comp, atol=0.01), (
-            f"Column {col}: max_diff={float(np.abs(v_full - v_comp).max()):.4f} > atol=0.01"
+        if v_comp[np.argmax(np.abs(v_comp))] < 0:
+            v_comp = -v_comp
+        assert np.allclose(v_full, v_comp, atol=1e-3), (
+            f"Column {col}: max_diff={float(np.abs(v_full - v_comp).max()):.4f} > atol=1e-3"
+        )
+
+
+def test_cross_check_uses_comp_e_not_comp_f(pipeline_refs_outdir):
+    """Cross-check compares full_spectral vs comp_e_selection (f64), not comp_f pre_noise."""
+    dataset_dir = pipeline_refs_outdir / "blobs_50"
+    full_emb = np.load(dataset_dir / "full_spectral.npz", allow_pickle=False)["embedding"]  # f64
+    comp_e = np.load(dataset_dir / "comp_e_selection.npz", allow_pickle=False)["embedding"]  # f64
+
+    assert full_emb.dtype == np.float64
+    assert comp_e.dtype == np.float64
+
+    for col in range(2):
+        v_full = full_emb[:, col].copy()
+        v_comp = comp_e[:, col].copy()
+        # Sign normalize: flip so largest-abs element is positive
+        if v_full[np.argmax(np.abs(v_full))] < 0:
+            v_full = -v_full
+        if v_comp[np.argmax(np.abs(v_comp))] < 0:
+            v_comp = -v_comp
+        assert np.allclose(v_full, v_comp, atol=1e-3), (
+            f"Column {col}: max_diff={float(np.abs(v_full - v_comp).max()):.4f}"
         )
 
 
