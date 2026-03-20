@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-03-20T12:53:35.923270+00:00",
+  "generated_at": "2026-03-20T13:48:09.740331+00:00",
   "datasets": [
     {
       "name": "blobs_50",
@@ -29,7 +29,12 @@
         "comp_e_selection.npz",
         "comp_f_scaling.npz",
         "full_spectral.npz",
-        "full_umap_e2e.npz"
+        "full_umap_e2e.npz",
+        "step1_knn_exact.npz",
+        "step2_smooth_knn_exact.npz",
+        "step3_membership_exact.npz",
+        "step4_symmetrized_exact.npz",
+        "step5a_pruned_exact.npz"
       ]
     },
     {
@@ -60,7 +65,12 @@
         "comp_e_selection.npz",
         "comp_f_scaling.npz",
         "full_spectral.npz",
-        "full_umap_e2e.npz"
+        "full_umap_e2e.npz",
+        "step1_knn_exact.npz",
+        "step2_smooth_knn_exact.npz",
+        "step3_membership_exact.npz",
+        "step4_symmetrized_exact.npz",
+        "step5a_pruned_exact.npz"
       ]
     },
     {
@@ -90,7 +100,12 @@
         "comp_e_selection.npz",
         "comp_f_scaling.npz",
         "full_spectral.npz",
-        "full_umap_e2e.npz"
+        "full_umap_e2e.npz",
+        "step1_knn_exact.npz",
+        "step2_smooth_knn_exact.npz",
+        "step3_membership_exact.npz",
+        "step4_symmetrized_exact.npz",
+        "step5a_pruned_exact.npz"
       ]
     },
     {
@@ -152,7 +167,12 @@
         "comp_e_selection.npz",
         "comp_f_scaling.npz",
         "full_spectral.npz",
-        "full_umap_e2e.npz"
+        "full_umap_e2e.npz",
+        "step1_knn_exact.npz",
+        "step2_smooth_knn_exact.npz",
+        "step3_membership_exact.npz",
+        "step4_symmetrized_exact.npz",
+        "step5a_pruned_exact.npz"
       ]
     },
     {
@@ -187,7 +207,12 @@
         "comp_e_selection.npz",
         "comp_f_scaling.npz",
         "full_spectral.npz",
-        "full_umap_e2e.npz"
+        "full_umap_e2e.npz",
+        "step1_knn_exact.npz",
+        "step2_smooth_knn_exact.npz",
+        "step3_membership_exact.npz",
+        "step4_symmetrized_exact.npz",
+        "step5a_pruned_exact.npz"
       ]
     },
     {
@@ -218,7 +243,12 @@
         "comp_e_selection.npz",
         "comp_f_scaling.npz",
         "full_spectral.npz",
-        "full_umap_e2e.npz"
+        "full_umap_e2e.npz",
+        "step1_knn_exact.npz",
+        "step2_smooth_knn_exact.npz",
+        "step3_membership_exact.npz",
+        "step4_symmetrized_exact.npz",
+        "step5a_pruned_exact.npz"
       ]
     }
   ]
