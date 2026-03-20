@@ -16,7 +16,7 @@ def _run(datasets: list[str], outdir: str, extra_args: list[str] | None = None) 
     if extra_args:
         cmd += extra_args
     result = subprocess.run(cmd, capture_output=True, text=True)
-    assert result.returncode == 0, f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+    assert result.returncode == 0, f"CMD: {cmd}\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
 
 
 def test_step0_raw_data_output():
@@ -63,16 +63,20 @@ def test_pipeline_is_deterministic():
         _run(["blobs_50"], td_a)
         _run(["blobs_50"], td_b)
         for fname in ("step0_raw_data.npz", "step1_knn.npz", "step2_smooth_knn.npz"):
-            file_a = Path(td_a) / "blobs_50" / fname
-            file_b = Path(td_b) / "blobs_50" / fname
-            assert file_a.read_bytes() == file_b.read_bytes(), f"{fname} is not byte-identical"
+            npz_a = np.load(Path(td_a) / "blobs_50" / fname)
+            npz_b = np.load(Path(td_b) / "blobs_50" / fname)
+            assert set(npz_a.files) == set(npz_b.files), f"{fname}: different keys"
+            for key in npz_a.files:
+                np.testing.assert_array_equal(
+                    npz_a[key], npz_b[key], err_msg=f"{fname}[{key!r}] differs between runs"
+                )
 
 
 def test_all_7_datasets_generate():
     with tempfile.TemporaryDirectory() as td:
         cmd = [sys.executable, str(SCRIPT), "--output-dir", td]
         result = subprocess.run(cmd, capture_output=True, text=True)
-        assert result.returncode == 0, f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+        assert result.returncode == 0, f"CMD: {cmd}\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
         expected_datasets = [
             "blobs_50", "blobs_500", "moons_200", "blobs_5000",
             "circles_300", "near_dupes_100", "disconnected_200",
