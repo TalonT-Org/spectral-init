@@ -463,11 +463,51 @@ def cross_check_full_spectral_vs_comp_e(
 # Per-dataset orchestrator
 # ---------------------------------------------------------------------------
 
+def verify_exact_path(
+    dataset_dir: Path,
+    n_samples: int,
+    n_neighbors: int,
+) -> list[str]:
+    """
+    Validate _exact KNN path fixtures (steps 1–5a) if they exist.
+    Returns empty list if step1_knn_exact.npz is absent (path not generated).
+    """
+    step1_path = dataset_dir / "step1_knn_exact.npz"
+    if not step1_path.exists():
+        return []
+
+    failures: list[str] = []
+
+    def run(label, fn, *args):
+        for e in fn(*args):
+            failures.append(f"  [{label}] {e}")
+
+    n, k = n_samples, n_neighbors
+
+    d1 = np.load(dataset_dir / "step1_knn_exact.npz", allow_pickle=False)
+    run("step1_knn_exact", check_step1, d1, n, k)
+
+    d2 = np.load(dataset_dir / "step2_smooth_knn_exact.npz", allow_pickle=False)
+    run("step2_smooth_knn_exact", check_step2, d2, n, k)
+
+    A3 = scipy.sparse.load_npz(str(dataset_dir / "step3_membership_exact.npz"))
+    run("step3_membership_exact", check_step3, A3, n)
+
+    A4 = scipy.sparse.load_npz(str(dataset_dir / "step4_symmetrized_exact.npz"))
+    run("step4_symmetrized_exact", check_step4, A4, n)
+
+    A5 = scipy.sparse.load_npz(str(dataset_dir / "step5a_pruned_exact.npz"))
+    run("step5a_pruned_exact", check_step5a, A5, A4, n)
+
+    return failures
+
+
 def verify_dataset(
     dataset_dir: Path,
     n_samples: int,
     n_neighbors: int,
     n_components: int = 2,
+    knn_method: str = "approx",
 ) -> list[str]:
     """
     Run all checks for one dataset directory. Returns list of failure strings.
@@ -486,21 +526,22 @@ def verify_dataset(
     d0 = np.load(dataset_dir / "step0_raw_data.npz", allow_pickle=False)
     run("step0_raw_data", check_step0, d0, n)
 
-    d1 = np.load(dataset_dir / "step1_knn.npz", allow_pickle=False)
-    run("step1_knn", check_step1, d1, n, k)
+    # Approx KNN path fixtures (only when approx path was generated)
+    if knn_method in ("approx", "both"):
+        d1 = np.load(dataset_dir / "step1_knn.npz", allow_pickle=False)
+        run("step1_knn", check_step1, d1, n, k)
 
-    d2 = np.load(dataset_dir / "step2_smooth_knn.npz", allow_pickle=False)
-    run("step2_smooth_knn", check_step2, d2, n, k)
+        d2 = np.load(dataset_dir / "step2_smooth_knn.npz", allow_pickle=False)
+        run("step2_smooth_knn", check_step2, d2, n, k)
 
-    # Sparse fixtures
-    A3 = scipy.sparse.load_npz(str(dataset_dir / "step3_membership.npz"))
-    run("step3_membership", check_step3, A3, n)
+        A3 = scipy.sparse.load_npz(str(dataset_dir / "step3_membership.npz"))
+        run("step3_membership", check_step3, A3, n)
 
-    A4 = scipy.sparse.load_npz(str(dataset_dir / "step4_symmetrized.npz"))
-    run("step4_symmetrized", check_step4, A4, n)
+        A4 = scipy.sparse.load_npz(str(dataset_dir / "step4_symmetrized.npz"))
+        run("step4_symmetrized", check_step4, A4, n)
 
-    A5 = scipy.sparse.load_npz(str(dataset_dir / "step5a_pruned.npz"))
-    run("step5a_pruned", check_step5a, A5, A4, n)
+        A5 = scipy.sparse.load_npz(str(dataset_dir / "step5a_pruned.npz"))
+        run("step5a_pruned", check_step5a, A5, A4, n)
 
     # Laplacian steps
     da = np.load(dataset_dir / "comp_a_degrees.npz", allow_pickle=False)
@@ -528,6 +569,10 @@ def verify_dataset(
 
     dfu = np.load(dataset_dir / "full_umap_e2e.npz", allow_pickle=False)
     run("full_umap_e2e", check_full_umap_e2e, dfu, n, dim)
+
+    # Exact KNN path (if generated)
+    exact_failures = verify_exact_path(dataset_dir, n, k)
+    failures.extend(exact_failures)
 
     # Cross-step consistency
     n_conn = int(dc["n_components"])
@@ -573,9 +618,10 @@ def main(
         name = entry["name"]
         n = entry["shape"][0]
         k = entry.get("n_neighbors", 15)
+        knn_method = entry.get("knn_method", "approx")
         dataset_dir = output_dir / name
         print(f"\n[{name}] Verifying ({n} samples, k={k})...")
-        failures = verify_dataset(dataset_dir, n_samples=n, n_neighbors=k)
+        failures = verify_dataset(dataset_dir, n_samples=n, n_neighbors=k, knn_method=knn_method)
         if failures:
             all_pass = False
             print(f"  FAIL ({len(failures)} error(s)):")
