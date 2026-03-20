@@ -47,7 +47,13 @@ def generate_step1_knn(
 
     random_state = RandomState(params["seed"])
     knn_indices, knn_dists, _ = nearest_neighbors(
-        X, n_neighbors, "euclidean", {}, False, random_state, n_jobs=1
+        X,
+        n_neighbors,
+        metric="euclidean",
+        metric_kwds={},
+        angular=False,
+        random_state=random_state,
+        n_jobs=1,
     )
     np.savez(
         outdir / "step1_knn",
