@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import scipy.linalg
 import scipy.sparse
 
 
@@ -220,7 +221,116 @@ def check_comp_d(d: Any) -> list[str]:
     if not np.allclose(VTV, np.eye(VTV.shape[0]), atol=1e-10):
         off_diag = np.abs(VTV - np.eye(VTV.shape[0])).max()
         errors.append(f"eigenvectors not orthonormal (max_off_diag={off_diag:.2e})")
+
+    # REQ-META-001: solver_name
+    if "solver_name" not in d.files:
+        errors.append("missing key 'solver_name'")
+    else:
+        val = d["solver_name"].item()
+        if val not in {b"eigsh", b"eigh"}:
+            errors.append(f"solver_name {val!r} not in {{b'eigsh', b'eigh'}}")
+
+    # REQ-META-002: converged
+    if "converged" not in d.files:
+        errors.append("missing key 'converged'")
+    else:
+        if d["converged"].dtype != np.bool_:
+            errors.append(f"converged dtype {d['converged'].dtype!r} != bool")
+        if "solver_name" in d.files:
+            converged = d["converged"].item()
+            solver = d["solver_name"].item()
+            if converged != (solver == b"eigsh"):
+                errors.append(
+                    f"converged={converged} inconsistent with solver_name={solver!r}"
+                )
+
+    # REQ-META-003: eigenvalue_gaps
+    if "eigenvalue_gaps" not in d.files:
+        errors.append("missing key 'eigenvalue_gaps'")
+    else:
+        gaps = d["eigenvalue_gaps"]
+        if gaps.dtype != np.float64:
+            errors.append(f"eigenvalue_gaps dtype {gaps.dtype!r} != float64")
+        if gaps.shape != (k - 1,):
+            errors.append(f"eigenvalue_gaps shape {gaps.shape} != ({k-1},)")
+        elif not np.allclose(gaps, np.diff(lam), atol=1e-15):
+            errors.append("eigenvalue_gaps does not match np.diff(eigenvalues)")
+
     return errors
+
+
+def _compare_eigenvectors_gap_aware(
+    V_ref: np.ndarray,
+    V_test: np.ndarray,
+    gaps: np.ndarray,
+    gap_threshold: float = 1e-6,
+    atol: float = 1e-14,
+) -> tuple[list[str], list[str]]:
+    """Compare two eigenvector matrices using gap-dependent strategy.
+
+    Args:
+        V_ref: Reference eigenvectors, shape (n, m).
+        V_test: Tested eigenvectors, shape (n, m).
+        gaps: Consecutive eigenvalue differences, shape (m-1,).
+               gaps[i] = lambda[i+1] - lambda[i].
+        gap_threshold: Minimum gap to treat eigenvectors as well-separated.
+        atol: Absolute tolerance for sign-flip comparison.
+
+    Returns:
+        (errors, method_log): errors is a list of failure strings (empty = pass);
+        method_log is a list of strings naming the comparison method per
+        column/cluster (REQ-VER-003).
+    """
+    errors: list[str] = []
+    method_log: list[str] = []
+    m = V_ref.shape[1]
+    if m == 0:
+        return errors, method_log
+
+    # Identify cluster boundaries.  A new cluster starts at column i+1 when
+    # gaps[i] >= gap_threshold (well-separated from i).
+    # gaps has shape (m-1,); column 0 always starts a cluster.
+    cluster_start = 0
+    for i in range(m):
+        at_last = (i == m - 1)
+        gap_after = gaps[i] if i < len(gaps) else gap_threshold  # sentinel
+        end_of_cluster = at_last or gap_after >= gap_threshold
+
+        if end_of_cluster:
+            cluster_end = i + 1  # exclusive
+            cols = slice(cluster_start, cluster_end)
+
+            if cluster_end - cluster_start == 1:
+                # REQ-VER-001: well-separated — per-eigenvector sign-flip
+                col = cluster_start
+                v_ref = V_ref[:, col]
+                v_tst = V_test[:, col]
+                if np.dot(v_ref, v_tst) < 0:
+                    v_tst = -v_tst
+                if not np.allclose(v_ref, v_tst, atol=atol):
+                    errors.append(
+                        f"column {col}: sign-flip comparison failed "
+                        f"(max_diff={np.abs(v_ref - v_tst).max():.2e})"
+                    )
+                method_log.append(f"col {col}: sign-flip")
+            else:
+                # REQ-VER-002: clustered — subspace angle comparison
+                S1 = V_ref[:, cols]
+                S2 = V_test[:, cols]
+                angles = scipy.linalg.subspace_angles(S1, S2)
+                if not np.allclose(angles, 0.0, atol=atol):
+                    errors.append(
+                        f"cols {cluster_start}–{cluster_end-1}: subspace comparison "
+                        f"failed (max_angle={angles.max():.2e})"
+                    )
+                method_log.append(
+                    f"cols {cluster_start}–{cluster_end-1}: subspace "
+                    f"(cluster size {cluster_end - cluster_start})"
+                )
+
+            cluster_start = cluster_end
+
+    return errors, method_log
 
 
 def check_comp_e(d: Any, d_d: Any, n: int, dim: int) -> list[str]:
@@ -236,12 +346,22 @@ def check_comp_e(d: Any, d_d: Any, n: int, dim: int) -> list[str]:
     if trivial_col in order.tolist():
         errors.append(f"trivial eigenvector index {trivial_col} included in order")
     # Cross-step: embedding columns must equal eigenvectors[:, order]
+    # Use gap-aware comparison based on eigenvalue gaps from comp_d.
     V = d_d["eigenvectors"]
-    for i, col in enumerate(order.tolist()):
-        if not (np.allclose(emb[:, i], V[:, col], atol=1e-14) or
-                np.allclose(emb[:, i], -V[:, col], atol=1e-14)):
-            errors.append(f"comp_e column {i} != ±comp_d eigenvectors[:, {col}]")
-            break  # one is enough to flag the issue
+    order_list = order.tolist()
+    selected_V = V[:, order_list]
+    all_gaps = d_d["eigenvalue_gaps"] if "eigenvalue_gaps" in d_d.files else np.array([])
+    # Reindex gaps to the selected eigenvector positions.
+    selected_gaps = np.array([
+        all_gaps[order_list[i]] if order_list[i] < len(all_gaps) else 1.0
+        for i in range(len(order_list) - 1)
+    ]) if len(order_list) > 1 else np.array([])
+    cmp_errors, method_log = _compare_eigenvectors_gap_aware(
+        selected_V, emb, selected_gaps
+    )
+    for line in method_log:
+        print(f"  [comp_e cross-check] {line}", flush=True)
+    errors.extend(cmp_errors)
     return errors
 
 

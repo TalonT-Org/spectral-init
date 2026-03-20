@@ -138,6 +138,103 @@ def test_blobs_connected_2000_min_n(comp_d_e_f_outdir):
     assert int(d["n_samples"]) >= 2000
 
 
+# ── Solver metadata (REQ-META-001/002/003) ────────────────────────────────────
+
+# --- REQ-META-001: solver_name ---
+
+@pytest.mark.parametrize("name", DATASETS)
+def test_comp_d_solver_name_present(name, comp_d_e_f_outdir):
+    d = load(comp_d_e_f_outdir, name, "comp_d_eigensolver.npz")
+    assert "solver_name" in d.files
+
+@pytest.mark.parametrize("name", DATASETS)
+def test_comp_d_solver_name_value(name, comp_d_e_f_outdir):
+    d = load(comp_d_e_f_outdir, name, "comp_d_eigensolver.npz")
+    val = d["solver_name"].item()
+    assert val in {b"eigsh", b"eigh"}, f"unexpected solver_name: {val!r}"
+
+# --- REQ-META-002: converged ---
+
+@pytest.mark.parametrize("name", DATASETS)
+def test_comp_d_converged_present(name, comp_d_e_f_outdir):
+    d = load(comp_d_e_f_outdir, name, "comp_d_eigensolver.npz")
+    assert "converged" in d.files
+
+@pytest.mark.parametrize("name", DATASETS)
+def test_comp_d_converged_dtype(name, comp_d_e_f_outdir):
+    d = load(comp_d_e_f_outdir, name, "comp_d_eigensolver.npz")
+    assert d["converged"].dtype == np.bool_, (
+        f"converged dtype {d['converged'].dtype!r} is not bool"
+    )
+
+@pytest.mark.parametrize("name", DATASETS)
+def test_comp_d_metadata_consistency(name, comp_d_e_f_outdir):
+    """converged must be True iff solver_name is b'eigsh'."""
+    d = load(comp_d_e_f_outdir, name, "comp_d_eigensolver.npz")
+    converged = d["converged"].item()
+    solver = d["solver_name"].item()
+    assert converged == (solver == b"eigsh"), (
+        f"converged={converged} inconsistent with solver_name={solver!r}"
+    )
+
+# --- REQ-META-003: eigenvalue_gaps ---
+
+@pytest.mark.parametrize("name", DATASETS)
+def test_comp_d_eigenvalue_gaps_present(name, comp_d_e_f_outdir):
+    d = load(comp_d_e_f_outdir, name, "comp_d_eigensolver.npz")
+    assert "eigenvalue_gaps" in d.files
+
+@pytest.mark.parametrize("name", DATASETS)
+def test_comp_d_eigenvalue_gaps_dtype_shape(name, comp_d_e_f_outdir):
+    d = load(comp_d_e_f_outdir, name, "comp_d_eigensolver.npz")
+    gaps = d["eigenvalue_gaps"]
+    k = int(d["k"])
+    assert gaps.dtype == np.float64, f"eigenvalue_gaps dtype {gaps.dtype!r} != float64"
+    assert gaps.shape == (k - 1,), f"eigenvalue_gaps shape {gaps.shape} != ({k-1},)"
+
+@pytest.mark.parametrize("name", DATASETS)
+def test_comp_d_eigenvalue_gaps_match_diff(name, comp_d_e_f_outdir):
+    d = load(comp_d_e_f_outdir, name, "comp_d_eigensolver.npz")
+    assert np.allclose(d["eigenvalue_gaps"], np.diff(d["eigenvalues"]), atol=1e-15)
+
+@pytest.mark.parametrize("name", DATASETS)
+def test_comp_d_eigenvalue_gaps_nonneg(name, comp_d_e_f_outdir):
+    """Gaps must be >= 0 because eigenvalues are sorted ascending."""
+    d = load(comp_d_e_f_outdir, name, "comp_d_eigensolver.npz")
+    assert np.all(d["eigenvalue_gaps"] >= -1e-15), (
+        f"negative gap found: {d['eigenvalue_gaps'].min():.2e}"
+    )
+
+# --- REQ-VER-003: comparison method reporting ---
+
+@pytest.mark.parametrize("name", DATASETS)
+def test_comp_d_e_gap_aware_comparison_reports_method(name, comp_d_e_f_outdir):
+    """Gap-aware comparison must report the method used for each column/cluster."""
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent))
+    from verify_fixtures import _compare_eigenvectors_gap_aware
+    d = load(comp_d_e_f_outdir, name, "comp_d_eigensolver.npz")
+    e = load(comp_d_e_f_outdir, name, "comp_e_selection.npz")
+    order = e["order"].tolist()
+    V = d["eigenvectors"]
+    gaps = d["eigenvalue_gaps"]
+    # Compare the embedding against the eigenvectors from which it was selected
+    # (comp_e selects a subset; we verify those selected columns only)
+    selected_V = V[:, order]
+    selected_gaps = np.array([
+        gaps[i] for i in order[:-1]  # gaps between selected columns
+    ]) if len(order) > 1 else np.array([])
+    errors, method_log = _compare_eigenvectors_gap_aware(
+        selected_V, e["embedding"], selected_gaps
+    )
+    assert errors == [], f"Eigenvector comparison failed:\n" + "\n".join(errors)
+    assert len(method_log) > 0, "method_log must report which comparison was used"
+    for entry in method_log:
+        assert "sign-flip" in entry or "subspace" in entry, (
+            f"method_log entry does not name a comparison method: {entry!r}"
+        )
+
+
 # ── Byte-identical repro ──────────────────────────────────────────────────────
 
 def test_byte_identical_reruns(tmp_path):
