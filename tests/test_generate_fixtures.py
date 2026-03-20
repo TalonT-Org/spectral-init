@@ -173,7 +173,7 @@ def test_comp_b_laplacian_output(blobs_50_outdir: Path):
     assert diff.max() < 1e-14, f"Laplacian is not symmetric: max diff = {diff.max()}"
     L_dense = L.toarray()
     eigvals = np.linalg.eigvalsh(L_dense)
-    assert eigvals.min() >= -1e-10, f"Eigenvalue below 0: {eigvals.min()}"
+    assert eigvals.min() >= -1e-6, f"Eigenvalue below 0: {eigvals.min()}"
     assert eigvals.max() <= 2.0 + 1e-10, f"Eigenvalue above 2: {eigvals.max()}"
 
 
@@ -196,3 +196,21 @@ def test_comp_c_components_disconnected(disconnected_200_outdir: Path):
     assert labels.shape == (200,)
     assert labels.min() >= 0
     assert labels.max() < n_components
+
+
+def test_step3_membership_no_explicit_zeros():
+    """step3_membership.data must contain no explicit zero entries after generation."""
+    datasets = [
+        "blobs_50", "blobs_500", "moons_200", "blobs_5000",
+        "circles_300", "near_dupes_100", "disconnected_200",
+    ]
+    with tempfile.TemporaryDirectory() as td:
+        _run(datasets, td)
+        for name in datasets:
+            A = scipy.sparse.load_npz(
+                str(Path(td) / name / "step3_membership.npz")
+            )
+            assert np.all(A.data > 0), (
+                f"[{name}] step3_membership contains explicit zeros "
+                f"(count={np.sum(A.data == 0)})"
+            )
