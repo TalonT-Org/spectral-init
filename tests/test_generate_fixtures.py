@@ -196,3 +196,124 @@ def test_comp_c_components_disconnected(disconnected_200_outdir: Path):
     assert labels.shape == (200,)
     assert labels.min() >= 0
     assert labels.max() < n_components
+
+
+# ---------------------------------------------------------------------------
+# Exact-distance KNN path tests
+# ---------------------------------------------------------------------------
+
+def test_step1_knn_exact_output():
+    with tempfile.TemporaryDirectory() as td:
+        _run(["blobs_50"], td)
+        d = np.load(Path(td) / "blobs_50" / "step1_knn_exact.npz")
+        assert set(d.files) >= {"knn_indices", "knn_dists", "n_neighbors"}
+        assert d["knn_indices"].dtype == np.int32
+        assert d["knn_indices"].shape == (50, 15)
+        assert d["knn_dists"].dtype == np.float32
+        assert d["knn_dists"].shape == (50, 15)
+        assert (d["knn_indices"] >= 0).all() and (d["knn_indices"] < 50).all()
+        assert (d["knn_dists"] >= 0).all()
+        assert d["n_neighbors"] == np.int32(15)
+
+
+def test_step1_knn_exact_self_not_in_indices():
+    with tempfile.TemporaryDirectory() as td:
+        _run(["blobs_50"], td)
+        d = np.load(Path(td) / "blobs_50" / "step1_knn_exact.npz")
+        idx = d["knn_indices"]
+        for i in range(idx.shape[0]):
+            assert i not in idx[i].tolist(), f"Self-index {i} found in row {i}"
+
+
+def test_exact_pipeline_files_generated_for_small_dataset():
+    with tempfile.TemporaryDirectory() as td:
+        _run(["blobs_50"], td)
+        for fname in (
+            "step1_knn_exact.npz",
+            "step2_smooth_knn_exact.npz",
+            "step3_membership_exact.npz",
+            "step4_symmetrized_exact.npz",
+            "step5a_pruned_exact.npz",
+        ):
+            assert (Path(td) / "blobs_50" / fname).exists(), f"Missing {fname}"
+
+
+def test_exact_pipeline_not_generated_for_large_dataset():
+    with tempfile.TemporaryDirectory() as td:
+        _run(["blobs_5000"], td)
+        for fname in (
+            "step1_knn_exact.npz",
+            "step2_smooth_knn_exact.npz",
+        ):
+            assert not (Path(td) / "blobs_5000" / fname).exists(), \
+                f"{fname} should not exist for n=5000"
+
+
+def test_exact_pipeline_coexists_with_approx():
+    with tempfile.TemporaryDirectory() as td:
+        _run(["blobs_50"], td)
+        approx = np.load(Path(td) / "blobs_50" / "step1_knn.npz")
+        exact = np.load(Path(td) / "blobs_50" / "step1_knn_exact.npz")
+        # Both must exist
+        assert approx["knn_indices"].shape == (50, 15)
+        assert exact["knn_indices"].shape == (50, 15)
+        # They may differ (different algorithms), but approx must still match PyNNDescent
+        assert approx["knn_dists"][:, 0].min() >= 0
+
+
+def test_exact_knn_distances_are_exact():
+    from sklearn.metrics import pairwise_distances as sk_pdist
+    from fixture_utils import make_blobs_dataset
+    X, _ = make_blobs_dataset(n=50, n_features=2, n_centers=3, seed=42)
+    D = sk_pdist(X, metric="euclidean")
+    sorted_idx = np.argsort(D, axis=1)
+    expected_indices = sorted_idx[:, 1:16].astype(np.int32)
+    expected_dists = D[np.arange(50)[:, None], expected_indices].astype(np.float32)
+
+    with tempfile.TemporaryDirectory() as td:
+        _run(["blobs_50"], td)
+        d = np.load(Path(td) / "blobs_50" / "step1_knn_exact.npz")
+        np.testing.assert_array_equal(d["knn_indices"], expected_indices)
+        np.testing.assert_allclose(d["knn_dists"], expected_dists, rtol=1e-5)
+
+
+def test_exact_step2_smooth_knn_exact_output():
+    with tempfile.TemporaryDirectory() as td:
+        _run(["blobs_50"], td)
+        d = np.load(Path(td) / "blobs_50" / "step2_smooth_knn_exact.npz")
+        assert d["sigmas"].dtype == np.float32
+        assert d["sigmas"].shape == (50,)
+        assert d["rhos"].dtype == np.float32
+        assert d["rhos"].shape == (50,)
+        assert (d["sigmas"] > 0).all()
+        assert d["n_neighbors"] == np.int32(15)
+
+
+def test_exact_knn_method_flag_approx_only():
+    with tempfile.TemporaryDirectory() as td:
+        _run(["blobs_50"], td, extra_args=["--knn-method", "approx"])
+        assert not (Path(td) / "blobs_50" / "step1_knn_exact.npz").exists()
+        assert (Path(td) / "blobs_50" / "step1_knn.npz").exists()
+
+
+def test_exact_knn_method_flag_exact_only():
+    with tempfile.TemporaryDirectory() as td:
+        _run(["blobs_50"], td, extra_args=["--knn-method", "exact"])
+        assert (Path(td) / "blobs_50" / "step1_knn_exact.npz").exists()
+        assert not (Path(td) / "blobs_50" / "step1_knn.npz").exists()
+
+
+def test_verify_exact_fixtures_pass():
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent))
+    import verify_fixtures
+    import json
+    with tempfile.TemporaryDirectory() as td:
+        _run(["blobs_50"], td)
+        manifest = {"generated_at": "2026-01-01T00:00:00Z", "datasets": [
+            {"name": "blobs_50", "shape": [50, 2], "params": {}, "n_neighbors": 15,
+             "step_files": []}
+        ]}
+        (Path(td) / "manifest.json").write_text(json.dumps(manifest))
+        ok = verify_fixtures.main(output_dir=td, dataset_names=["blobs_50"])
+        assert ok, "verify_fixtures failed for blobs_50 exact fixtures"
