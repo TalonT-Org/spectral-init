@@ -49,7 +49,7 @@ def _run(datasets, outdir, extra_args=None):
 @pytest.fixture(scope="session")
 def pipeline_refs_outdir(tmp_path_factory):
     td = tmp_path_factory.mktemp("pipeline_refs")
-    _run(["blobs_50", "disconnected_200"], str(td))
+    _run(["blobs_50", "disconnected_200", "moons_200"], str(td))
     return td
 
 
@@ -79,9 +79,9 @@ def test_full_umap_e2e_shape_dtype(pipeline_refs_outdir, dataset, n):
 
 
 def test_full_spectral_matches_comp_e_connected(pipeline_refs_outdir):
-    """For blobs_50 (connected): full_spectral embedding matches comp_e_selection up to
+    """For moons_200 (connected): full_spectral embedding matches comp_e_selection up to
     per-column sign normalization (largest-abs element positive)."""
-    dataset_dir = pipeline_refs_outdir / "blobs_50"
+    dataset_dir = pipeline_refs_outdir / "moons_200"
     full_emb = np.load(dataset_dir / "full_spectral.npz", allow_pickle=False)["embedding"]
     comp_e = np.load(dataset_dir / "comp_e_selection.npz", allow_pickle=False)["embedding"]
 
@@ -99,7 +99,7 @@ def test_full_spectral_matches_comp_e_connected(pipeline_refs_outdir):
 
 def test_cross_check_uses_comp_e_not_comp_f(pipeline_refs_outdir):
     """Cross-check compares full_spectral vs comp_e_selection (f64), not comp_f pre_noise."""
-    dataset_dir = pipeline_refs_outdir / "blobs_50"
+    dataset_dir = pipeline_refs_outdir / "moons_200"
     full_emb = np.load(dataset_dir / "full_spectral.npz", allow_pickle=False)["embedding"]  # f64
     comp_e = np.load(dataset_dir / "comp_e_selection.npz", allow_pickle=False)["embedding"]  # f64
 
