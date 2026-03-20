@@ -344,6 +344,64 @@ def generate_comp_f_scaling(
     return final
 
 
+def generate_full_spectral(
+    pruned_graph: scipy.sparse.csr_matrix,
+    X: np.ndarray,
+    n_conn_components: int,
+    dim: int,
+    outdir: Path,
+) -> np.ndarray:
+    """
+    Call umap.spectral.spectral_layout on the pruned graph.
+
+    For connected graphs (n_conn_components == 1): data=None is safe.
+    For disconnected graphs: pass data=X so spectral_layout can use
+    centroid coordinates when stitching per-component embeddings.
+
+    Random state is seeded at RandomState(42) on every call for byte-identical
+    regeneration. Output is cast to f64 and saved as full_spectral.npz key
+    'embedding' with shape (n, dim).
+    """
+    from umap.spectral import spectral_layout
+
+    data = X if n_conn_components > 1 else None
+    embedding = spectral_layout(
+        data=data,
+        graph=pruned_graph,
+        n_components=dim,
+        random_state=np.random.RandomState(42),
+    )
+    embedding = np.asarray(embedding, dtype=np.float64)
+    np.savez(outdir / "full_spectral", embedding=embedding)
+    return embedding
+
+
+def generate_full_umap_e2e(
+    X: np.ndarray,
+    dim: int,
+    outdir: Path,
+) -> np.ndarray:
+    """
+    Run UMAP(init='spectral', n_jobs=1, random_state=42).fit_transform(X).
+
+    This is for end-to-end quality comparison (SGD introduces variation vs
+    full_spectral, but random_state=42 and n_jobs=1 make it deterministic
+    within a fixed UMAP version). Output is cast to f32 and saved as
+    full_umap_e2e.npz key 'embedding' with shape (n, dim).
+    """
+    import umap as umap_lib
+
+    reducer = umap_lib.UMAP(
+        n_components=dim,
+        init="spectral",
+        n_jobs=1,
+        random_state=42,
+    )
+    embedding = reducer.fit_transform(X).astype(np.float32)
+    np.savez(outdir / "full_umap_e2e", embedding=embedding)
+    return embedding
+
+
 # ---------------------------------------------------------------------------
 # Per-dataset orchestrator
 # ---------------------------------------------------------------------------
@@ -353,7 +411,6 @@ def generate_all_for_dataset(
     gen_fn: Callable[..., tuple[np.ndarray, dict]],
     kwargs: dict,
     outdir: Path,
-    verify: bool = False,
     n_neighbors: int = 15,
     n_components: int = 2,
 ) -> dict:
@@ -417,7 +474,35 @@ def generate_all_for_dataset(
     generate_comp_f_scaling(embedding, dataset_dir)
     print(f"  comp_f_scaling.npz written")
 
-    return {"name": name, "shape": list(X.shape), "params": params, "n_neighbors": n_neighbors}
+    generate_full_spectral(pruned, X, n_conn_components, n_components, dataset_dir)
+    print(f"  full_spectral.npz written")
+
+    generate_full_umap_e2e(X, n_components, dataset_dir)
+    print(f"  full_umap_e2e.npz written")
+
+    STEP_FILES = [
+        "step0_raw_data.npz",
+        "step1_knn.npz",
+        "step2_smooth_knn.npz",
+        "step3_membership.npz",
+        "step4_symmetrized.npz",
+        "step5a_pruned.npz",
+        "comp_a_degrees.npz",
+        "comp_b_laplacian.npz",
+        "comp_c_components.npz",
+        "comp_d_eigensolver.npz",
+        "comp_e_selection.npz",
+        "comp_f_scaling.npz",
+        "full_spectral.npz",
+        "full_umap_e2e.npz",
+    ]
+    return {
+        "name": name,
+        "shape": list(X.shape),
+        "params": params,
+        "n_neighbors": n_neighbors,
+        "step_files": STEP_FILES,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -469,7 +554,7 @@ def main() -> None:
     for name, gen_fn, kwargs in selected:
         entry = generate_all_for_dataset(
             name, gen_fn, kwargs, outdir,
-            verify=args.verify, n_neighbors=args.n_neighbors,
+            n_neighbors=args.n_neighbors,
             n_components=args.n_components,
         )
         manifest["datasets"].append(entry)
@@ -477,6 +562,14 @@ def main() -> None:
     manifest_path = outdir / "manifest.json"
     with open(manifest_path, "w") as f:
         json.dump(manifest, f, indent=2, default=str)
+
+    if args.verify:
+        import verify_fixtures
+        dataset_names = [name for name, _, _ in selected]
+        all_pass = verify_fixtures.main(outdir, dataset_names)
+        if not all_pass:
+            sys.exit(1)
+
     print(f"\nmanifest.json → {manifest_path}")
     print(f"Done. {len(manifest['datasets'])} dataset(s) generated.")
 
