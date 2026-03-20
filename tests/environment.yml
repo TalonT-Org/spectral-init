@@ -12,3 +12,4 @@ dependencies:
   - umap-learn=0.5.11
   - matplotlib=3.10.*
   - tqdm=4.*
+  - pytest

@@ -17,10 +17,15 @@ Thumbs.db
 /temp/
 
 # Python fixtures (generated, large)
-tests/fixtures/*.npz
+tests/fixtures/**/*.npz
 
 # Python environment (micromamba prefix, never commit)
 /envs/
 
 # Secrets
 .secrets.yaml
+
+# Python bytecode
+**/__pycache__/
+*.pyc
+*.pyo
