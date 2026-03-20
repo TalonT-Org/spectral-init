@@ -1,0 +1,11 @@
+github:
+  default_repo: TalonT-Org/spectral-init
+  token: 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
+safety:
+  require_dry_walkthrough: true
+  reset_guard_marker: .autoskillit-workspace
+  test_gate_on_merge: true
+test_check:
+  command:
+  - cargo
+  - test
