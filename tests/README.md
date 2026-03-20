@@ -30,10 +30,11 @@ Options:
 - `--verify`           Run `verify_fixtures.py` after generation; exit 1 if any check fails
 - `--n-neighbors N`    KNN neighbor count (default: 15)
 - `--n-components N`   Embedding dimensions (default: 2)
+- `--knn-method M`     KNN method: `approx` (default), `exact`, or `both` (see section below)
 
 Examples:
 
-    # Generate all 7 datasets
+    # Generate all datasets (approx KNN, default)
     python tests/generate_fixtures.py
 
     # Generate only blobs_50 and disconnected_200
@@ -41,6 +42,36 @@ Examples:
 
     # Generate and immediately verify
     python tests/generate_fixtures.py --verify
+
+---
+
+## KNN Methods and the 4096 Threshold
+
+Python UMAP uses two KNN algorithms depending on dataset size:
+
+- **n < 4096**: `sklearn.neighbors.NearestNeighbors` (exact pairwise distances via
+  `sklearn.metrics.pairwise_distances`).
+- **n ≥ 4096**: PyNNDescent (approximate, faster).
+
+The fixture pipeline captures both paths via the `--knn-method` flag:
+
+| Flag value | What runs | Files generated |
+|---|---|---|
+| `approx` (default) | `umap.nearest_neighbors` (PyNNDescent) | `step1_knn.npz` … `step5a_pruned.npz` |
+| `exact` | `sklearn.metrics.pairwise_distances` | `step1_knn_exact.npz` … `step5a_pruned_exact.npz` |
+| `both` | Both paths | All approx + all exact files |
+
+Use `--knn-method exact` (or `both`) only for datasets with n < 4096 — the O(n²) distance
+matrix is impractical for large datasets.
+
+Examples:
+
+    # Generate exact-path fixtures for all small datasets
+    python tests/generate_fixtures.py --datasets blobs_50 blobs_500 moons_200 \
+        circles_300 near_dupes_100 disconnected_200 --knn-method exact --verify
+
+    # Generate both paths for blobs_50
+    python tests/generate_fixtures.py --datasets blobs_50 --knn-method both
 
 ---
 
@@ -172,3 +203,5 @@ comp_f) which are all standard numpy `.npz` archives.
 | `circles_300` | (300, 2) | Concentric circles | Nonlinear structure |
 | `near_dupes_100` | (100, 2) | Near-duplicates | Tests degenerate eigenvalue handling |
 | `disconnected_200` | (200, 2) | 4 isolated clusters | Tests multi-component graph handling |
+| `blobs_connected_200` | (200, 2) | Gaussian blobs | Guaranteed-connected graph; tests eigensolver on medium connected input |
+| `blobs_connected_2000` | (2000+, 2) | Gaussian blobs | Guaranteed-connected graph; tests eigensolver on large connected input |
