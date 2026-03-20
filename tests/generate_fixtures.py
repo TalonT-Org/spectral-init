@@ -246,6 +246,8 @@ def generate_comp_d_eigensolver(
         eigenvalues, eigenvectors = scipy.sparse.linalg.eigsh(
             L, k=k, which="SM", ncv=ncv, tol=1e-4, v0=v0, maxiter=n * 5
         )
+        solver_name = b"eigsh"
+        converged = True
     except scipy.sparse.linalg.ArpackNoConvergence:
         # Dense fallback for graphs with degenerate near-zero eigenvalues
         # (e.g. disconnected graphs where #components >= k).
@@ -258,6 +260,8 @@ def generate_comp_d_eigensolver(
         all_eigenvalues, all_eigenvectors = np.linalg.eigh(L_dense)
         eigenvalues = all_eigenvalues[:k]
         eigenvectors = all_eigenvectors[:, :k]
+        solver_name = b"eigh"
+        converged = False
 
     eigenvalues = np.maximum(eigenvalues, 0.0)
 
@@ -275,12 +279,17 @@ def generate_comp_d_eigensolver(
             file=sys.stderr,
         )
 
+    eigenvalue_gaps = np.diff(eigenvalues)  # shape (k-1,), dtype float64
+
     np.savez(
         outdir / "comp_d_eigensolver",
         eigenvalues=eigenvalues,
         eigenvectors=eigenvectors,
         residuals=residuals,
         k=np.int32(k),
+        solver_name=np.bytes_(solver_name),
+        converged=np.bool_(converged),
+        eigenvalue_gaps=eigenvalue_gaps,
     )
     return eigenvalues, eigenvectors
 
