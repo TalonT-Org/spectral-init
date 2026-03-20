@@ -333,6 +333,44 @@ def cross_check_full_spectral_vs_comp_f(
     return errors
 
 
+def verify_exact_pipeline_files(
+    dataset_dir: Path,
+    n_samples: int,
+    n_neighbors: int,
+    n_components: int = 2,
+) -> list[str]:
+    """
+    Validate the five _exact.npz fixture variants if they are present.
+    Skips silently when the files are absent (large datasets, or approx-only run).
+    """
+    failures: list[str] = []
+    if not (dataset_dir / "step1_knn_exact.npz").exists():
+        return failures  # exact pipeline was not generated; skip
+
+    def run(label: str, fn, *args):
+        for e in fn(*args):
+            failures.append(f"  [{label}] {e}")
+
+    n, k = n_samples, n_neighbors
+
+    d1e = np.load(dataset_dir / "step1_knn_exact.npz", allow_pickle=False)
+    run("step1_knn_exact", check_step1, d1e, n, k)
+
+    d2e = np.load(dataset_dir / "step2_smooth_knn_exact.npz", allow_pickle=False)
+    run("step2_smooth_knn_exact", check_step2, d2e, n, k)
+
+    A3e = scipy.sparse.load_npz(str(dataset_dir / "step3_membership_exact.npz"))
+    run("step3_membership_exact", check_step3, A3e, n)
+
+    A4e = scipy.sparse.load_npz(str(dataset_dir / "step4_symmetrized_exact.npz"))
+    run("step4_symmetrized_exact", check_step4, A4e, n)
+
+    A5e = scipy.sparse.load_npz(str(dataset_dir / "step5a_pruned_exact.npz"))
+    run("step5a_pruned_exact", check_step5a, A5e, A4e, n)
+
+    return failures
+
+
 # ---------------------------------------------------------------------------
 # Per-dataset orchestrator
 # ---------------------------------------------------------------------------
@@ -408,6 +446,10 @@ def verify_dataset(
     cross = cross_check_full_spectral_vs_comp_f(dataset_dir, n, dim, n_conn)
     for e in cross:
         failures.append(f"  [cross_check] {e}")
+
+    # Exact-distance pipeline (skipped silently if files absent)
+    exact_failures = verify_exact_pipeline_files(dataset_dir, n_samples, n_neighbors, n_components)
+    failures.extend(exact_failures)
 
     return failures
 
