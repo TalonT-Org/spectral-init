@@ -57,6 +57,8 @@ def make_near_dupes_dataset(
     Dupes are all within jitter of a shared center. Max pairwise Euclidean
     distance among dupes = 2 * jitter * sqrt(2) ≈ 8.49e-7 < 1e-6 for jitter=3e-7.
     """
+    if n_dupes >= n:
+        raise ValueError(f"n_dupes ({n_dupes}) must be less than n ({n})")
     rng = np.random.default_rng(seed)
     n_normal = n - n_dupes
     X_normal = rng.standard_normal((n_normal, 2))
@@ -118,7 +120,7 @@ def save_dense(path: Path | str, dtype: np.dtype = np.float64, **arrays: np.ndar
     np.savez(path, **cast)
 
 
-def save_sparse(path: Path | str, matrix: scipy.sparse.spmatrix) -> None:
+def save_sparse(path: Path | str, matrix: scipy.sparse.sparray | scipy.sparse.spmatrix) -> None:
     """Save a sparse matrix to a .npz file via scipy.sparse.save_npz."""
     scipy.sparse.save_npz(str(path), matrix)
 
@@ -144,6 +146,6 @@ def get_env_metadata() -> dict:
         try:
             mod = importlib.import_module(pkg)
             env[pkg] = getattr(mod, attr, "unknown")
-        except ImportError:
-            env[pkg] = None
+        except ImportError as e:
+            env[pkg] = f"import-error: {e}"
     return env
