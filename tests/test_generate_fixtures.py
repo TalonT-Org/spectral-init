@@ -6,9 +6,19 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+import pytest
+import scipy.sparse
 
 
 SCRIPT = Path(__file__).parent / "generate_fixtures.py"
+
+
+@pytest.fixture(scope="session")
+def blobs_50_outdir(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Run the blobs_50 fixture pipeline once per test session; shared by steps 3–5a tests."""
+    td = tmp_path_factory.mktemp("blobs_50")
+    _run(["blobs_50"], str(td))
+    return td
 
 
 def _run(datasets: list[str], outdir: str, extra_args: list[str] | None = None) -> None:
@@ -62,7 +72,10 @@ def test_pipeline_is_deterministic():
     with tempfile.TemporaryDirectory() as td_a, tempfile.TemporaryDirectory() as td_b:
         _run(["blobs_50"], td_a)
         _run(["blobs_50"], td_b)
-        for fname in ("step0_raw_data.npz", "step1_knn.npz", "step2_smooth_knn.npz"):
+        for fname in (
+            "step0_raw_data.npz", "step1_knn.npz", "step2_smooth_knn.npz",
+            "step3_membership.npz", "step4_symmetrized.npz", "step5a_pruned.npz",
+        ):
             npz_a = np.load(Path(td_a) / "blobs_50" / fname)
             npz_b = np.load(Path(td_b) / "blobs_50" / fname)
             assert set(npz_a.files) == set(npz_b.files), f"{fname}: different keys"
@@ -82,5 +95,45 @@ def test_all_7_datasets_generate():
             "circles_300", "near_dupes_100", "disconnected_200",
         ]
         for name in expected_datasets:
-            for fname in ("step0_raw_data.npz", "step1_knn.npz", "step2_smooth_knn.npz"):
+            for fname in (
+                "step0_raw_data.npz", "step1_knn.npz", "step2_smooth_knn.npz",
+                "step3_membership.npz", "step4_symmetrized.npz", "step5a_pruned.npz",
+            ):
                 assert (Path(td) / name / fname).exists(), f"Missing {name}/{fname}"
+
+
+def test_step3_membership_output(blobs_50_outdir: Path):
+    """step3: shape (n,n), values in (0,1], NOT symmetric (directed graph)."""
+    A = scipy.sparse.load_npz(blobs_50_outdir / "blobs_50" / "step3_membership.npz")
+    assert A.shape == (50, 50)
+    assert A.nnz > 0
+    assert (A.data > 0).all(), "all nonzeros must be positive"
+    assert (A.data <= 1.0 + 1e-10).all(), "all nonzeros must be <= 1.0"
+    diff = (A - A.T).tocsr()
+    assert diff.nnz > 0, "step3 must NOT be symmetric (directed graph)"
+
+
+def test_step4_symmetrized_output(blobs_50_outdir: Path):
+    """step4: shape (n,n), values in (0,1], symmetric."""
+    A = scipy.sparse.load_npz(blobs_50_outdir / "blobs_50" / "step4_symmetrized.npz")
+    assert A.shape == (50, 50)
+    assert A.nnz > 0
+    assert (A.data > 0).all(), "all nonzeros must be positive"
+    assert (A.data <= 1.0 + 1e-10).all(), "all nonzeros must be <= 1.0"
+    diff = abs(A - A.T)
+    assert diff.max() < 1e-10, "step4 must be symmetric (||A - A^T|| == 0)"
+
+
+def test_step5a_pruned_output(blobs_50_outdir: Path):
+    """step5a: fewer nnz than step4, min nonzero >= threshold, still symmetric."""
+    A4 = scipy.sparse.load_npz(blobs_50_outdir / "blobs_50" / "step4_symmetrized.npz")
+    A5 = scipy.sparse.load_npz(blobs_50_outdir / "blobs_50" / "step5a_pruned.npz")
+    assert A5.shape == (50, 50)
+    n_epochs = 500  # n=50 <= 10000
+    threshold = A4.data.max() / float(n_epochs)
+    # blobs_50 has 15 neighbors with varied membership strengths; many edges fall
+    # below max/500 ≈ 0.002, so pruning is guaranteed for this dataset.
+    assert A5.nnz < A4.nnz, "step5a must have fewer nonzeros than step4 (edges pruned)"
+    assert A5.data.min() >= threshold, "all surviving edges must be >= threshold"
+    diff = abs(A5 - A5.T)
+    assert diff.max() < 1e-10, "step5a must still be symmetric"
