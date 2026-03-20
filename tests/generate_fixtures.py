@@ -241,9 +241,19 @@ def generate_comp_d_eigensolver(
     ncv = max(2 * k + 1, int(np.sqrt(n)))
     v0 = np.ones(n, dtype=np.float64)
 
-    eigenvalues, eigenvectors = scipy.sparse.linalg.eigsh(
-        L, k=k, which="SM", ncv=ncv, tol=1e-4, v0=v0, maxiter=n * 5
-    )
+    try:
+        eigenvalues, eigenvectors = scipy.sparse.linalg.eigsh(
+            L, k=k, which="SM", ncv=ncv, tol=1e-4, v0=v0, maxiter=n * 5
+        )
+    except scipy.sparse.linalg.ArpackNoConvergence:
+        # Dense fallback for graphs with degenerate near-zero eigenvalues
+        # (e.g. disconnected graphs where #components >= k).
+        L_dense = L.toarray()
+        all_eigenvalues, all_eigenvectors = np.linalg.eigh(L_dense)
+        eigenvalues = all_eigenvalues[:k]
+        eigenvectors = all_eigenvectors[:, :k]
+
+    eigenvalues = np.maximum(eigenvalues, 0.0)
 
     residuals = np.array([
         np.linalg.norm(L @ eigenvectors[:, i] - eigenvalues[i] * eigenvectors[:, i])
