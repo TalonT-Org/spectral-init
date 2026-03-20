@@ -10,8 +10,10 @@ SCRIPT = Path(__file__).parent / "generate_fixtures.py"
 
 # ── Session fixture ────────────────────────────────────────────────────────────
 
-def _run(datasets: list[str], outdir: str) -> None:
+def _run(datasets: list[str], outdir: str, extra_args: list[str] | None = None) -> None:
     cmd = [sys.executable, str(SCRIPT), "--output-dir", outdir, "--datasets"] + datasets
+    if extra_args:
+        cmd += extra_args
     result = subprocess.run(cmd, capture_output=True, text=True)
     assert result.returncode == 0, f"CMD: {cmd}\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
 
@@ -244,3 +246,25 @@ def test_byte_identical_reruns(tmp_path):
     _run(["blobs_50"], str(tmp_path / "run2"))
     second = (tmp_path / "run2" / "blobs_50" / "comp_f_scaling.npz").read_bytes()
     assert first == second
+
+
+# ---------------------------------------------------------------------------
+# Exact-path verify_fixtures integration tests (Tests 15–16)
+# ---------------------------------------------------------------------------
+
+def test_verify_exact_path_passes_for_blobs_50(tmp_path):
+    """Test 15: verify_exact_path returns empty failures list for a generated exact run."""
+    _run(["blobs_50"], str(tmp_path), ["--knn-method", "exact"])
+    sys.path.insert(0, str(SCRIPT.parent))
+    import verify_fixtures
+    failures = verify_fixtures.verify_exact_path(tmp_path / "blobs_50", n_samples=50, n_neighbors=15)
+    assert failures == [], f"verify_exact_path reported failures:\n" + "\n".join(failures)
+
+
+def test_verify_detects_exact_files_via_main(tmp_path):
+    """Test 16: verify_fixtures.main returns True (all pass) for a 'both' run."""
+    _run(["blobs_50"], str(tmp_path), ["--knn-method", "both"])
+    sys.path.insert(0, str(SCRIPT.parent))
+    import verify_fixtures
+    result = verify_fixtures.main(tmp_path, ["blobs_50"])
+    assert result is True, "verify_fixtures.main should return True when all checks pass"

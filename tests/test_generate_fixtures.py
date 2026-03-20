@@ -214,3 +214,203 @@ def test_step3_membership_no_explicit_zeros():
                 f"[{name}] step3_membership contains explicit zeros "
                 f"(count={np.sum(A.data == 0)})"
             )
+
+
+# ---------------------------------------------------------------------------
+# Exact KNN path tests (Tests 1–14)
+# ---------------------------------------------------------------------------
+
+def test_step1_knn_exact_output():
+    """Test 1: exact-only run produces step1_knn_exact.npz; step1_knn.npz absent."""
+    with tempfile.TemporaryDirectory() as td:
+        _run(["blobs_50"], td, ["--knn-method", "exact"])
+        p = Path(td) / "blobs_50"
+        d = np.load(p / "step1_knn_exact.npz")
+        assert set(d.files) >= {"knn_indices", "knn_dists", "n_neighbors"}
+        assert d["knn_indices"].dtype == np.int32
+        assert d["knn_indices"].shape == (50, 15)
+        assert d["knn_dists"].dtype == np.float32
+        assert d["knn_dists"].shape == (50, 15)
+        assert (d["knn_indices"] >= 0).all() and (d["knn_indices"] < 50).all()
+        # no self-references
+        for i in range(50):
+            assert i not in d["knn_indices"][i], f"self-reference at row {i}"
+        assert (d["knn_dists"] >= 0).all()
+        assert d["n_neighbors"] == np.int32(15)
+        assert not (p / "step1_knn.npz").exists(), "approx step1 should not exist in exact-only run"
+
+
+def test_step1_knn_exact_distances_match_pairwise():
+    """Test 2: exact KNN distances match sklearn pairwise_distances ground truth."""
+    sys.path.insert(0, str(SCRIPT.parent))
+    from generate_fixtures import generate_step1_knn_exact
+    from sklearn.metrics import pairwise_distances
+    from fixture_utils import DATASETS
+
+    X = None
+    for name, gen_fn, kwargs in DATASETS:
+        if name == "blobs_50":
+            X, _ = gen_fn(**kwargs)
+            break
+    assert X is not None
+
+    with tempfile.TemporaryDirectory() as td:
+        outdir = Path(td)
+        knn_indices, knn_dists = generate_step1_knn_exact(X, outdir, 15)
+        pdist = pairwise_distances(X, metric="euclidean")
+        for i in range(len(X)):
+            for j in range(15):
+                expected = pdist[i, knn_indices[i, j]]
+                np.testing.assert_allclose(
+                    knn_dists[i, j], expected, atol=1e-5,
+                    err_msg=f"Distance mismatch at row {i}, neighbor {j}",
+                )
+
+
+def test_knn_method_exact_generates_exact_files():
+    """Test 3: --knn-method exact generates all _exact step files; no approx step1."""
+    with tempfile.TemporaryDirectory() as td:
+        _run(["blobs_50"], td, ["--knn-method", "exact"])
+        p = Path(td) / "blobs_50"
+        for fname in (
+            "step1_knn_exact.npz", "step2_smooth_knn_exact.npz",
+            "step3_membership_exact.npz", "step4_symmetrized_exact.npz",
+            "step5a_pruned_exact.npz",
+        ):
+            assert (p / fname).exists(), f"Missing {fname}"
+        assert not (p / "step1_knn.npz").exists(), "approx step1 should not exist"
+
+
+def test_knn_method_approx_default():
+    """Test 4: default (approx) run produces step1_knn.npz; no _exact files."""
+    with tempfile.TemporaryDirectory() as td:
+        _run(["blobs_50"], td)
+        p = Path(td) / "blobs_50"
+        assert (p / "step1_knn.npz").exists()
+        assert not (p / "step1_knn_exact.npz").exists()
+
+
+def test_knn_method_both_generates_all_files():
+    """Test 5: --knn-method both generates both approx and exact step1/5a files."""
+    with tempfile.TemporaryDirectory() as td:
+        _run(["blobs_50"], td, ["--knn-method", "both"])
+        p = Path(td) / "blobs_50"
+        assert (p / "step1_knn.npz").exists()
+        assert (p / "step1_knn_exact.npz").exists()
+        assert (p / "step5a_pruned.npz").exists()
+        assert (p / "step5a_pruned_exact.npz").exists()
+
+
+def test_exact_step3_membership_is_directed():
+    """Test 6: step3_membership_exact.npz must be directed (asymmetric)."""
+    with tempfile.TemporaryDirectory() as td:
+        _run(["blobs_50"], td, ["--knn-method", "exact"])
+        A = scipy.sparse.load_npz(str(Path(td) / "blobs_50" / "step3_membership_exact.npz"))
+        diff = (A - A.T).tocsr()
+        assert diff.nnz > 0, "step3_membership_exact must be asymmetric (directed)"
+
+
+def test_exact_step4_symmetrized_is_symmetric():
+    """Test 7: step4_symmetrized_exact.npz must be symmetric."""
+    with tempfile.TemporaryDirectory() as td:
+        _run(["blobs_50"], td, ["--knn-method", "exact"])
+        A = scipy.sparse.load_npz(str(Path(td) / "blobs_50" / "step4_symmetrized_exact.npz"))
+        assert abs(A - A.T).max() < 1e-10, "step4_symmetrized_exact must be symmetric"
+
+
+def test_exact_step5a_pruned_fewer_edges():
+    """Test 8: step5a_pruned_exact must have fewer edges than step4_symmetrized_exact."""
+    with tempfile.TemporaryDirectory() as td:
+        _run(["blobs_50"], td, ["--knn-method", "exact"])
+        p = Path(td) / "blobs_50"
+        A4 = scipy.sparse.load_npz(str(p / "step4_symmetrized_exact.npz"))
+        A5 = scipy.sparse.load_npz(str(p / "step5a_pruned_exact.npz"))
+        assert A5.nnz < A4.nnz, "step5a_pruned_exact must have fewer nnz than step4_symmetrized_exact"
+
+
+def test_exact_path_deterministic():
+    """Test 9: exact path is deterministic (byte-identical across two runs)."""
+    with tempfile.TemporaryDirectory() as td_a, tempfile.TemporaryDirectory() as td_b:
+        _run(["blobs_50"], td_a, ["--knn-method", "exact"])
+        _run(["blobs_50"], td_b, ["--knn-method", "exact"])
+        f_a = (Path(td_a) / "blobs_50" / "step1_knn_exact.npz").read_bytes()
+        f_b = (Path(td_b) / "blobs_50" / "step1_knn_exact.npz").read_bytes()
+        assert f_a == f_b, "step1_knn_exact.npz must be byte-identical across runs"
+
+
+def test_knn_method_manifest_records_method():
+    """Test 10: manifest records knn_method and step_files_exact for exact run."""
+    import json
+    with tempfile.TemporaryDirectory() as td:
+        _run(["blobs_50"], td, ["--knn-method", "exact"])
+        manifest = json.loads((Path(td) / "manifest.json").read_text())
+        entry = next(e for e in manifest["datasets"] if e["name"] == "blobs_50")
+        assert entry["knn_method"] == "exact"
+        assert "step1_knn_exact.npz" in entry["step_files_exact"]
+
+
+def test_suffix_parameter_step2():
+    """Test 11: generate_step2_smooth_knn with suffix='_exact' writes correct file."""
+    sys.path.insert(0, str(SCRIPT.parent))
+    from generate_fixtures import generate_step2_smooth_knn
+
+    rng = np.random.RandomState(0)
+    knn_dists = rng.rand(50, 15).astype(np.float32) * 2.0
+    with tempfile.TemporaryDirectory() as td:
+        outdir = Path(td)
+        generate_step2_smooth_knn(knn_dists, outdir, 15, suffix="_exact")
+        assert (outdir / "step2_smooth_knn_exact.npz").exists()
+        assert not (outdir / "step2_smooth_knn.npz").exists()
+
+
+def test_suffix_parameter_step3():
+    """Test 12: generate_step3_membership with suffix='_exact' writes correct file."""
+    sys.path.insert(0, str(SCRIPT.parent))
+    from generate_fixtures import generate_step2_smooth_knn, generate_step3_membership
+
+    rng = np.random.RandomState(0)
+    knn_indices = np.argsort(rng.rand(50, 50), axis=1)[:, 1:16].astype(np.int32)
+    knn_dists = rng.rand(50, 15).astype(np.float32) * 2.0
+    with tempfile.TemporaryDirectory() as td:
+        outdir = Path(td)
+        sigmas, rhos = generate_step2_smooth_knn(knn_dists, outdir, 15, suffix="_exact")
+        generate_step3_membership(knn_indices, knn_dists, sigmas, rhos, outdir, 50, suffix="_exact")
+        assert (outdir / "step3_membership_exact.npz").exists()
+        assert not (outdir / "step3_membership.npz").exists()
+
+
+def test_suffix_parameter_step4():
+    """Test 13: generate_step4_symmetrized with suffix='_exact' writes correct file."""
+    sys.path.insert(0, str(SCRIPT.parent))
+    from generate_fixtures import generate_step4_symmetrized
+
+    n = 20
+    rng = np.random.RandomState(0)
+    rows = rng.randint(0, n, 100)
+    cols = rng.randint(0, n, 100)
+    vals = rng.rand(100).astype(np.float32) * 0.5
+    directed = scipy.sparse.coo_matrix((vals, (rows, cols)), shape=(n, n))
+    with tempfile.TemporaryDirectory() as td:
+        outdir = Path(td)
+        generate_step4_symmetrized(directed, outdir, suffix="_exact")
+        assert (outdir / "step4_symmetrized_exact.npz").exists()
+        assert not (outdir / "step4_symmetrized.npz").exists()
+
+
+def test_suffix_parameter_step5a():
+    """Test 14: generate_step5a_prune with suffix='_exact' writes correct file."""
+    sys.path.insert(0, str(SCRIPT.parent))
+    from generate_fixtures import generate_step4_symmetrized, generate_step5a_prune
+
+    n = 20
+    rng = np.random.RandomState(0)
+    rows = rng.randint(0, n, 100)
+    cols = rng.randint(0, n, 100)
+    vals = rng.rand(100).astype(np.float32) * 0.5
+    directed = scipy.sparse.coo_matrix((vals, (rows, cols)), shape=(n, n))
+    with tempfile.TemporaryDirectory() as td:
+        outdir = Path(td)
+        symmetric = generate_step4_symmetrized(directed, outdir, suffix="_exact")
+        generate_step5a_prune(symmetric, outdir, n, suffix="_exact")
+        assert (outdir / "step5a_pruned_exact.npz").exists()
+        assert not (outdir / "step5a_pruned.npz").exists()
