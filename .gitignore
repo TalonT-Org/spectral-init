@@ -24,3 +24,8 @@ tests/fixtures/**/*.npz
 
 # Secrets
 .secrets.yaml
+
+# Python bytecode
+**/__pycache__/
+*.pyc
+*.pyo
