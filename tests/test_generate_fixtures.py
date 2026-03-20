@@ -21,6 +21,14 @@ def blobs_50_outdir(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return td
 
 
+@pytest.fixture(scope="session")
+def disconnected_200_outdir(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Run the disconnected_200 fixture pipeline once per test session."""
+    td = tmp_path_factory.mktemp("disconnected_200")
+    _run(["disconnected_200"], str(td))
+    return td
+
+
 def _run(datasets: list[str], outdir: str, extra_args: list[str] | None = None) -> None:
     cmd = [sys.executable, str(SCRIPT), "--output-dir", outdir, "--datasets"] + datasets
     if extra_args:
@@ -75,6 +83,7 @@ def test_pipeline_is_deterministic():
         for fname in (
             "step0_raw_data.npz", "step1_knn.npz", "step2_smooth_knn.npz",
             "step3_membership.npz", "step4_symmetrized.npz", "step5a_pruned.npz",
+            "comp_a_degrees.npz", "comp_b_laplacian.npz", "comp_c_components.npz",
         ):
             npz_a = np.load(Path(td_a) / "blobs_50" / fname)
             npz_b = np.load(Path(td_b) / "blobs_50" / fname)
@@ -98,6 +107,7 @@ def test_all_7_datasets_generate():
             for fname in (
                 "step0_raw_data.npz", "step1_knn.npz", "step2_smooth_knn.npz",
                 "step3_membership.npz", "step4_symmetrized.npz", "step5a_pruned.npz",
+                "comp_a_degrees.npz", "comp_b_laplacian.npz", "comp_c_components.npz",
             ):
                 assert (Path(td) / name / fname).exists(), f"Missing {name}/{fname}"
 
@@ -137,3 +147,52 @@ def test_step5a_pruned_output(blobs_50_outdir: Path):
     assert A5.data.min() >= threshold, "all surviving edges must be >= threshold"
     diff = abs(A5 - A5.T)
     assert diff.max() < 1e-10, "step5a must still be symmetric"
+
+
+def test_comp_a_degrees_output(blobs_50_outdir: Path):
+    d = np.load(blobs_50_outdir / "blobs_50" / "comp_a_degrees.npz")
+    assert set(d.files) >= {"degrees", "sqrt_deg"}
+    degrees = d["degrees"]
+    sqrt_deg = d["sqrt_deg"]
+    assert degrees.dtype == np.float64
+    assert degrees.shape == (50,)
+    assert sqrt_deg.dtype == np.float64
+    assert sqrt_deg.shape == (50,)
+    assert (degrees >= 0).all(), "degrees must be non-negative"
+    np.testing.assert_allclose(sqrt_deg, np.sqrt(degrees), atol=1e-14)
+
+
+def test_comp_b_laplacian_output(blobs_50_outdir: Path):
+    L = scipy.sparse.load_npz(blobs_50_outdir / "blobs_50" / "comp_b_laplacian.npz")
+    n = 50
+    assert L.shape == (n, n)
+    assert L.dtype == np.float64
+    diag = np.asarray(L.diagonal())
+    np.testing.assert_allclose(diag, 1.0, atol=1e-12, err_msg="Laplacian diagonal must be 1.0")
+    diff = abs(L - L.T)
+    assert diff.max() < 1e-14, f"Laplacian is not symmetric: max diff = {diff.max()}"
+    L_dense = L.toarray()
+    eigvals = np.linalg.eigvalsh(L_dense)
+    assert eigvals.min() >= -1e-10, f"Eigenvalue below 0: {eigvals.min()}"
+    assert eigvals.max() <= 2.0 + 1e-10, f"Eigenvalue above 2: {eigvals.max()}"
+
+
+def test_comp_c_components_connected(blobs_50_outdir: Path):
+    d = np.load(blobs_50_outdir / "blobs_50" / "comp_c_components.npz")
+    assert set(d.files) >= {"n_components", "labels"}
+    assert int(d["n_components"]) == 1, "blobs_50 must be a single connected component"
+    labels = d["labels"]
+    assert labels.dtype == np.int32
+    assert labels.shape == (50,)
+    assert (labels == 0).all(), "all nodes in a single component must have label 0"
+
+
+def test_comp_c_components_disconnected(disconnected_200_outdir: Path):
+    d = np.load(disconnected_200_outdir / "disconnected_200" / "comp_c_components.npz")
+    n_components = int(d["n_components"])
+    assert n_components > 1, f"disconnected_200 must have >1 component, got {n_components}"
+    labels = d["labels"]
+    assert labels.dtype == np.int32
+    assert labels.shape == (200,)
+    assert labels.min() >= 0
+    assert labels.max() < n_components
