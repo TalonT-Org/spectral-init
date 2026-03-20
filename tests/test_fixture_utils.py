@@ -23,15 +23,34 @@ from fixture_utils import (
 )
 
 
-def test_registry_has_7_datasets():
-    """DATASETS registry must contain exactly the 7 required entries."""
-    assert len(DATASETS) == 7
+def test_registry_has_9_datasets():
+    """DATASETS registry must contain exactly the 9 required entries."""
+    assert len(DATASETS) == 9
     names = [name for name, _, _ in DATASETS]
     for expected in [
         "blobs_50", "blobs_500", "moons_200", "blobs_5000",
         "circles_300", "near_dupes_100", "disconnected_200",
+        "blobs_connected_200", "blobs_connected_2000",
     ]:
         assert expected in names, f"Missing dataset: {expected}"
+
+
+def test_blobs_connected_shapes():
+    """blobs_connected datasets return correct (n, n_features) shapes."""
+    X, params = make_blobs_dataset(n=200, n_features=2, n_centers=3, cluster_std=3.0, seed=42)
+    assert X.shape == (200, 2)
+    assert params["cluster_std"] == 3.0
+
+    X, params = make_blobs_dataset(n=2000, n_features=10, n_centers=5, cluster_std=5.0, seed=42)
+    assert X.shape == (2000, 10)
+    assert params["n_features"] == 10
+
+
+def test_blobs_connected_deterministic():
+    """blobs_connected generators are deterministic with same seed."""
+    X1, _ = make_blobs_dataset(n=200, n_features=2, n_centers=3, cluster_std=3.0, seed=42)
+    X2, _ = make_blobs_dataset(n=200, n_features=2, n_centers=3, cluster_std=3.0, seed=42)
+    np.testing.assert_array_equal(X1, X2)
 
 
 def test_generators_are_deterministic():

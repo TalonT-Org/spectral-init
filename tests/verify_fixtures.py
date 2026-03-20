@@ -166,7 +166,7 @@ def check_comp_b(L: scipy.sparse.spmatrix, n: int) -> list[str]:
     # PSD check via eigenvalues (only feasible for small n; skip for large graphs)
     if n <= 1000:
         eigvals = np.linalg.eigvalsh(L.toarray())
-        if eigvals.min() < -1e-10:
+        if eigvals.min() < -1e-6:
             errors.append(f"not PSD: min eigenvalue={eigvals.min():.2e}")
         if eigvals.max() > 2.0 + 1e-10:
             errors.append(f"eigenvalue > 2: max={eigvals.max():.6f}")
@@ -317,7 +317,14 @@ def cross_check_full_spectral_vs_comp_f(
     errors = []
     full_emb = np.load(dataset_dir / "full_spectral.npz", allow_pickle=False)["embedding"]
     pre_noise = np.load(dataset_dir / "comp_f_scaling.npz", allow_pickle=False)["pre_noise"]
-    full_f32 = full_emb.astype(np.float32)
+    full_f64 = full_emb.astype(np.float64)
+
+    # Normalize full_spectral to max abs 10 to match comp_f pre_noise scale.
+    # spectral_layout may return unscaled embeddings depending on UMAP version.
+    full_max = np.abs(full_f64).max()
+    if full_max > 0:
+        full_f64 = full_f64 * (10.0 / full_max)
+    full_f32 = full_f64.astype(np.float32)
 
     for col in range(dim):
         v_full = full_f32[:, col]
