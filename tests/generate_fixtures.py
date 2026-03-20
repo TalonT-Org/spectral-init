@@ -15,9 +15,72 @@ from pathlib import Path
 from typing import Callable
 
 import numpy as np
+from numpy.random import RandomState
 
 sys.path.insert(0, str(Path(__file__).parent))
 from fixture_utils import DATASETS, get_env_metadata, save_dense, save_metadata
+
+
+# ---------------------------------------------------------------------------
+# Pipeline step functions — steps 0–2
+# ---------------------------------------------------------------------------
+
+def generate_step0_raw_data(X: np.ndarray, outdir: Path) -> None:
+    """Save dataset X as float64 with shape scalars to step0_raw_data.npz."""
+    n_samples, n_features = X.shape
+    np.savez(
+        outdir / "step0_raw_data",
+        X=X.astype(np.float64),
+        n_samples=np.int32(n_samples),
+        n_features=np.int32(n_features),
+    )
+
+
+def generate_step1_knn(
+    X: np.ndarray, outdir: Path, params: dict, n_neighbors: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Run UMAP nearest_neighbors and save step1_knn.npz.
+    Returns (knn_indices, knn_dists) for downstream steps.
+    """
+    from umap.umap_ import nearest_neighbors
+
+    random_state = RandomState(params["seed"])
+    knn_indices, knn_dists, _ = nearest_neighbors(
+        X,
+        n_neighbors,
+        metric="euclidean",
+        metric_kwds={},
+        angular=False,
+        random_state=random_state,
+        n_jobs=1,
+    )
+    np.savez(
+        outdir / "step1_knn",
+        knn_indices=knn_indices.astype(np.int32),
+        knn_dists=knn_dists.astype(np.float32),
+        n_neighbors=np.int32(n_neighbors),
+    )
+    return knn_indices, knn_dists
+
+
+def generate_step2_smooth_knn(
+    knn_dists: np.ndarray, outdir: Path, n_neighbors: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Run UMAP smooth_knn_dist and save step2_smooth_knn.npz.
+    Returns (sigmas, rhos) for downstream steps.
+    """
+    from umap.umap_ import smooth_knn_dist
+
+    sigmas, rhos = smooth_knn_dist(knn_dists.astype(np.float32), float(n_neighbors))
+    np.savez(
+        outdir / "step2_smooth_knn",
+        sigmas=sigmas.astype(np.float32),
+        rhos=rhos.astype(np.float32),
+        n_neighbors=np.int32(n_neighbors),
+    )
+    return sigmas, rhos
 
 
 # ---------------------------------------------------------------------------
@@ -54,6 +117,7 @@ def generate_all_for_dataset(
     kwargs: dict,
     outdir: Path,
     verify: bool = False,
+    n_neighbors: int = 15,
 ) -> dict:
     """Run all pipeline steps for a single dataset, return manifest entry."""
     dataset_dir = outdir / name
@@ -63,8 +127,17 @@ def generate_all_for_dataset(
     X, params = gen_fn(**kwargs)
     print(f"  shape: {X.shape}, dtype: {X.dtype}")
 
-    # Save raw points
-    save_dense(dataset_dir / "X.npz", X=X)
+    # Step 0: raw data (replaces the former X.npz save)
+    generate_step0_raw_data(X, dataset_dir)
+    print(f"  step0_raw_data.npz written")
+
+    # Step 1: nearest neighbors (triggers numba JIT on first call)
+    knn_indices, knn_dists = generate_step1_knn(X, dataset_dir, params, n_neighbors)
+    print(f"  step1_knn.npz written")
+
+    # Step 2: smooth KNN distances
+    generate_step2_smooth_knn(knn_dists, dataset_dir, n_neighbors)
+    print(f"  step2_smooth_knn.npz written")
 
     # Write meta.json
     meta = {
@@ -82,7 +155,7 @@ def generate_all_for_dataset(
     eigs  = step_compute_eigenvectors(lap, name, dataset_dir, params)
     _emb  = step_compute_embedding(eigs, name, dataset_dir, params)
 
-    return {"name": name, "shape": list(X.shape), "params": params}
+    return {"name": name, "shape": list(X.shape), "params": params, "n_neighbors": n_neighbors}
 
 
 # ---------------------------------------------------------------------------
@@ -105,6 +178,10 @@ def main() -> None:
         "--verify", action="store_true",
         help="Run post-generation constraint checks",
     )
+    parser.add_argument(
+        "--n-neighbors", type=int, default=15,
+        help="Number of nearest neighbors for KNN steps (default: 15)",
+    )
     args = parser.parse_args()
 
     outdir = Path(args.output_dir)
@@ -124,7 +201,10 @@ def main() -> None:
     }
 
     for name, gen_fn, kwargs in selected:
-        entry = generate_all_for_dataset(name, gen_fn, kwargs, outdir, verify=args.verify)
+        entry = generate_all_for_dataset(
+            name, gen_fn, kwargs, outdir,
+            verify=args.verify, n_neighbors=args.n_neighbors,
+        )
         manifest["datasets"].append(entry)
 
     manifest_path = outdir / "manifest.json"
