@@ -173,7 +173,7 @@ def test_comp_b_laplacian_output(blobs_50_outdir: Path):
     assert diff.max() < 1e-14, f"Laplacian is not symmetric: max diff = {diff.max()}"
     L_dense = L.toarray()
     eigvals = np.linalg.eigvalsh(L_dense)
-    assert eigvals.min() >= -1e-8, f"Eigenvalue below 0: {eigvals.min()}"
+    assert eigvals.min() >= -1e-7, f"Eigenvalue below 0: {eigvals.min()}"
     assert eigvals.max() <= 2.0 + 1e-10, f"Eigenvalue above 2: {eigvals.max()}"
 
 

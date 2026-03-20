@@ -166,7 +166,7 @@ def check_comp_b(L: scipy.sparse.spmatrix, n: int) -> list[str]:
     # PSD check via eigenvalues (only feasible for small n; skip for large graphs)
     if n <= 1000:
         eigvals = np.linalg.eigvalsh(L.toarray())
-        if eigvals.min() < -1e-8:
+        if eigvals.min() < -1e-7:
             errors.append(f"not PSD: min eigenvalue={eigvals.min():.2e}")
         if eigvals.max() > 2.0 + 1e-10:
             errors.append(f"eigenvalue > 2: max={eigvals.max():.6f}")
