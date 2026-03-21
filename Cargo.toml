@@ -13,6 +13,7 @@ rand = "0.9"
 rand_distr = "0.5"
 thiserror = "2"
 linfa-linalg = "0.2"        # pure-Rust LOBPCG; no LAPACK backend required
+ndarray16 = { package = "ndarray", version = "0.16" }  # linfa-linalg uses ndarray 0.16; alias for bridging
 annembed = "0.1"            # Halko-Tropp rSVD with native sprs CsMatI support
 
 [dev-dependencies]
@@ -35,3 +36,7 @@ path = "tests/integration/test_comp_b_laplacian.rs"
 [[test]]
 name = "test_comp_d_dense_evd"
 path = "tests/integration/test_comp_d_dense_evd.rs"
+
+[[test]]
+name = "test_comp_f_lobpcg"
+path = "tests/integration/test_comp_f_lobpcg.rs"

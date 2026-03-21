@@ -3,10 +3,10 @@
 mod components;
 mod laplacian;
 mod multi_component;
-pub(crate) mod operator;
+pub mod operator;
 mod scaling;
 mod selection;
-mod solvers;
+pub mod solvers;
 
 // Re-exported for component-level integration tests. These are internal pipeline
 // functions, not part of the stable public API.
