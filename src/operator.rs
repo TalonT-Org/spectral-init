@@ -18,7 +18,46 @@ pub trait LinearOperator {
 /// This is the Phase 3 SIMD replacement point. The raw-slice signature exposes
 /// the memory layout that AVX-512 / SELL-C-sigma intrinsics require. Do not
 /// change the signature; replace the body in Phase 3.
-fn spmv_csr_inner(
+///
+/// `pub` under the `testing` feature (bench/test access) with always-on
+/// precondition assertions; `pub(crate)` otherwise with `debug_assert!` guards.
+#[cfg(feature = "testing")]
+#[doc(hidden)]
+pub fn spmv_csr(
+    indptr: &[usize],
+    indices: &[usize],
+    data: &[f64],
+    x: &[f64],
+    y: &mut [f64],
+) {
+    assert!(
+        indptr.len() == y.len() + 1,
+        "CSR invariant violated: indptr.len()={} != y.len()+1={}",
+        indptr.len(),
+        y.len() + 1
+    );
+    assert!(
+        indices.iter().all(|&j| j < x.len()),
+        "CSR invariant violated: column index out of bounds (x.len()={})",
+        x.len()
+    );
+    assert!(
+        data.len() >= indptr.last().copied().unwrap_or(0),
+        "CSR invariant violated: data.len()={} < nnz={}",
+        data.len(),
+        indptr.last().copied().unwrap_or(0)
+    );
+    for i in 0..y.len() {
+        let mut acc = 0.0_f64;
+        for k in indptr[i]..indptr[i + 1] {
+            acc += data[k] * x[indices[k]];
+        }
+        y[i] = acc;
+    }
+}
+
+#[cfg(not(feature = "testing"))]
+pub(crate) fn spmv_csr(
     indptr: &[usize],
     indices: &[usize],
     data: &[f64],
@@ -49,17 +88,6 @@ fn spmv_csr_inner(
         }
         y[i] = acc;
     }
-}
-
-#[cfg(feature = "testing")]
-#[doc(hidden)]
-pub fn spmv_csr(indptr: &[usize], indices: &[usize], data: &[f64], x: &[f64], y: &mut [f64]) {
-    spmv_csr_inner(indptr, indices, data, x, y)
-}
-
-#[cfg(not(feature = "testing"))]
-pub(crate) fn spmv_csr(indptr: &[usize], indices: &[usize], data: &[f64], x: &[f64], y: &mut [f64]) {
-    spmv_csr_inner(indptr, indices, data, x, y)
 }
 
 // ─── CsrOperator ─────────────────────────────────────────────────────────────
