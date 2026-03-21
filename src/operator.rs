@@ -69,9 +69,8 @@ impl<'a> LinearOperator for CsrOperator<'a> {
 }
 
 // Note: `spmv_csr` is not called from `apply` — `csr_mulacc_dense_rowmaj` handles
-// the block case more efficiently (no per-column Vec allocations). `spmv_csr` remains
-// the Phase 3 SIMD boundary: its raw-slice signature is the replacement target for
-// AVX-512/pulp intrinsics, exercised directly via unit tests.
+// the block case more efficiently (no per-column Vec allocations). It is exercised
+// directly via unit tests.
 
 // ─── Unit tests ──────────────────────────────────────────────────────────────
 #[cfg(test)]
