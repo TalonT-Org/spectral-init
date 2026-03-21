@@ -13,6 +13,8 @@ mod solvers;
 pub use crate::selection::select_eigenvectors;
 #[doc(hidden)]
 pub use crate::laplacian::compute_degrees;
+#[doc(hidden)]
+pub use crate::laplacian::build_normalized_laplacian;
 
 use ndarray::Array2;
 use sprs::CsMatI;
