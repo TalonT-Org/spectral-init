@@ -49,3 +49,7 @@ path = "tests/integration/test_comp_f_lobpcg.rs"
 name = "test_comp_d_rsvd"
 path = "tests/integration/test_comp_d_rsvd.rs"
 required-features = ["testing"]
+
+[[test]]
+name = "test_pipeline"
+path = "tests/integration/test_pipeline.rs"
