@@ -4,24 +4,6 @@ mod common;
 use spectral_init::dense_evd;
 use ndarray::Array1;
 
-fn residual_spmv(
-    laplacian: &sprs::CsMat<f64>,
-    eigvec: ndarray::ArrayView1<f64>,
-    eigval: f64,
-) -> f64 {
-    let n = laplacian.rows();
-    let mut lv = vec![0.0f64; n];
-    for (val, (row, col)) in laplacian.iter() {
-        lv[row] += val * eigvec[col];
-    }
-    let diff_norm: f64 = lv.iter().zip(eigvec.iter())
-        .map(|(&lvi, &vi)| (lvi - eigval * vi).powi(2))
-        .sum::<f64>()
-        .sqrt();
-    let v_norm: f64 = eigvec.iter().map(|&vi| vi.powi(2)).sum::<f64>().sqrt();
-    diff_norm / v_norm
-}
-
 fn run_comp_d_test(dataset: &str, expected_n: usize) {
     let base = common::fixture_path(dataset, "");
 
@@ -56,7 +38,7 @@ fn run_comp_d_test(dataset: &str, expected_n: usize) {
 
     // Eigenvector residual check (sign-independent)
     for j in 0..k {
-        let r = residual_spmv(&laplacian, eigenvectors.column(j), eigenvalues[j]);
+        let r = common::residual_spmv(&laplacian, eigenvectors.column(j), eigenvalues[j]);
         assert!(
             r < 1e-10,
             "eigenvector residual[{j}] = {r} >= 1e-10"
