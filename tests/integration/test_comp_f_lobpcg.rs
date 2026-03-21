@@ -16,7 +16,11 @@ fn lobpcg_blobs_connected_2000_eigenvalues() {
     let laplacian = common::load_sparse_csr(&lap_path);
     let op = CsrOperator(&laplacian);
 
-    let result = lobpcg_solve(&op, 2, 42, false);
+    let deg_path = fixture_dir.join("comp_a_degrees.npz");
+    let sqrt_deg: ndarray::Array1<f64> = common::load_dense(&deg_path, "sqrt_deg");
+    assert_eq!(sqrt_deg.len(), laplacian.rows(), "sqrt_deg length must match Laplacian dimension");
+
+    let result = lobpcg_solve(&op, 2, 42, false, &sqrt_deg);
     assert!(result.is_some(), "lobpcg_solve returned None on blobs_connected_2000 Laplacian");
     let (eigvals, eigvecs) = result.unwrap();
 
@@ -52,7 +56,11 @@ fn lobpcg_blobs_connected_2000_level2() {
     let laplacian = common::load_sparse_csr(&lap_path);
     let op = CsrOperator(&laplacian);
 
-    let result = lobpcg_solve(&op, 2, 42, true);
+    let deg_path = fixture_dir.join("comp_a_degrees.npz");
+    let sqrt_deg: ndarray::Array1<f64> = common::load_dense(&deg_path, "sqrt_deg");
+    assert_eq!(sqrt_deg.len(), laplacian.rows(), "sqrt_deg length must match Laplacian dimension");
+
+    let result = lobpcg_solve(&op, 2, 42, true, &sqrt_deg);
     assert!(
         result.is_some(),
         "lobpcg_solve (regularized) returned None on blobs_connected_2000"
