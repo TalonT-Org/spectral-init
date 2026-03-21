@@ -19,6 +19,16 @@ pub use crate::laplacian::build_normalized_laplacian;
 /// stable public API and may change without notice.
 pub use crate::solvers::dense_evd;
 
+#[cfg(feature = "testing")]
+#[doc(hidden)]
+pub fn rsvd_solve_pub(
+    laplacian: &sprs::CsMatI<f64, usize>,
+    n_components: usize,
+    seed: u64,
+) -> (ndarray::Array2<f64>, ndarray::Array2<f64>) {
+    crate::solvers::rsvd::rsvd_solve(laplacian, n_components, seed)
+}
+
 use ndarray::Array2;
 use sprs::CsMatI;
 
