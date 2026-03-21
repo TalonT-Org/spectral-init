@@ -29,7 +29,7 @@ pub fn rsvd_solve_pub(
     crate::solvers::rsvd::rsvd_solve(laplacian, n_components, seed)
 }
 
-use ndarray::Array2;
+use ndarray::{Array2, ArrayView2};
 use sprs::CsMatI;
 
 /// Errors returned by the spectral initialization pipeline.
@@ -47,11 +47,6 @@ pub enum SpectralError {
     /// The graph has fewer nodes than the requested embedding dimensionality.
     #[error("graph has too few nodes ({n}) for {dims}-dimensional embedding")]
     TooFewNodes { n: usize, dims: usize },
-
-    /// The graph has more than one connected component.
-    /// Use `multi_component_layout` to handle disconnected graphs.
-    #[error("graph is disconnected; spectral_init requires a connected graph")]
-    DisconnectedGraph,
 }
 
 /// Compute spectral initialization coordinates for a UMAP fuzzy k-NN graph.
@@ -60,6 +55,9 @@ pub enum SpectralError {
 /// - `graph`: Symmetric sparse adjacency matrix (CSR format, f32 weights, u32 column indices).
 /// - `n_components`: Number of embedding dimensions.
 /// - `seed`: Random seed for reproducible noise and solver initialization.
+/// - `data`: Optional raw input data `(n_samples, n_features)` in f32. Required only when the
+///   graph is disconnected and the number of connected components exceeds `2 * n_components`
+///   (needed for the spectral meta-embedding of component centroids).
 ///
 /// # Returns
 /// An `(n_samples, n_components)` array of f32 initial coordinates.
@@ -67,6 +65,7 @@ pub fn spectral_init(
     graph: &CsMatI<f32, u32, usize>,
     n_components: usize,
     seed: u64,
+    data: Option<ArrayView2<'_, f32>>,
 ) -> Result<Array2<f32>, SpectralError> {
     // ── Input validation ──────────────────────────────────────────────────
     let n = graph.rows();
@@ -80,9 +79,17 @@ pub fn spectral_init(
     }
 
     // ── Component A: connectivity check ───────────────────────────────────
-    let (_labels, n_conn_components) = components::find_components(graph);
+    let (labels, n_conn_components) = components::find_components(graph);
     if n_conn_components > 1 {
-        return Err(SpectralError::DisconnectedGraph);
+        let coords = crate::multi_component::embed_disconnected(
+            graph,
+            &labels,
+            n_conn_components,
+            n_components,
+            seed,
+            data,
+        )?;
+        return scaling::scale_and_add_noise(coords, seed);
     }
 
     // ── Component B: degrees and inverse-square-root degrees ──────────────
@@ -114,14 +121,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn spectral_error_variants_exist() {
-        let _a = SpectralError::ConvergenceFailure;
-        let _b = SpectralError::InvalidGraph("test".into());
-        let _c = SpectralError::TooFewNodes { n: 1, dims: 2 };
-        let _d = SpectralError::DisconnectedGraph;
-    }
-
-    #[test]
     fn spectral_error_is_std_error() {
         let e: &dyn std::error::Error = &SpectralError::ConvergenceFailure;
         assert!(!e.to_string().is_empty());
@@ -136,14 +135,14 @@ mod tests {
             vec![1u32, 0u32, 2u32, 1u32],
             vec![1.0f32; 4],
         );
-        let result = spectral_init(&g, 0, 42);
+        let result = spectral_init(&g, 0, 42, None);
         assert!(matches!(result, Err(SpectralError::InvalidGraph(_))));
     }
 
     #[test]
     fn spectral_init_empty_graph_returns_error() {
         let g = CsMatI::<f32, u32, usize>::new((0, 0), vec![0usize], vec![], vec![]);
-        let result = spectral_init(&g, 2, 42);
+        let result = spectral_init(&g, 2, 42, None);
         assert!(matches!(result, Err(SpectralError::InvalidGraph(_))));
     }
 
@@ -151,21 +150,8 @@ mod tests {
     fn spectral_init_too_few_nodes_returns_error() {
         // 2-node connected graph, asking for 3 dimensions
         let g = CsMatI::<f32, u32, usize>::new((2, 2), vec![0, 1, 2], vec![1u32, 0u32], vec![1.0f32; 2]);
-        let result = spectral_init(&g, 3, 42);
+        let result = spectral_init(&g, 3, 42, None);
         assert!(matches!(result, Err(SpectralError::TooFewNodes { n: 2, dims: 3 })));
-    }
-
-    #[test]
-    fn spectral_init_disconnected_graph_returns_error() {
-        // 4-node graph: edges (0,1) and (2,3), no cross-component edges
-        let g = CsMatI::<f32, u32, usize>::new(
-            (4, 4),
-            vec![0usize, 1, 2, 3, 4],
-            vec![1u32, 0u32, 3u32, 2u32],
-            vec![1.0f32; 4],
-        );
-        let result = spectral_init(&g, 1, 42);
-        assert!(matches!(result, Err(SpectralError::DisconnectedGraph)));
     }
 
     #[test]
@@ -177,17 +163,11 @@ mod tests {
             vec![1u32, 0u32, 2u32, 1u32, 3u32, 2u32],
             vec![1.0f32; 6],
         );
-        let result = spectral_init(&g, 2, 42);
+        let result = spectral_init(&g, 2, 42, None);
         let arr = result.expect("spectral_init on connected graph should succeed");
         assert_eq!(arr.shape(), &[4, 2]);
         for &v in arr.iter() {
             assert!(v.is_finite(), "output contains non-finite value: {v}");
         }
-    }
-
-    #[test]
-    fn spectral_error_disconnected_graph_variant_exists() {
-        let e: &dyn std::error::Error = &SpectralError::DisconnectedGraph;
-        assert!(!e.to_string().is_empty());
     }
 }
