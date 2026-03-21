@@ -31,3 +31,7 @@ path = "tests/integration/test_comp_a_degrees.rs"
 [[test]]
 name = "test_comp_b_laplacian"
 path = "tests/integration/test_comp_b_laplacian.rs"
+
+[[test]]
+name = "test_comp_d_dense_evd"
+path = "tests/integration/test_comp_d_dense_evd.rs"
