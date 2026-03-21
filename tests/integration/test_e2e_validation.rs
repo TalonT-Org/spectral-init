@@ -283,6 +283,7 @@ fn test_e2e_disconnected_200_component_separation() {
             .filter(|&i| labels[i] == comp)
             .map(|i| (result[[i, 0]] as f64, result[[i, 1]] as f64))
             .collect();
+        assert!(!pts.is_empty(), "component {comp} has no points — fixture labels may be corrupt");
         let cx = pts.iter().map(|&(x, _)| x).sum::<f64>() / pts.len() as f64;
         let cy = pts.iter().map(|&(_, y)| y).sum::<f64>() / pts.len() as f64;
         centroids.push((cx, cy));
