@@ -93,31 +93,26 @@ fn run_e2e_exact_knn_check(dataset: &str, n: usize) {
 // by embed_disconnected() and are not Laplacian eigenvectors of the full graph.
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py --knn-method both"]
 fn test_e2e_residual_quality_blobs_connected_200() {
     run_e2e_residual_check("blobs_connected_200", 200);
 }
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py --knn-method both"]
 fn test_e2e_residual_quality_blobs_connected_2000() {
     run_e2e_residual_check("blobs_connected_2000", 2000);
 }
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py --knn-method both"]
 fn test_e2e_residual_quality_moons_200() {
     run_e2e_residual_check("moons_200", 200);
 }
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py --knn-method both"]
 fn test_e2e_residual_quality_circles_300() {
     run_e2e_residual_check("circles_300", 300);
 }
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py --knn-method both"]
 fn test_e2e_residual_quality_near_dupes_100() {
     run_e2e_residual_check("near_dupes_100", 100);
 }
@@ -125,7 +120,6 @@ fn test_e2e_residual_quality_near_dupes_100() {
 // ── subspace comparison tests (near-degenerate eigenvalues) ──────────────────
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py --knn-method both"]
 fn test_e2e_subspace_circles_300() {
     let dataset = "circles_300";
 
@@ -175,7 +169,6 @@ fn test_e2e_subspace_circles_300() {
 }
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py --knn-method both"]
 fn test_e2e_subspace_near_dupes_100() {
     let dataset = "near_dupes_100";
 
@@ -218,31 +211,26 @@ fn test_e2e_subspace_near_dupes_100() {
 // ── exact-KNN alternative path tests (5 small datasets) ──────────────────────
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py --knn-method both"]
 fn test_e2e_exact_knn_blobs_50() {
     run_e2e_exact_knn_check("blobs_50", 50);
 }
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py --knn-method both"]
 fn test_e2e_exact_knn_moons_200() {
     run_e2e_exact_knn_check("moons_200", 200);
 }
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py --knn-method both"]
 fn test_e2e_exact_knn_circles_300() {
     run_e2e_exact_knn_check("circles_300", 300);
 }
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py --knn-method both"]
 fn test_e2e_exact_knn_blobs_connected_200() {
     run_e2e_exact_knn_check("blobs_connected_200", 200);
 }
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py --knn-method both"]
 fn test_e2e_exact_knn_near_dupes_100() {
     run_e2e_exact_knn_check("near_dupes_100", 100);
 }
@@ -250,7 +238,6 @@ fn test_e2e_exact_knn_near_dupes_100() {
 // ── disconnected component separation ────────────────────────────────────────
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py --knn-method both"]
 fn test_e2e_disconnected_200_component_separation() {
     let dataset = "disconnected_200";
 
@@ -316,7 +303,6 @@ fn test_e2e_disconnected_200_component_separation() {
 // ── performance gate ──────────────────────────────────────────────────────────
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py --knn-method both"]
 fn test_e2e_performance_blobs_5000() {
     let path = common::fixture_path("blobs_5000", "step5a_pruned.npz");
     let graph = common::load_sparse_csr_f32_u32(&path);

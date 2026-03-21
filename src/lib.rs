@@ -26,7 +26,24 @@ pub fn rsvd_solve_pub(
     n_components: usize,
     seed: u64,
 ) -> (ndarray::Array1<f64>, ndarray::Array2<f64>) {
-    crate::solvers::rsvd::rsvd_solve(laplacian, n_components, seed)
+    // Use the accurate variant: builds a large random subspace via 2I-L power
+    // iteration, then projects L directly onto it (B_L = Q^T L Q) and runs
+    // dense EVD.  Directly projecting L avoids the λ_L = 2 − λ_M cancellation
+    // that degrades accuracy for near-zero eigenvalues.
+    let n = laplacian.rows();
+    // k_sub: subspace size — large enough that the top-(n_components+1) Ritz
+    // values of B_L closely approximate the true smallest L eigenvalues.
+    // Scale k_sub with n so that larger graphs get a proportionally larger
+    // subspace.  n/4 ensures enough vectors for good Ritz approximations on
+    // graphs with small spectral gaps (e.g. λ_1 ≈ 0.01 for n=2000).
+    let k_sub = (n / 4).max(n_components * 100 + 60).min(n.saturating_sub(1));
+    let (eigs_all, evecs_all) =
+        crate::solvers::rsvd::rsvd_solve_accurate(laplacian, n_components, seed, k_sub);
+    // eigs_all[0]           = trivial (~0); strip it.
+    // eigs_all[1..=n_components] = n_components non-trivial eigenvalues (ascending).
+    let eigs = eigs_all.slice(ndarray::s![1..]).to_owned();
+    let evecs = evecs_all.slice(ndarray::s![.., 1..]).to_owned();
+    (eigs, evecs)
 }
 
 #[cfg(feature = "testing")]

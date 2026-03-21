@@ -7,7 +7,6 @@ use spectral_init::solvers::lobpcg::{lobpcg_solve, REGULARIZATION_EPS};
 /// Verify that lobpcg_solve returns eigenpairs close to Python UMAP's reference
 /// eigenvalues and that all residuals ||L*v - λ*v|| / ||v|| < 1e-4.
 #[test]
-#[ignore = "requires fixture generation: run tests/generate_fixtures.py first"]
 fn lobpcg_blobs_connected_2000_eigenvalues() {
     let fixture_dir = common::fixture_path("blobs_connected_2000", "");
     let lap_path = fixture_dir.join("comp_b_laplacian.npz");
@@ -48,7 +47,6 @@ fn lobpcg_blobs_connected_2000_eigenvalues() {
 
 /// Level 2 (regularized) should also converge on blobs_connected_2000.
 #[test]
-#[ignore = "requires fixture generation: run tests/generate_fixtures.py first"]
 fn lobpcg_blobs_connected_2000_level2() {
     let fixture_dir = common::fixture_path("blobs_connected_2000", "");
     let lap_path = fixture_dir.join("comp_b_laplacian.npz");

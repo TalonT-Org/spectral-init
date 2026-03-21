@@ -166,6 +166,69 @@ pub(crate) fn rsvd_solve(
     (eigenvalues, eigenvectors)
 }
 
+/// Accurate eigensolver via random subspace + direct L-projection.
+///
+/// Builds the same QR-stabilized power-iteration subspace as `rsvd_solve`
+/// (using M = 2I − L to amplify the smallest-L eigenvectors), but then
+/// projects **L** directly onto the subspace (B_L = Q^T L Q) and runs
+/// a dense EVD on the small matrix.  Returning L eigenvalues via EVD of B_L
+/// avoids the catastrophic cancellation `λ_L = 2 − λ_M` that occurs when
+/// `λ_L ≈ 0` and `λ_M ≈ 2`.
+///
+/// Returns `n_components + 1` eigenpairs (trivial at index 0 followed by
+/// `n_components` non-trivial pairs in ascending eigenvalue order).
+///
+/// `k_sub` controls the subspace size; larger values give higher accuracy at
+/// higher cost.  Must satisfy `k_sub > n_components + 1`.
+#[cfg(feature = "testing")]
+pub(crate) fn rsvd_solve_accurate(
+    laplacian: &CsMatI<f64, usize>,
+    n_components: usize,
+    seed: u64,
+    k_sub: usize,
+) -> (Array1<f64>, Array2<f64>) {
+    let n = laplacian.rows();
+    assert!(k_sub > n_components + 1, "k_sub must be > n_components + 1");
+    let k = k_sub.min(n);
+
+    // ── Step A: Build power-iteration subspace using M = 2I − L ─────────────
+    let m = two_i_minus_laplacian(laplacian);
+    let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+    let normal = StandardNormal;
+    let mut omega = Array2::from_shape_fn((n, k), |_| normal.sample(&mut rng));
+
+    let nbiter = 6;  // more iterations for near-degenerate eigenvalue gaps
+    for _ in 0..nbiter {
+        let y = sparse_dense_mult(&m, &omega);
+        omega = qr_thin_q(&y);
+        let z = sparse_dense_mult(&m, &omega);
+        omega = qr_thin_q(&z);
+    }
+    let y = sparse_dense_mult(&m, &omega);
+    let q = qr_thin_q(&y);  // [n, k] orthonormal subspace basis
+
+    // ── Step B: Project L directly onto subspace: B_L = Q^T L Q ─────────────
+    // This avoids the λ_L = 2 − λ_M cancellation for near-zero eigenvalues.
+    let lq = sparse_dense_mult(laplacian, &q);  // L·Q [n, k]
+    let b_l = q.t().dot(&lq);                   // B_L [k, k]  symmetric PSD
+
+    // ── Step C: Dense EVD of B_L (ascending = smallest L eigenvalue first) ──
+    let (l_eigenvals, u_b) = sym_eig(&b_l);
+
+    // ── Step D: Recover full Ritz vectors V = Q U_B ──────────────────────────
+    let v = q.dot(&u_b);  // [n, k]
+
+    // ── Step E: Build output — trivial first (index 0), then non-trivials ────
+    // l_eigenvals[0] ≈ 0 (trivial), l_eigenvals[1..=n_components] non-trivials
+    let n_out = n_components + 1;
+    let eigenvalues = Array1::from_iter(l_eigenvals[..n_out].iter().copied());
+    let mut eigenvectors = Array2::<f64>::zeros((n, n_out));
+    for i in 0..n_out {
+        eigenvectors.column_mut(i).assign(&v.column(i));
+    }
+    (eigenvalues, eigenvectors)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -4,7 +4,6 @@ use spectral_init::select_eigenvectors;
 use std::fs::File;
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
 fn comp_e_selection_matches_python_blobs_connected_200() {
     let fixture_base = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/blobs_connected_200");
