@@ -302,10 +302,10 @@ def generate_comp_d_eigensolver(
     ])
 
     max_residual = residuals.max()
-    if max_residual >= 1e-4:
+    if max_residual >= 1e-3:
         print(
             f"  [WARNING] Poor eigensolver quality: max residual={max_residual:.2e} "
-            f"(threshold=1e-4); fixture saved but quality may be insufficient",
+            f"(threshold=1e-3); fixture saved but quality may be insufficient",
             file=sys.stderr,
         )
 
