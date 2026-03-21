@@ -11,7 +11,6 @@ mod rsvd;
 pub use dense::dense_evd;
 
 use ndarray::{Array1, Array2};
-use crate::operator::LinearOperator;
 use sprs::CsMatI;
 use crate::SpectralError;
 use crate::operator::CsrOperator;
@@ -19,28 +18,102 @@ use crate::operator::CsrOperator;
 /// Eigendecomposition result: (eigenvalues shape [k], eigenvectors shape [n, k]).
 pub type EigenResult = (Array1<f64>, Array2<f64>);
 
-/// Solver escalation chain. Tries LOBPCG → LOBPCG+reg → rSVD → dense EVD.
-/// Returns `Err(SpectralError::ConvergenceFailure)` if all solvers are exhausted.
-/// The `CsrOperator` for iterative solvers is constructed internally from `laplacian`.
-pub(crate) fn solve(
+/// Graphs with n < DENSE_N_THRESHOLD use Level 0 (dense EVD) directly.
+const DENSE_N_THRESHOLD: usize = 2000;
+
+/// Maximum acceptable max-residual from rSVD before falling to Level 4.
+/// rSVD with 2 power iterations typically achieves 1e-4 to 1e-6 on well-conditioned
+/// graphs; 1e-2 accepts all such results while correctly escalating pathological cases.
+const RSVD_QUALITY_THRESHOLD: f64 = 1e-2;
+
+/// Returns the maximum relative residual ||L·v - λ·v|| / ||v|| over all
+/// eigenpairs (i, λ_i, v_i) in the result.
+fn max_eigenpair_residual(
     laplacian: &CsMatI<f64, usize>,
-    n_components: usize,
+    eigenvalues: &Array1<f64>,
+    eigenvectors: &Array2<f64>,
+) -> f64 {
+    eigenvalues
+        .iter()
+        .enumerate()
+        .map(|(i, &lambda)| {
+            let v = eigenvectors.column(i).to_owned();
+            let lv = laplacian * &v;
+            let lambda_v = v.mapv(|x| lambda * x);
+            let diff = &lv - &lambda_v;
+            let v_norm = v.dot(&v).sqrt().max(f64::EPSILON);
+            diff.dot(&diff).sqrt() / v_norm
+        })
+        .fold(0.0_f64, f64::max)
+}
+
+/// Solver escalation chain. Tries five levels in order, advancing only on failure.
+///
+/// Returns `k+1` eigenpairs (including the trivial λ≈0 vector at index 0) so that
+/// the caller can apply `select_eigenvectors` uniformly across all solver paths.
+///
+/// # Panics
+///
+/// Panics at Level 4 exhaustion — this represents a bug, not a user error.
+/// The spectral theorem guarantees eigenvectors exist for any symmetric PSD matrix.
+pub fn solve_eigenproblem(
+    laplacian: &CsMatI<f64, usize>,
+    k: usize,
     seed: u64,
 ) -> Result<EigenResult, SpectralError> {
+    let n = laplacian.rows();
     let op = CsrOperator(laplacian);
 
-    // Level 1: LOBPCG without regularization
-    if let Some(result) = lobpcg::lobpcg_solve(&op, n_components, seed, false) {
+    // Level 0: Dense EVD — exact, used for small n where O(n³) is acceptable.
+    if n < DENSE_N_THRESHOLD {
+        if let Ok(result) = dense_evd(laplacian, k + 1) {
+            eprintln!("[spectral] Level 0 (dense EVD) succeeded (n={n})");
+            return Ok(result);
+        }
+        // Unexpected failure (e.g. faer edge case) — fall through to iterative.
+    }
+
+    // Level 1: LOBPCG without regularization.
+    if let Some(result) = lobpcg::lobpcg_solve(&op, k, seed, false) {
+        eprintln!("[spectral] Level 1 (LOBPCG) succeeded (n={n})");
         return Ok(result);
     }
 
-    // Level 2: LOBPCG with epsilon*I regularization
-    if let Some(result) = lobpcg::lobpcg_solve(&op, n_components, seed, true) {
+    // Level 2: LOBPCG with ε·I regularization — widens eigengap.
+    if let Some(result) = lobpcg::lobpcg_solve(&op, k, seed, true) {
+        eprintln!("[spectral] Level 2 (LOBPCG+reg) succeeded (n={n})");
         return Ok(result);
     }
 
-    // Level 3: rSVD (P2-11) — not yet implemented
-    Err(SpectralError::ConvergenceFailure)
+    // Level 3: Randomized SVD via 2I-L trick.
+    // rsvd_solve is infallible; gate on output quality via residual check.
+    {
+        let (eigs, vecs) = rsvd::rsvd_solve(laplacian, k, seed);
+        let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
+        if quality < RSVD_QUALITY_THRESHOLD {
+            eprintln!(
+                "[spectral] Level 3 (rSVD) succeeded (n={n}, max_residual={quality:.2e})"
+            );
+            return Ok((eigs, vecs));
+        }
+        eprintln!(
+            "[spectral] Level 3 (rSVD) poor quality (max_residual={quality:.2e}), \
+             escalating to Level 4"
+        );
+    }
+
+    // Level 4: Forced dense EVD — O(n³) nuclear option.
+    // This level CANNOT fail mathematically (spectral theorem).
+    // If it returns Err, that indicates an OOM or a faer bug — both are
+    // unrecoverable and should surface as an assertion failure, not a silent
+    // ConvergenceFailure that would produce a garbage embedding.
+    eprintln!("[spectral] Level 4 (forced dense EVD) (n={n})");
+    let result = dense_evd(laplacian, k + 1).expect(
+        "solve_eigenproblem: Level 4 forced dense EVD failed — \
+         this is a bug; the spectral theorem guarantees eigenvectors \
+         exist for any symmetric positive semidefinite matrix",
+    );
+    Ok(result)
 }
 
 // ─── Unit Tests ──────────────────────────────────────────────────────────────
@@ -82,16 +155,16 @@ mod tests {
     }
 
     #[test]
-    fn solve_level1_success_returns_ok() {
+    fn solve_eigenproblem_eigenvalues_nonneg_and_sorted() {
         let laplacian = path_graph_laplacian_6();
-        let result = solve(&laplacian, 2, 42);
-        assert!(result.is_ok(), "solve() returned Err: {:?}", result.err());
+        let result = solve_eigenproblem(&laplacian, 2, 42);
+        assert!(result.is_ok(), "solve_eigenproblem() returned Err: {:?}", result.err());
 
-        let (eigvals, _eigvecs) = result.unwrap();
+        let (eigvals, _) = result.unwrap();
 
         // All eigenvalues must be non-negative
-        for (i, &v) in eigvals.iter().enumerate() {
-            assert!(v >= -1e-10, "eigenvalue[{i}] is negative: {v}");
+        for &v in eigvals.iter() {
+            assert!(v >= -1e-10, "eigenvalue is negative: {v}");
         }
 
         // Eigenvalues must be sorted ascending
@@ -99,11 +172,35 @@ mod tests {
             assert!(
                 eigvals[i] >= eigvals[i - 1] - 1e-10,
                 "eigenvalues not sorted: eigvals[{}]={} > eigvals[{}]={}",
-                i - 1,
-                eigvals[i - 1],
-                i,
-                eigvals[i]
+                i - 1, eigvals[i - 1], i, eigvals[i]
             );
         }
+    }
+
+    #[test]
+    fn solve_eigenproblem_returns_k_plus_one_pairs() {
+        // 6-node path graph (n=6 < 2000 → Level 0 dense EVD)
+        let (eigs, vecs) = solve_eigenproblem(&path_graph_laplacian_6(), 2, 42).unwrap();
+        assert_eq!(eigs.len(), 3, "expected k+1=3 eigenvalues");
+        assert_eq!(vecs.shape(), &[6, 3], "expected [n, k+1] = [6, 3] eigenvectors");
+    }
+
+    #[test]
+    fn max_eigenpair_residual_trivial_near_zero() {
+        // 3-node path graph unnormalized Laplacian:
+        //   L = [[1,-1,0],[-1,2,-1],[0,-1,1]]
+        // Trivial eigenvector: [1/√3, 1/√3, 1/√3], eigenvalue = 0
+        let laplacian = CsMatI::new(
+            (3, 3),
+            vec![0usize, 2, 5, 7],
+            vec![0usize, 1, 0, 1, 2, 1, 2],
+            vec![1.0_f64, -1.0, -1.0, 2.0, -1.0, -1.0, 1.0],
+        );
+        let s = 1.0_f64 / 3.0_f64.sqrt();
+        let eigenvalues = Array1::from_vec(vec![0.0_f64]);
+        let eigenvectors = Array2::from_shape_vec((3, 1), vec![s, s, s]).unwrap();
+
+        let residual = max_eigenpair_residual(&laplacian, &eigenvalues, &eigenvectors);
+        assert!(residual < 1e-10, "trivial residual={residual:.2e}, expected < 1e-10");
     }
 }
