@@ -116,7 +116,8 @@ mod tests {
             .fold(0.0f32, f32::max);
         // Tolerance is 1e-6f32: scale_coords computes expansion = 10.0 / max_abs_f64,
         // then casts each element to f32. The maximum element maps to exactly 10.0
-        // modulo f32 rounding (~1.2e-7); 1e-6 is an order of magnitude above that.
+        // modulo f32 rounding (~9.5e-7, one ULP at 10.0 = 2^(3-23)); 1e-6 is just
+        // above that single-ULP bound.
         approx::assert_abs_diff_eq!(max_abs, 10.0f32, epsilon = 1e-6f32);
     }
 
