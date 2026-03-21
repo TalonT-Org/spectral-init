@@ -280,7 +280,11 @@ mod tests {
         }
     }
 
-    /// Test 3: rsvd_solve residual check on a 6-node ring graph.
+    /// Test 3: rsvd_solve residual check on a 6-node ring graph with analytical eigenvalues.
+    ///
+    /// For a 6-node ring with uniform weight 1.0, all degrees = 2.
+    /// Symmetric normalized Laplacian eigenvalues: 1 - cos(2πk/6), k=0..5
+    ///   λ_0 = 0 (trivial), λ_1 = λ_2 = 0.5 (smallest non-trivial).
     #[test]
     fn test_rsvd_solve_residuals_ring_6() {
         let n = 6;
@@ -295,6 +299,18 @@ mod tests {
         let (eigenvalues, eigenvectors) = rsvd_solve(&l, n_components, 0);
 
         let eig_slice = eigenvalues.as_slice().unwrap();
+
+        // Analytical eigenvalues: both non-trivial eigenvalues of the 6-ring are 0.5
+        let expected = [0.5f64, 0.5f64];
+        for i in 0..n_components {
+            let err = (eig_slice[i] - expected[i]).abs();
+            assert!(
+                err < 1e-4,
+                "eigenvalue[{i}] = {:.8}, expected {:.8}, err = {:.2e} (threshold 1e-4)",
+                eig_slice[i], expected[i], err
+            );
+        }
+
         for i in 0..n_components {
             let v = eigenvectors.column(i).to_owned();
             let lambda = eig_slice[i];
@@ -307,8 +323,8 @@ mod tests {
             let residual = diff.dot(&diff).sqrt() / norm_v;
 
             assert!(
-                residual < 1e-2,
-                "residual[{i}] = {residual:.2e} exceeds 1e-2 (lambda={lambda:.6})"
+                residual < 1e-4,
+                "residual[{i}] = {residual:.2e} exceeds 1e-4 (lambda={lambda:.6})"
             );
         }
     }
