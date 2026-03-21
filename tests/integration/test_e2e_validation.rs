@@ -57,9 +57,14 @@ fn run_e2e_residual_check(dataset: &str, n: usize) {
         let evec = descaled.column(col);
         let eigval = ref_eigenvalues[col + 1];
         let r = common::residual_spmv(&laplacian, evec, eigval);
+        // Tolerance is 0.005: dense EVD residuals are ~1e-8 pre-noise.
+        // Gaussian noise (sigma=0.0001) adds at most ~1e-4 after de-scaling
+        // by expansion (~10); f32→f64 de-scaling contributes another ~1e-7.
+        // 0.005 is 50× above the expected noise floor, catching genuine solver
+        // failures while rejecting the misleadingly loose 0.05 bound.
         assert!(
-            r < 0.05,
-            "residual quality check failed for {dataset} column {col}: residual={r:.6e} >= 0.05"
+            r < 0.005,
+            "residual quality check failed for {dataset} column {col}: residual={r:.6e} >= 0.005"
         );
     }
 }

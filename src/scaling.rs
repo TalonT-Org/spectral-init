@@ -114,7 +114,10 @@ mod tests {
             .cloned()
             .map(f32::abs)
             .fold(0.0f32, f32::max);
-        approx::assert_abs_diff_eq!(max_abs, 10.0f32, epsilon = 1e-5f32);
+        // Tolerance is 1e-6f32: scale_coords computes expansion = 10.0 / max_abs_f64,
+        // then casts each element to f32. The maximum element maps to exactly 10.0
+        // modulo f32 rounding (~1.2e-7); 1e-6 is an order of magnitude above that.
+        approx::assert_abs_diff_eq!(max_abs, 10.0f32, epsilon = 1e-6f32);
     }
 
     #[test]
@@ -185,7 +188,9 @@ mod tests {
                 .map(f32::abs)
                 .fold(0.0f32, f32::max);
 
-            approx::assert_abs_diff_eq!(max_abs, 10.0f32, epsilon = 1e-5f32);
+            // Tolerance is 1e-6f32: deterministic f64→f32 cast; max element rounds
+            // to 10.0 with at most ~1.2e-7 (f32 ULP at 10.0); 1e-6 gives headroom.
+            approx::assert_abs_diff_eq!(max_abs, 10.0f32, epsilon = 1e-6f32);
         }
     }
 }
