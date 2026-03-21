@@ -5,6 +5,11 @@ edition = "2024"
 description = "Spectral initialization for UMAP embeddings"
 license = "MIT"
 
+[features]
+# Expose internal solver functions for integration tests.
+# Not part of the stable public API.
+testing = []
+
 [dependencies]
 sprs = "0.11"
 ndarray = "0.17"
@@ -41,5 +46,6 @@ name = "test_comp_f_lobpcg"
 path = "tests/integration/test_comp_f_lobpcg.rs"
 
 [[test]]
-name = "test_comp_11_rsvd"
-path = "tests/integration/test_comp_11_rsvd.rs"
+name = "test_comp_d_rsvd"
+path = "tests/integration/test_comp_d_rsvd.rs"
+required-features = ["testing"]
