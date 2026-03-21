@@ -7,11 +7,10 @@
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use spectral_init::{
-    build_normalized_laplacian, compute_degrees, dense_evd, find_components, rsvd_solve_pub,
-    spectral_init,
+    build_normalized_laplacian, compute_degrees, dense_evd, find_components, lobpcg_solve,
+    rsvd_solve, spectral_init,
 };
 use spectral_init::operator::{spmv_csr, CsrOperator};
-use spectral_init::solvers::lobpcg::lobpcg_solve;
 use std::hint::black_box;
 
 // ─── Synthetic Graph Helpers ──────────────────────────────────────────────────
@@ -117,7 +116,7 @@ fn bench_lobpcg(c: &mut Criterion) {
 fn bench_rsvd(c: &mut Criterion) {
     let lap = make_laplacian(2000, 2);
     c.bench_function("rsvd_2000", |b| {
-        b.iter(|| black_box(rsvd_solve_pub(black_box(&lap), black_box(3), black_box(42_u64))))
+        b.iter(|| black_box(rsvd_solve(black_box(&lap), black_box(3), black_box(42_u64))))
     });
 }
 

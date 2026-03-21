@@ -29,7 +29,7 @@ pub fn find_components(
 
 #[cfg(feature = "testing")]
 #[doc(hidden)]
-pub fn rsvd_solve_pub(
+pub fn rsvd_solve(
     laplacian: &sprs::CsMatI<f64, usize>,
     n_components: usize,
     seed: u64,
@@ -73,6 +73,10 @@ pub fn solve_eigenproblem_pub(
     let sqrt_deg = ndarray::Array1::ones(n);
     crate::solvers::solve_eigenproblem(laplacian, n_components, seed, &sqrt_deg)
 }
+
+#[cfg(feature = "testing")]
+#[doc(hidden)]
+pub use crate::solvers::lobpcg::lobpcg_solve;
 
 use ndarray::{Array2, ArrayView2};
 use sprs::CsMatI;
