@@ -117,6 +117,7 @@ mod tests {
     #[test]
     fn dense_evd_truncation_k_less_than_n() {
         // 3x3 path graph Laplacian: L = [[1,-1,0],[-1,2,-1],[0,-1,1]]
+        // Smallest eigenvalue must be 0.0 (PSD, not PD — path graph is connected).
         let l = make_csr(3, &[
             (0, 0, 1.0), (0, 1, -1.0),
             (1, 0, -1.0), (1, 1, 2.0), (1, 2, -1.0),
@@ -126,9 +127,11 @@ mod tests {
 
         assert_eq!(eigenvalues.len(), 2);
         assert_eq!(eigenvectors.shape(), &[3, 2]);
-
-        // Eigenvalues must be in ascending order
         assert!(eigenvalues[0] <= eigenvalues[1], "eigenvalues not sorted");
+        assert!(
+            eigenvalues[0].abs() < 1e-13,
+            "smallest eigenvalue = {}, expected 0.0", eigenvalues[0]
+        );
 
         for j in 0..2 {
             let r = residual(&l, eigenvectors.column(j), eigenvalues[j]);
@@ -137,18 +140,11 @@ mod tests {
     }
 
     #[test]
-    fn dense_evd_zero_eigenvalue_path_graph() {
-        // Same 3x3 path graph — smallest eigenvalue must be 0.0 (PSD, not PD)
-        let l = make_csr(3, &[
-            (0, 0, 1.0), (0, 1, -1.0),
-            (1, 0, -1.0), (1, 1, 2.0), (1, 2, -1.0),
-            (2, 1, -1.0), (2, 2, 1.0),
-        ]);
-        let (eigenvalues, _) = dense_evd(&l, 2).expect("dense_evd must not error on singular PSD");
-
+    fn dense_evd_k_greater_than_n_returns_error() {
+        let l = make_csr(2, &[(0, 0, 1.0), (0, 1, -1.0), (1, 0, -1.0), (1, 1, 1.0)]);
         assert!(
-            eigenvalues[0].abs() < 1e-13,
-            "smallest eigenvalue = {}, expected 0.0", eigenvalues[0]
+            dense_evd(&l, 3).is_err(),
+            "expected Err when k > n"
         );
     }
 }
