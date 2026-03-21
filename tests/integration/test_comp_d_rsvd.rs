@@ -35,7 +35,7 @@ macro_rules! rsvd_test {
 
             // Run rSVD solver
             let (eigenvalues, eigenvectors) =
-                spectral_init::rsvd_solve_pub(&laplacian, n_components, 42);
+                spectral_init::rsvd_solve(&laplacian, n_components, 42);
 
             // Check eigenvalue accuracy (1e-3: rSVD trades precision for speed)
             let eig_slice = eigenvalues.as_slice().unwrap();
