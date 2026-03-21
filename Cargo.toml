@@ -18,3 +18,4 @@ annembed = "0.1"            # Halko-Tropp rSVD with native sprs CsMatI support
 [dev-dependencies]
 ndarray-npy = "0.10"
 approx = "0.5"
+serde_json = "1"
