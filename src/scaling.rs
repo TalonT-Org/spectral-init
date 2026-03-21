@@ -194,4 +194,32 @@ mod tests {
             approx::assert_abs_diff_eq!(max_abs, 10.0f32, epsilon = 1e-6f32);
         }
     }
+
+    macro_rules! make_scale_test {
+        ($name:ident, $dataset:literal) => {
+            #[test]
+            #[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
+            fn $name() {
+                check_pre_noise_exact($dataset);
+            }
+        };
+    }
+
+    make_scale_test!(scale_pre_noise_matches_blobs_500,            "blobs_500");
+    make_scale_test!(scale_pre_noise_matches_blobs_5000,           "blobs_5000");
+    make_scale_test!(scale_pre_noise_matches_blobs_connected_200,  "blobs_connected_200");
+    make_scale_test!(scale_pre_noise_matches_blobs_connected_2000, "blobs_connected_2000");
+    make_scale_test!(scale_pre_noise_matches_near_dupes_100,       "near_dupes_100");
+
+    #[test]
+    #[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
+    fn scale_max_abs_is_10_disconnected_200() {
+        let path = fixture_path("disconnected_200", "comp_f_scaling.npz");
+        let pre_noise: ndarray::Array2<f32> =
+            npz_array2::<f32>(&path, "pre_noise").expect("pre_noise key missing");
+        assert_eq!(pre_noise.shape(), &[200, 2]);
+        assert!(pre_noise.iter().all(|v| v.is_finite()));
+        let max_abs = pre_noise.iter().copied().map(f32::abs).fold(0f32, f32::max);
+        assert!((max_abs - 10.0f32).abs() < 1e-5, "max_abs={max_abs}");
+    }
 }

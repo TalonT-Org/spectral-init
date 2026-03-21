@@ -55,17 +55,21 @@ fn run_comp_b_test(dataset: &str, expected_n: usize) {
     }
 }
 
-#[test]
-fn comp_b_laplacian_matches_python_blobs_connected_200() {
-    run_comp_b_test("blobs_connected_200", 200);
+macro_rules! make_comp_b_test {
+    ($name:ident, $dataset:literal, $n:expr) => {
+        #[test]
+        fn $name() {
+            run_comp_b_test($dataset, $n);
+        }
+    };
 }
 
-#[test]
-fn comp_b_laplacian_matches_python_blobs_connected_2000() {
-    run_comp_b_test("blobs_connected_2000", 2000);
-}
-
-#[test]
-fn comp_b_laplacian_matches_python_disconnected_200() {
-    run_comp_b_test("disconnected_200", 200);
-}
+make_comp_b_test!(comp_b_laplacian_matches_python_blobs_connected_200,  "blobs_connected_200",  200);
+make_comp_b_test!(comp_b_laplacian_matches_python_blobs_connected_2000, "blobs_connected_2000", 2000);
+make_comp_b_test!(comp_b_laplacian_matches_python_disconnected_200,     "disconnected_200",     200);
+make_comp_b_test!(comp_b_laplacian_matches_python_moons_200,            "moons_200",            200);
+make_comp_b_test!(comp_b_laplacian_matches_python_circles_300,          "circles_300",          300);
+make_comp_b_test!(comp_b_laplacian_matches_python_near_dupes_100,       "near_dupes_100",       100);
+make_comp_b_test!(comp_b_laplacian_matches_python_blobs_50,             "blobs_50",             50);
+make_comp_b_test!(comp_b_laplacian_matches_python_blobs_500,            "blobs_500",            500);
+make_comp_b_test!(comp_b_laplacian_matches_python_blobs_5000,           "blobs_5000",           5000);
