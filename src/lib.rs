@@ -79,20 +79,20 @@ pub fn spectral_init(
         return Err(SpectralError::TooFewNodes { n, dims: n_components });
     }
 
-    // ── Component C: connectivity check ───────────────────────────────────
+    // ── Component A: connectivity check ───────────────────────────────────
     let (_labels, n_conn_components) = components::find_components(graph);
     if n_conn_components > 1 {
         return Err(SpectralError::DisconnectedGraph);
     }
 
-    // ── Component A: degrees and inverse-square-root degrees ──────────────
+    // ── Component B: degrees and inverse-square-root degrees ──────────────
     let (_degrees, sqrt_deg) = laplacian::compute_degrees(graph);
     let inv_sqrt_deg: Vec<f64> = sqrt_deg
         .iter()
         .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
         .collect();
 
-    // ── Component B: normalized Laplacian ─────────────────────────────────
+    // ── Component C: normalized Laplacian ─────────────────────────────────
     let lap = laplacian::build_normalized_laplacian(graph, &inv_sqrt_deg);
 
     // ── Component D: eigensolver escalation chain ─────────────────────────
