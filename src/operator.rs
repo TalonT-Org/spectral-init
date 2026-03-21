@@ -60,19 +60,29 @@ pub struct CsrOperator<'a>(pub &'a CsMatI<f64, usize>);
 
 impl<'a> LinearOperator for CsrOperator<'a> {
     fn apply(&self, x: ArrayView2<f64>, y: &mut Array2<f64>) {
-        // Zero output before accumulation: csr_mulacc_dense_rowmaj adds into out.
         y.fill(0.0);
-        sprs::prod::csr_mulacc_dense_rowmaj(self.0.view(), x, y.view_mut());
+        let k = x.shape()[1];
+        if k == 1 {
+            // Single-vector path: route through spmv_csr, the Phase 3 SIMD replacement
+            // point. Collecting x to a Vec handles non-contiguous column strides safely.
+            let mat = self.0;
+            let x_col: Vec<f64> = x.column(0).iter().copied().collect();
+            let mut y_col = vec![0.0_f64; mat.rows()];
+            spmv_csr(mat.indptr().raw_storage(), mat.indices(), mat.data(), &x_col, &mut y_col);
+            for (i, v) in y_col.into_iter().enumerate() {
+                y[[i, 0]] = v;
+            }
+        } else {
+            // Block-vector path: csr_mulacc_dense_rowmaj handles k>1 efficiently
+            // (no per-column allocations, single row-major pass over the matrix).
+            sprs::prod::csr_mulacc_dense_rowmaj(self.0.view(), x, y.view_mut());
+        }
     }
 
     fn size(&self) -> usize {
         self.0.rows()
     }
 }
-
-// Note: `spmv_csr` is not called from `apply` — `csr_mulacc_dense_rowmaj` handles
-// the block case more efficiently (no per-column Vec allocations). It is exercised
-// directly via unit tests.
 
 // ─── Unit tests ──────────────────────────────────────────────────────────────
 #[cfg(test)]
@@ -171,6 +181,38 @@ mod tests {
                 "block col1 mismatch at row {i}: {} vs {}",
                 y_block[[i, 1]],
                 y1[[i, 0]]
+            );
+        }
+    }
+
+    #[test]
+    fn test_spmv_matches_csr_operator_single_vector() {
+        // Cross-validate: spmv_csr and CsrOperator::apply must agree for k=1.
+        let mat = laplacian_3x3();
+        let op = CsrOperator(&mat);
+
+        let x_vec = vec![1.0_f64, -1.0, 2.0];
+        let x_arr: Array2<f64> = ndarray::Array1::from(x_vec.clone())
+            .insert_axis(ndarray::Axis(1));
+        let mut y_op = Array2::zeros((3, 1));
+        op.apply(x_arr.view(), &mut y_op);
+
+        // Direct spmv_csr call
+        let mut y_spmv = vec![0.0_f64; 3];
+        spmv_csr(
+            mat.indptr().raw_storage(),
+            mat.indices(),
+            mat.data(),
+            &x_vec,
+            &mut y_spmv,
+        );
+
+        for i in 0..3 {
+            assert!(
+                (y_op[[i, 0]] - y_spmv[i]).abs() < 1e-15,
+                "spmv_csr vs CsrOperator mismatch at row {i}: op={}, spmv={}",
+                y_op[[i, 0]],
+                y_spmv[i]
             );
         }
     }
