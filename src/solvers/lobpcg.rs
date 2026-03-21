@@ -125,7 +125,7 @@ pub fn lobpcg_solve<O: LinearOperator>(
         (from_nd16_array1(r.eigvals), from_nd16_array2(r.eigvecs))
     };
 
-    match result {
+    let result_opt = match result {
         Ok(r) => Some(extract(r)),
         Err((_, Some(r))) => {
             if r.rnorm.iter().all(|&norm| norm < LOBPCG_ACCEPT_TOL) {
@@ -135,6 +135,17 @@ pub fn lobpcg_solve<O: LinearOperator>(
             }
         }
         Err((_, None)) => None,
+    };
+
+    // Level 2 solves the shifted problem (L + ε·I)·v = λ_shifted·v.
+    // Subtract the shift to recover true Laplacian eigenvalues: λ_true = λ_shifted - ε.
+    if regularize {
+        result_opt.map(|(mut eigvals, eigvecs)| {
+            eigvals.mapv_inplace(|v| v - REGULARIZATION_EPS);
+            (eigvals, eigvecs)
+        })
+    } else {
+        result_opt
     }
 }
 
@@ -198,33 +209,35 @@ mod tests {
     }
 
     #[test]
-    fn lobpcg_solve_level2_converges() {
+    fn lobpcg_solve_level2_eigenvalues_corrected() {
         let diag = [0.0_f64, 0.1, 0.3, 0.7, 1.2, 2.0];
         let mat = diagonal_csr(&diag);
         let op = CsrOperator(&mat);
 
         let result = lobpcg_solve(&op, 2, 42, true);
-        assert!(result.is_some(), "Level 2 lobpcg_solve returned None on diagonal matrix");
+        assert!(result.is_some(), "Level 2 lobpcg_solve returned None");
         let (eigvals, eigvecs) = result.unwrap();
 
-        // Regularization shifts all eigenvalues up by REGULARIZATION_EPS
+        // Acceptance criterion: eigenvalues within 1e-6 of true Laplacian eigenvalues.
+        // 1e-6 is tight enough to catch a missing REGULARIZATION_EPS subtraction (eps = 1e-5),
+        // and reliably achievable for a diagonal matrix whose eigenvectors are the standard
+        // basis vectors (no numerical ill-conditioning in the eigenvector solve).
         assert!(
-            (eigvals[0] - (diag[0] + REGULARIZATION_EPS)).abs() < 1e-5,
-            "eigenvalue[0] expected ≈ {}, got {}",
-            diag[0] + REGULARIZATION_EPS,
+            (eigvals[0] - diag[0]).abs() < 1e-6,
+            "eigenvalue[0] expected ≈ {}, got {} (REGULARIZATION_EPS not subtracted?)",
+            diag[0],
             eigvals[0]
         );
         assert!(
-            (eigvals[1] - (diag[1] + REGULARIZATION_EPS)).abs() < 1e-5,
-            "eigenvalue[1] expected ≈ {}, got {}",
-            diag[1] + REGULARIZATION_EPS,
+            (eigvals[1] - diag[1]).abs() < 1e-6,
+            "eigenvalue[1] expected ≈ {}, got {} (REGULARIZATION_EPS not subtracted?)",
+            diag[1],
             eigvals[1]
         );
 
-        // Check eigenvector quality via residuals against the original (unshifted) operator.
-        // The regularized operator shifts eigenvalues by REGULARIZATION_EPS; remove that shift.
+        // Residual check against original Laplacian — no manual shift needed by the caller
         for i in 0..eigvals.len() {
-            let r = residual(&op, eigvecs.column(i), eigvals[i] - REGULARIZATION_EPS);
+            let r = residual(&op, eigvecs.column(i), eigvals[i]);
             assert!(r < 1e-4, "level2 residual for eigenpair {i}: {r} >= 1e-4");
         }
     }
