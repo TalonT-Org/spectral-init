@@ -199,7 +199,7 @@ fn spectral_meta_embedding(
     let centroid_laplacian = tri.to_csr();
 
     let sqrt_deg_meta = ndarray::Array1::from_iter(degrees.iter().map(|&d| d.sqrt()));
-    let (evals, evecs) = solve_eigenproblem(&centroid_laplacian, n_embedding_dims, seed, &sqrt_deg_meta);
+    let ((evals, evecs), _) = solve_eigenproblem(&centroid_laplacian, n_embedding_dims, seed, &sqrt_deg_meta);
     let evals_slice = evals
         .as_slice_memory_order()
         .ok_or(SpectralError::ConvergenceFailure)?;
@@ -282,7 +282,7 @@ fn embed_single_component(
         .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
         .collect();
     let laplacian = build_normalized_laplacian(&sub_graph, &inv_sqrt_deg);
-    let (evals, evecs) = solve_eigenproblem(&laplacian, n_embedding_dims, seed, &sqrt_deg);
+    let ((evals, evecs), _) = solve_eigenproblem(&laplacian, n_embedding_dims, seed, &sqrt_deg);
     let evals_slice = evals
         .as_slice_memory_order()
         .ok_or(SpectralError::ConvergenceFailure)?;

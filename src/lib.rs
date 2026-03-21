@@ -29,6 +29,26 @@ pub fn rsvd_solve_pub(
     crate::solvers::rsvd::rsvd_solve(laplacian, n_components, seed)
 }
 
+#[cfg(feature = "testing")]
+#[doc(hidden)]
+/// Exposes `solve_eigenproblem` for integration tests that need to assert which
+/// solver level was reached.
+///
+/// **Test-only seam — not part of the stable public API.**  The returned `u8`
+/// encodes the solver level (0 = dense EVD, 1 = LOBPCG, 2 = LOBPCG+reg,
+/// 3 = rSVD, 4 = forced dense EVD) and may change if the escalation chain is
+/// reordered or extended.  Test code that asserts on this value is intentionally
+/// coupled to the current chain ordering.
+pub fn solve_eigenproblem_pub(
+    laplacian: &sprs::CsMatI<f64, usize>,
+    n_components: usize,
+    seed: u64,
+) -> ((ndarray::Array1<f64>, ndarray::Array2<f64>), u8) {
+    let n = laplacian.rows();
+    let sqrt_deg = ndarray::Array1::ones(n);
+    crate::solvers::solve_eigenproblem(laplacian, n_components, seed, &sqrt_deg)
+}
+
 use ndarray::{Array2, ArrayView2};
 use sprs::CsMatI;
 
@@ -103,7 +123,7 @@ pub fn spectral_init(
     let lap = laplacian::build_normalized_laplacian(graph, &inv_sqrt_deg);
 
     // ── Component D: eigensolver escalation chain ─────────────────────────
-    let (eigenvalues, eigenvectors) = solvers::solve_eigenproblem(&lap, n_components, seed, &sqrt_deg);
+    let ((eigenvalues, eigenvectors), _) = solvers::solve_eigenproblem(&lap, n_components, seed, &sqrt_deg);
 
     // ── Component E: eigenvector selection ────────────────────────────────
     let selected = selection::select_eigenvectors(
