@@ -1,8 +1,20 @@
 [package]
 name = "spectral-init"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 description = "Spectral initialization for UMAP embeddings"
 license = "MIT"
 
 [dependencies]
+sprs = "0.11"
+ndarray = "0.17"
+faer = "0.24"
+rand = "0.9"
+rand_distr = "0.5"
+thiserror = "2"
+linfa-linalg = "0.2"        # pure-Rust LOBPCG; no LAPACK backend required
+annembed = "0.1"            # Halko-Tropp rSVD with native sprs CsMatI support
+
+[dev-dependencies]
+ndarray-npy = "0.10"
+approx = "0.5"
