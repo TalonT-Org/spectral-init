@@ -3,12 +3,21 @@ use ndarray::{Array2, Axis};
 /// Selects `n_components` eigenvectors, skipping the trivial zero-eigenvalue
 /// eigenvector(s). Sorts eigenvalues ascending, skips index 0 (trivial), and
 /// returns the next `n_components` columns from the eigenvectors matrix.
+///
+/// # Panics
+///
+/// Panics if `eigenvalues.len() <= n_components` (need at least `n_components + 1`
+/// eigenvalues to skip the trivial one and still return `n_components` columns).
 pub fn select_eigenvectors(
     eigenvalues: &[f64],
     eigenvectors: &Array2<f64>,
     n_components: usize,
 ) -> Array2<f64> {
-    // Argsort eigenvalues ascending
+    assert!(
+        eigenvalues.len() > n_components,
+        "need at least n_components+1 eigenvalues, got {}",
+        eigenvalues.len()
+    );
     let mut indices: Vec<usize> = (0..eigenvalues.len()).collect();
     indices.sort_by(|&a, &b| {
         eigenvalues[a]
@@ -16,11 +25,7 @@ pub fn select_eigenvectors(
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    // Skip index 0 (trivial near-zero eigenvalue), take next n_components
-    let selected: Vec<usize> = indices[1..1 + n_components].to_vec();
-
-    // Extract columns from eigenvectors matrix
-    eigenvectors.select(Axis(1), &selected)
+    eigenvectors.select(Axis(1), &indices[1..1 + n_components])
 }
 
 #[cfg(test)]
