@@ -8,7 +8,7 @@ slow-timeout = { period = "120s" }
 fail-fast = false
 
 [profile.ci.junit]
-path = "junit.xml"
+path = "target/nextest/ci/junit.xml"
 report-name = "spectral-init-tests"
 
 [profile.with-fixtures]
