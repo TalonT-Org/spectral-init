@@ -20,25 +20,27 @@ fn run_comp_a_test(dataset: &str, expected_n: usize) {
     assert_eq!(degrees.len(), expected_n, "degrees length");
     assert_eq!(sqrt_deg.len(), expected_n, "sqrt_deg length");
 
-    // Tolerance is 1e-5: input graph weights are f32, and Python sums columns
-    // (axis=0) while Rust sums rows. For symmetric graphs both give the same value,
-    // but floating-point summation order differs. For degree values in the range
-    // 7–30, f32 ULP is ≈9.5e-7 to ≈1.9e-6; observed diffs reach ~3.2e-6
-    // (≈1.7 ULPs at degree ~30). Using 1e-5 (≈5 ULPs at degree ~30) provides
-    // generous headroom above the summation-order noise floor while remaining
-    // orders of magnitude below actual degree values, catching genuine bugs.
-    let degree_tol = 1e-5_f64;
+    // Relative tolerance of 3e-7 (≈2.5 × f32_epsilon ≈ 2.5 ULPs): input graph
+    // weights are f32, and Python sums columns (axis=0) while Rust sums rows.
+    // Floating-point summation order differs, yielding noise that scales with the
+    // degree magnitude. Observed max relative error across all 9 datasets is
+    // ≈2.2e-7 (≈1.84 f32_epsilon); 3e-7 provides ~37 % headroom while remaining
+    // tight enough to catch genuine degree-computation bugs (which would differ by
+    // ≥1e-4 relative). The `want.abs().max(1.0)` floor avoids divide-by-zero for
+    // the degenerate degree=0 case.
     for (i, (&got, &want)) in degrees.iter().zip(expected_deg.iter()).enumerate() {
+        let tol = 3e-7_f64 * want.abs().max(1.0);
         assert!(
-            (got - want).abs() < degree_tol,
-            "degrees[{i}]: got {got}, want {want}, diff {}",
+            (got - want).abs() < tol,
+            "degrees[{i}]: got {got}, want {want}, diff {}, tol {tol}",
             (got - want).abs()
         );
     }
     for (i, (&got, &want)) in sqrt_deg.iter().zip(expected_sqrt.iter()).enumerate() {
+        let tol = 3e-7_f64 * want.abs().max(1.0);
         assert!(
-            (got - want).abs() < degree_tol,
-            "sqrt_deg[{i}]: got {got}, want {want}, diff {}",
+            (got - want).abs() < tol,
+            "sqrt_deg[{i}]: got {got}, want {want}, diff {}, tol {tol}",
             (got - want).abs()
         );
     }
