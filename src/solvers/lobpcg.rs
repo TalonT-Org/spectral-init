@@ -125,7 +125,7 @@ pub fn lobpcg_solve<O: LinearOperator>(
         (from_nd16_array1(r.eigvals), from_nd16_array2(r.eigvecs))
     };
 
-    match result {
+    let result_opt = match result {
         Ok(r) => Some(extract(r)),
         Err((_, Some(r))) => {
             if r.rnorm.iter().all(|&norm| norm < LOBPCG_ACCEPT_TOL) {
@@ -135,6 +135,17 @@ pub fn lobpcg_solve<O: LinearOperator>(
             }
         }
         Err((_, None)) => None,
+    };
+
+    // Level 2 solves the shifted problem (L + ε·I)·v = λ_shifted·v.
+    // Subtract the shift to recover true Laplacian eigenvalues: λ_true = λ_shifted - ε.
+    if regularize {
+        result_opt.map(|(mut eigvals, eigvecs)| {
+            eigvals.mapv_inplace(|v| v - REGULARIZATION_EPS);
+            (eigvals, eigvecs)
+        })
+    } else {
+        result_opt
     }
 }
 
