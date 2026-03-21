@@ -25,6 +25,7 @@ ndarray16 = { package = "ndarray", version = "0.16" }  # linfa-linalg uses ndarr
 ndarray-npy = "0.10"
 approx = "0.5"
 serde_json = "1"
+humantime = "2"
 criterion = { version = "0.5", features = ["html_reports"] }
 
 [[test]]
@@ -68,6 +69,11 @@ path = "tests/integration/test_e2e_validation.rs"
 [[test]]
 name = "test_adversarial_graphs"
 path = "tests/integration/test_adversarial_graphs.rs"
+required-features = ["testing"]
+
+[[test]]
+name = "test_accuracy_report"
+path = "tests/integration/test_accuracy_report.rs"
 required-features = ["testing"]
 
 [[bench]]
