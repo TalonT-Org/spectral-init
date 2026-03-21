@@ -5,9 +5,10 @@
     "n": 5000,
     "n_features": 2,
     "n_centers": 10,
+    "cluster_std": 1.0,
     "seed": 42
   },
-  "generated_at": "2026-03-20T13:43:27.292245+00:00",
+  "generated_at": "2026-03-21T12:07:02.933414+00:00",
   "env": {
     "python": "3.13.2",
     "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
