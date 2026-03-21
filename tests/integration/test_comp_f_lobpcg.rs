@@ -1,7 +1,7 @@
 #[path = "../common/mod.rs"]
 mod common;
 
-use spectral_init::operator::{CsrOperator, LinearOperator};
+use spectral_init::operator::CsrOperator;
 use spectral_init::solvers::lobpcg::{lobpcg_solve, REGULARIZATION_EPS};
 
 /// Verify that lobpcg_solve returns eigenpairs close to Python UMAP's reference

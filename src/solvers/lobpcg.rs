@@ -198,7 +198,6 @@ mod tests {
 
     #[test]
     fn lobpcg_solve_level2_converges() {
-        let eps = 1e-5_f64;
         let diag = [0.0_f64, 0.1, 0.3, 0.7, 1.2, 2.0];
         let mat = diagonal_csr(&diag);
         let op = CsrOperator(&mat);
