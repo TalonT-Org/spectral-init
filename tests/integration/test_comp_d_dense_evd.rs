@@ -66,25 +66,21 @@ fn run_comp_d_test(dataset: &str, expected_n: usize) {
 }
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
 fn comp_d_dense_evd_blobs_connected_200() {
     run_comp_d_test("blobs_connected_200", 200);
 }
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
 fn comp_d_dense_evd_moons_200() {
     run_comp_d_test("moons_200", 200);
 }
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
 fn comp_d_dense_evd_near_dupes_100() {
     run_comp_d_test("near_dupes_100", 100);
 }
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
 fn comp_d_dense_evd_circles_300() {
     run_comp_d_test("circles_300", 300);
 }

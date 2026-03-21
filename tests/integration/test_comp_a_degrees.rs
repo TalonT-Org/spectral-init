@@ -45,19 +45,16 @@ fn run_comp_a_test(dataset: &str, expected_n: usize) {
 }
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
 fn comp_a_degrees_matches_python_blobs_connected_200() {
     run_comp_a_test("blobs_connected_200", 200);
 }
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
 fn comp_a_degrees_matches_python_blobs_connected_2000() {
     run_comp_a_test("blobs_connected_2000", 2000);
 }
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
 fn comp_a_degrees_matches_python_disconnected_200() {
     run_comp_a_test("disconnected_200", 200);
 }

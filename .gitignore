@@ -16,9 +16,6 @@ Thumbs.db
 # Project
 /temp/
 
-# Python fixtures (generated, large)
-tests/fixtures/**/*.npz
-
 # Python environment (micromamba prefix, never commit)
 /envs/
 
