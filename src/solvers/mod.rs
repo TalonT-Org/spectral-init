@@ -1,10 +1,9 @@
 mod dense;
 mod lobpcg;
-pub(crate) mod operator;
 mod rsvd;
 
 use ndarray::Array2;
-pub(crate) use operator::LinearOperator;
+pub(crate) use crate::operator::LinearOperator;
 use sprs::CsMatI;
 use crate::SpectralError;
 
