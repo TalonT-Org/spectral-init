@@ -21,7 +21,15 @@ pub use crate::solvers::dense_evd;
 
 #[cfg(feature = "testing")]
 #[doc(hidden)]
-pub fn rsvd_solve_pub(
+pub fn find_components(
+    graph: &sprs::CsMatI<f32, u32, usize>,
+) -> (Vec<usize>, usize) {
+    components::find_components(graph)
+}
+
+#[cfg(feature = "testing")]
+#[doc(hidden)]
+pub fn rsvd_solve(
     laplacian: &sprs::CsMatI<f64, usize>,
     n_components: usize,
     seed: u64,
@@ -65,6 +73,10 @@ pub fn solve_eigenproblem_pub(
     let sqrt_deg = ndarray::Array1::ones(n);
     crate::solvers::solve_eigenproblem(laplacian, n_components, seed, &sqrt_deg)
 }
+
+#[cfg(feature = "testing")]
+#[doc(hidden)]
+pub use crate::solvers::lobpcg::lobpcg_solve;
 
 use ndarray::{Array2, ArrayView2};
 use sprs::CsMatI;
