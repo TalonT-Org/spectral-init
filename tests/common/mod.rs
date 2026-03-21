@@ -10,7 +10,7 @@ pub fn fixture_path(dataset: &str, filename: &str) -> PathBuf {
 }
 
 use ndarray::{Array, Array1, Dimension};
-use ndarray_npy::{NpzReader, ReadableElement};
+use ndarray_npy::{NpzReader, ReadNpyError, ReadNpzError, ReadableElement};
 
 pub fn load_dense<T, D>(path: &Path, key: &str) -> Array<T, D>
 where
@@ -36,36 +36,39 @@ pub fn load_sparse_csr(path: &Path) -> CsMat<f64> {
     // data: try f64 first (comp_b_laplacian), then f32 (step3/4/5a membership)
     let data: Vec<f64> = match npz.by_name::<ndarray::OwnedRepr<f64>, ndarray::Ix1>("data") {
         Ok(arr) => arr.into_iter().collect(),
-        Err(_) => {
+        Err(ReadNpzError::Npy(ReadNpyError::WrongDescriptor(_))) => {
             let arr: Array1<f32> = npz
                 .by_name("data")
                 .unwrap_or_else(|e| panic!("data key not found in {:?}: {}", path, e));
             arr.iter().map(|&x| x as f64).collect()
         }
+        Err(e) => panic!("error reading 'data' from {:?}: {}", path, e),
     };
 
     // indices: try i32 first, then i64
     let indices: Vec<usize> =
         match npz.by_name::<ndarray::OwnedRepr<i32>, ndarray::Ix1>("indices") {
             Ok(arr) => arr.iter().map(|&x| x as usize).collect(),
-            Err(_) => {
+            Err(ReadNpzError::Npy(ReadNpyError::WrongDescriptor(_))) => {
                 let arr: Array1<i64> = npz
                     .by_name("indices")
                     .unwrap_or_else(|e| panic!("indices key not found in {:?}: {}", path, e));
                 arr.iter().map(|&x| x as usize).collect()
             }
+            Err(e) => panic!("error reading 'indices' from {:?}: {}", path, e),
         };
 
     // indptr: try i32 first, then i64
     let indptr: Vec<usize> =
         match npz.by_name::<ndarray::OwnedRepr<i32>, ndarray::Ix1>("indptr") {
             Ok(arr) => arr.iter().map(|&x| x as usize).collect(),
-            Err(_) => {
+            Err(ReadNpzError::Npy(ReadNpyError::WrongDescriptor(_))) => {
                 let arr: Array1<i64> = npz
                     .by_name("indptr")
                     .unwrap_or_else(|e| panic!("indptr key not found in {:?}: {}", path, e));
                 arr.iter().map(|&x| x as usize).collect()
             }
+            Err(e) => panic!("error reading 'indptr' from {:?}: {}", path, e),
         };
 
     // shape: 1D array of 2 i32 elements
