@@ -11,6 +11,14 @@ fn descale_embedding(output: &ndarray::Array2<f32>, expansion: f64) -> ndarray::
     output.mapv(|v| v as f64 / expansion)
 }
 
+fn vec_norm(v: ndarray::ArrayView1<f64>) -> f64 {
+    v.iter().map(|x| x * x).sum::<f64>().sqrt()
+}
+
+fn vec_dot(a: ndarray::ArrayView1<f64>, b: ndarray::ArrayView1<f64>) -> f64 {
+    a.iter().zip(b.iter()).map(|(x, y)| x * y).sum::<f64>()
+}
+
 /// Load graph, run spectral_init, check residuals for a connected dataset.
 fn run_e2e_residual_check(dataset: &str, n: usize) {
     let graph_path = common::fixture_path(dataset, "step5a_pruned.npz");
@@ -141,20 +149,15 @@ fn test_e2e_subspace_circles_300() {
     let rust_v1 = descaled.column(0);
     let rust_v2 = descaled.column(1);
 
-    // Normalize
-    let norm = |v: ndarray::ArrayView1<f64>| v.iter().map(|x| x * x).sum::<f64>().sqrt();
-    let dot = |a: ndarray::ArrayView1<f64>, b: ndarray::ArrayView1<f64>| {
-        a.iter().zip(b.iter()).map(|(x, y)| x * y).sum::<f64>()
-    };
-    let n_ref_v1 = norm(ref_v1);
-    let n_ref_v2 = norm(ref_v2);
-    let n_rust_v1 = norm(rust_v1);
-    let n_rust_v2 = norm(rust_v2);
+    let n_ref_v1 = vec_norm(ref_v1);
+    let n_ref_v2 = vec_norm(ref_v2);
+    let n_rust_v1 = vec_norm(rust_v1);
+    let n_rust_v2 = vec_norm(rust_v2);
 
-    let a = dot(ref_v1, rust_v1) / (n_ref_v1 * n_rust_v1);
-    let b = dot(ref_v1, rust_v2) / (n_ref_v1 * n_rust_v2);
-    let c = dot(ref_v2, rust_v1) / (n_ref_v2 * n_rust_v1);
-    let d = dot(ref_v2, rust_v2) / (n_ref_v2 * n_rust_v2);
+    let a = vec_dot(ref_v1, rust_v1) / (n_ref_v1 * n_rust_v1);
+    let b = vec_dot(ref_v1, rust_v2) / (n_ref_v1 * n_rust_v2);
+    let c = vec_dot(ref_v2, rust_v1) / (n_ref_v2 * n_rust_v1);
+    let d = vec_dot(ref_v2, rust_v2) / (n_ref_v2 * n_rust_v2);
     let gram_det = (a * d - b * c).abs();
 
     assert!(
@@ -192,15 +195,10 @@ fn test_e2e_subspace_near_dupes_100() {
     let rust_v1 = descaled.column(0);
     let rust_v2 = descaled.column(1);
 
-    let norm = |v: ndarray::ArrayView1<f64>| v.iter().map(|x| x * x).sum::<f64>().sqrt();
-    let dot = |a: ndarray::ArrayView1<f64>, b: ndarray::ArrayView1<f64>| {
-        a.iter().zip(b.iter()).map(|(x, y)| x * y).sum::<f64>()
-    };
-
-    let a = dot(ref_v1, rust_v1) / (norm(ref_v1) * norm(rust_v1));
-    let b = dot(ref_v1, rust_v2) / (norm(ref_v1) * norm(rust_v2));
-    let c = dot(ref_v2, rust_v1) / (norm(ref_v2) * norm(rust_v1));
-    let d = dot(ref_v2, rust_v2) / (norm(ref_v2) * norm(rust_v2));
+    let a = vec_dot(ref_v1, rust_v1) / (vec_norm(ref_v1) * vec_norm(rust_v1));
+    let b = vec_dot(ref_v1, rust_v2) / (vec_norm(ref_v1) * vec_norm(rust_v2));
+    let c = vec_dot(ref_v2, rust_v1) / (vec_norm(ref_v2) * vec_norm(rust_v1));
+    let d = vec_dot(ref_v2, rust_v2) / (vec_norm(ref_v2) * vec_norm(rust_v2));
     let gram_det = (a * d - b * c).abs();
 
     assert!(
