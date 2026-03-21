@@ -118,17 +118,20 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
     fn test_pre_noise_exact_blobs_50() {
         check_pre_noise_exact("blobs_50");
     }
 
     #[test]
+    #[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
     fn test_pre_noise_exact_parametrized() {
         check_pre_noise_exact("moons_200");
         check_pre_noise_exact("circles_300");
     }
 
     #[test]
+    #[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
     fn test_noise_distribution_blobs_50() {
         let e_path = fixture_path("blobs_50", "comp_e_selection.npz");
         if !e_path.exists() {
@@ -165,6 +168,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
     fn test_max_abs_is_10() {
         for dataset in &["blobs_50", "moons_200", "circles_300"] {
             let e_path = fixture_path(dataset, "comp_e_selection.npz");
