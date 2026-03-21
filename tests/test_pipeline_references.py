@@ -15,7 +15,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-SCRIPT = Path(__file__).parent / "generate_fixtures.py"
+from conftest import run_fixture_pipeline
+
 VERIFY_SCRIPT = Path(__file__).parent / "verify_fixtures.py"
 
 EXPECTED_STEP_FILES = [
@@ -36,20 +37,10 @@ EXPECTED_STEP_FILES = [
 ]
 
 
-def _run(datasets, outdir, extra_args=None):
-    cmd = [sys.executable, str(SCRIPT), "--output-dir", outdir, "--datasets"] + datasets
-    if extra_args:
-        cmd += extra_args
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    assert result.returncode == 0, (
-        f"CMD: {cmd}\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
-    )
-
-
 @pytest.fixture(scope="session")
 def pipeline_refs_outdir(tmp_path_factory):
     td = tmp_path_factory.mktemp("pipeline_refs")
-    _run(["blobs_50", "disconnected_200", "moons_200"], str(td))
+    run_fixture_pipeline(["blobs_50", "disconnected_200", "moons_200"], str(td))
     return td
 
 
@@ -97,28 +88,6 @@ def test_full_spectral_matches_comp_e_connected(pipeline_refs_outdir):
         )
 
 
-def test_cross_check_uses_comp_e_not_comp_f(pipeline_refs_outdir):
-    """Cross-check compares full_spectral vs comp_e_selection (f64), not comp_f pre_noise."""
-    dataset_dir = pipeline_refs_outdir / "moons_200"
-    full_emb = np.load(dataset_dir / "full_spectral.npz", allow_pickle=False)["embedding"]  # f64
-    comp_e = np.load(dataset_dir / "comp_e_selection.npz", allow_pickle=False)["embedding"]  # f64
-
-    assert full_emb.dtype == np.float64
-    assert comp_e.dtype == np.float64
-
-    for col in range(2):
-        v_full = full_emb[:, col].copy()
-        v_comp = comp_e[:, col].copy()
-        # Sign normalize: flip so largest-abs element is positive
-        if v_full[np.argmax(np.abs(v_full))] < 0:
-            v_full = -v_full
-        if v_comp[np.argmax(np.abs(v_comp))] < 0:
-            v_comp = -v_comp
-        assert np.allclose(v_full, v_comp, atol=1e-3), (
-            f"Column {col}: max_diff={float(np.abs(v_full - v_comp).max()):.4f}"
-        )
-
-
 def test_manifest_has_step_files(pipeline_refs_outdir):
     with open(pipeline_refs_outdir / "manifest.json") as f:
         manifest = json.load(f)
@@ -134,7 +103,7 @@ def test_manifest_has_step_files(pipeline_refs_outdir):
 
 
 def test_verify_flag_passes(tmp_path):
-    _run(["blobs_50"], str(tmp_path), extra_args=["--verify"])
+    run_fixture_pipeline(["blobs_50"], str(tmp_path), extra_args=["--verify"])
 
 
 def test_verify_script_standalone(pipeline_refs_outdir):
@@ -158,8 +127,8 @@ def test_verify_script_standalone(pipeline_refs_outdir):
 def test_full_pipeline_deterministic(tmp_path_factory):
     run1 = tmp_path_factory.mktemp("run1")
     run2 = tmp_path_factory.mktemp("run2")
-    _run(["blobs_50"], str(run1))
-    _run(["blobs_50"], str(run2))
+    run_fixture_pipeline(["blobs_50"], str(run1))
+    run_fixture_pipeline(["blobs_50"], str(run2))
 
     for fname, key, rtol in [
         ("full_spectral.npz", "embedding", 1e-10),
