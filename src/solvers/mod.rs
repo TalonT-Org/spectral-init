@@ -2,13 +2,13 @@ mod dense;
 mod lobpcg;
 mod rsvd;
 
-use ndarray::Array2;
+use ndarray::{Array1, Array2};
 pub(crate) use crate::operator::LinearOperator;
 use sprs::CsMatI;
 use crate::SpectralError;
 
 /// Eigendecomposition result: (eigenvalues shape [k], eigenvectors shape [n, k]).
-pub(crate) type EigenResult = (Array2<f64>, Array2<f64>);
+pub(crate) type EigenResult = (Array1<f64>, Array2<f64>);
 
 /// Solver escalation chain. Tries LOBPCG → LOBPCG+reg → rSVD → dense EVD.
 /// Returns `Err(SpectralError::ConvergenceFailure)` if all solvers are exhausted.
