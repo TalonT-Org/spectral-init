@@ -3,9 +3,11 @@
 mod components;
 mod laplacian;
 mod multi_component;
+#[doc(hidden)]
 pub mod operator;
 mod scaling;
 mod selection;
+#[doc(hidden)]
 pub mod solvers;
 
 // Re-exported for component-level integration tests. These are internal pipeline
