@@ -5,7 +5,6 @@ use spectral_init::spectral_init;
 use sprs::CsMatI;
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
 fn spectral_init_output_shape_all_connected_datasets() {
     let datasets = [
         ("blobs_50", 50usize),
@@ -35,7 +34,6 @@ fn spectral_init_output_shape_all_connected_datasets() {
 }
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
 fn spectral_init_output_close_to_pre_noise_blobs_connected_200() {
     // spectral_init() returns the post-noise output (scale_and_add_noise is its final step,
     // adding Gaussian noise with sigma=0.0001 on coordinates scaled to max 10.0).
@@ -175,7 +173,6 @@ fn spectral_init_synthetic_disconnected_preserves_component_structure() {
 // ── fixture-gated tests (require generated .npz files) ───────────────────────
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
 fn spectral_init_disconnected_200_shape_and_finite() {
     let path = common::fixture_path("disconnected_200", "step5a_pruned.npz");
     let graph = common::load_sparse_csr_f32_u32(&path);
@@ -189,7 +186,6 @@ fn spectral_init_disconnected_200_shape_and_finite() {
 }
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
 fn spectral_init_blobs_50_produces_valid_embedding() {
     // blobs_50 has 3 tight clusters that may be disconnected in the k-NN graph
     let path = common::fixture_path("blobs_50", "step5a_pruned.npz");
@@ -201,4 +197,113 @@ fn spectral_init_blobs_50_produces_valid_embedding() {
     for &v in arr.iter() {
         assert!(v.is_finite(), "output contains non-finite value: {v}");
     }
+}
+
+// ── edge-case tests (synthetic graphs, no fixtures needed) ───────────────────
+
+#[test]
+fn spectral_init_single_point() {
+    // 1-node graph: no edges. n=1 <= n_components=2 → Err(TooFewNodes); must not panic.
+    let indptr = vec![0usize, 0];
+    let indices: Vec<u32> = vec![];
+    let data: Vec<f32> = vec![];
+    let g = CsMatI::<f32, u32, usize>::new((1, 1), indptr, indices, data);
+    let result = spectral_init(&g, 2, 42, None);
+    assert!(
+        matches!(result, Err(spectral_init::SpectralError::TooFewNodes { n: 1, dims: 2 })),
+        "single-point graph should return TooFewNodes, got: {:?}",
+        result
+    );
+}
+
+#[test]
+fn spectral_init_two_points_connected() {
+    // 2-node graph: one symmetric edge. n=2 <= n_components=2 → Err(TooFewNodes); must not panic.
+    let indptr = vec![0usize, 1, 2];
+    let indices = vec![1u32, 0u32];
+    let data = vec![1.0f32, 1.0f32];
+    let g = CsMatI::<f32, u32, usize>::new((2, 2), indptr, indices, data);
+    let result = spectral_init(&g, 2, 42, None);
+    assert!(
+        matches!(result, Err(spectral_init::SpectralError::TooFewNodes { n: 2, dims: 2 })),
+        "two-point graph with n_components=2 should return TooFewNodes, got: {:?}",
+        result
+    );
+}
+
+#[test]
+fn spectral_init_fully_connected_uniform() {
+    // 10-node complete graph (all off-diagonal weights = 1.0).
+    // Eigenvalues cluster near 0 and n/(n-1), exercising the solver escalation.
+    let n = 10usize;
+    let mut indptr = vec![0usize];
+    let mut indices: Vec<u32> = Vec::new();
+    let mut data: Vec<f32> = Vec::new();
+    for i in 0..n {
+        for j in 0..n {
+            if i != j {
+                indices.push(j as u32);
+                data.push(1.0f32);
+            }
+        }
+        indptr.push(indices.len());
+    }
+    let g = CsMatI::<f32, u32, usize>::new((n, n), indptr, indices, data);
+    let result = spectral_init(&g, 2, 42, None);
+    let arr = result.expect("spectral_init on fully-connected graph should succeed");
+    assert_eq!(arr.shape(), &[n, 2]);
+    for &v in arr.iter() {
+        assert!(v.is_finite(), "output contains non-finite value: {v}");
+    }
+}
+
+fn make_n_clique_graph(n_cliques: usize, clique_size: usize) -> CsMatI<f32, u32, usize> {
+    let n = n_cliques * clique_size;
+    let mut indptr = vec![0usize];
+    let mut indices: Vec<u32> = Vec::new();
+    let mut data: Vec<f32> = Vec::new();
+    for clique in 0..n_cliques {
+        let base = clique * clique_size;
+        for i in 0..clique_size {
+            for j in 0..clique_size {
+                if i != j {
+                    indices.push((base + j) as u32);
+                    data.push(1.0f32);
+                }
+            }
+            indptr.push(indices.len());
+        }
+    }
+    CsMatI::<f32, u32, usize>::new((n, n), indptr, indices, data)
+}
+
+#[test]
+fn spectral_init_ten_component_graph() {
+    // 10 isolated 3-node cliques (30 nodes total). Exercises the disconnected path
+    // with more components than the two-clique tests.
+    // When n_conn_components > 2 * n_embedding_dims, data is required for spectral
+    // meta-embedding; provide synthetic coordinates with clusters well separated.
+    let n_cliques = 10usize;
+    let clique_size = 3usize;
+    let n = n_cliques * clique_size;
+    let g = make_n_clique_graph(n_cliques, clique_size);
+    // Each clique's 3 nodes are placed near (clique_idx * 100.0, 0.0).
+    let mut flat = vec![0.0f32; n * 2];
+    for clique in 0..n_cliques {
+        let base_row = clique * clique_size;
+        for node in 0..clique_size {
+            flat[(base_row + node) * 2] = (clique as f32) * 100.0 + (node as f32) * 0.1;
+            flat[(base_row + node) * 2 + 1] = 0.0;
+        }
+    }
+    let data_arr = ndarray::Array2::from_shape_vec((n, 2), flat).unwrap();
+    let result = spectral_init(&g, 2, 42, Some(data_arr.view()));
+    let arr = result.expect("spectral_init on 10-component graph should succeed");
+    assert_eq!(arr.shape(), &[n, 2]);
+    for &v in arr.iter() {
+        assert!(v.is_finite(), "output contains non-finite value: {v}");
+    }
+    // With 10 components in 2D output, strict max_intra < min_inter separation is not
+    // guaranteed (10 clusters cannot always be perfectly separated in 2 dimensions).
+    // Shape and finiteness are sufficient to confirm the disconnected path executes correctly.
 }
