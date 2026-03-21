@@ -1,6 +1,10 @@
 mod dense;
 #[doc(hidden)]
 pub mod lobpcg;
+// pub(crate) visibility only needed when the testing feature exposes rsvd_solve_pub via lib.rs.
+#[cfg(feature = "testing")]
+pub(crate) mod rsvd;
+#[cfg(not(feature = "testing"))]
 mod rsvd;
 
 // pub (not pub(crate)) so lib.rs can re-export it for integration tests.
