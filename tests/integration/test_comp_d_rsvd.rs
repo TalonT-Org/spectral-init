@@ -5,7 +5,7 @@ mod common;
 
 /// Compute residual ||L·v - λ·v|| / ||v|| for a single eigenpair.
 fn residual(laplacian: &sprs::CsMat<f64>, eigvec: ndarray::ArrayView1<f64>, eigval: f64) -> f64 {
-    let lv = laplacian * &eigvec.to_owned();  // SpMV via sprs
+    let lv = laplacian * &eigvec.to_owned(); // SpMV via sprs
     let diff = lv - eigval * &eigvec.to_owned();
     diff.dot(&diff).sqrt() / eigvec.dot(&eigvec).sqrt()
 }
@@ -13,7 +13,7 @@ fn residual(laplacian: &sprs::CsMat<f64>, eigvec: ndarray::ArrayView1<f64>, eigv
 macro_rules! rsvd_test {
     ($name:ident, $dataset:expr) => {
         #[test]
-                fn $name() {
+        fn $name() {
             let fixture_base = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("tests/fixtures")
                 .join($dataset);
@@ -63,6 +63,6 @@ macro_rules! rsvd_test {
     };
 }
 
-rsvd_test!(comp_d_rsvd_blobs_connected_200,  "blobs_connected_200");
+rsvd_test!(comp_d_rsvd_blobs_connected_200, "blobs_connected_200");
 rsvd_test!(comp_d_rsvd_blobs_connected_2000, "blobs_connected_2000");
-rsvd_test!(comp_d_rsvd_blobs_500,            "blobs_500");
+rsvd_test!(comp_d_rsvd_blobs_500, "blobs_500");
