@@ -3,7 +3,8 @@ use sprs::CsMatI;
 
 // ─── Trait ───────────────────────────────────────────────────────────────────
 
-pub(crate) trait LinearOperator {
+#[doc(hidden)]
+pub trait LinearOperator {
     /// Apply operator: y = self * x. Both arrays have shape [n, k].
     fn apply(&self, x: ArrayView2<f64>, y: &mut Array2<f64>);
     /// Number of rows (and columns — operator is square).
@@ -54,7 +55,8 @@ pub(crate) fn spmv_csr(
 
 /// Wraps a borrowed CSR Laplacian and implements `LinearOperator` via sprs
 /// sparse-dense multiply.
-pub(crate) struct CsrOperator<'a>(pub(crate) &'a CsMatI<f64, usize>);
+#[doc(hidden)]
+pub struct CsrOperator<'a>(pub &'a CsMatI<f64, usize>);
 
 impl<'a> LinearOperator for CsrOperator<'a> {
     fn apply(&self, x: ArrayView2<f64>, y: &mut Array2<f64>) {

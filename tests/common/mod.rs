@@ -119,6 +119,26 @@ pub fn residual_spmv(
     diff_norm / v_norm
 }
 
+/// Compute the residual norm ||A*v - λ*v|| / ||v|| for one eigenpair.
+pub fn eigenpair_residual<O: spectral_init::operator::LinearOperator>(
+    op: &O,
+    eigvec: ndarray::ArrayView1<f64>,
+    eigval: f64,
+) -> f64 {
+    let n = eigvec.len();
+    let col: ndarray::Array2<f64> = eigvec.to_owned().insert_axis(ndarray::Axis(1));
+    let mut av = ndarray::Array2::zeros((n, 1));
+    op.apply(col.view(), &mut av);
+    let mut sq = 0.0_f64;
+    let mut norm_sq = 0.0_f64;
+    for r in 0..n {
+        let diff = av[[r, 0]] - eigval * col[[r, 0]];
+        sq += diff * diff;
+        norm_sq += col[[r, 0]] * col[[r, 0]];
+    }
+    sq.sqrt() / norm_sq.sqrt().max(1e-300)
+}
+
 pub fn load_metadata(path: &Path) -> serde_json::Value {
     let content = std::fs::read_to_string(path)
         .unwrap_or_else(|e| panic!("cannot read metadata {:?}: {}", path, e));
