@@ -15,15 +15,15 @@ HTML reports are written to `target/criterion/`.
 
 | Benchmark | Input | What It Measures | Baseline (mean) |
 |-----------|-------|------------------|----------------|
-| `spmv_csr/200` | 200-node ring Laplacian | SpMV Phase 3 SIMD target | — |
-| `spmv_csr/2000` | 2000-node ring Laplacian | SpMV at scale | — |
-| `dense_evd_200` | 200-node ring Laplacian | Dense EVD via faer | — |
-| `lobpcg_2000` | 2000-node ring Laplacian, k=3 | LOBPCG full solve | — |
-| `rsvd_2000` | 2000-node ring Laplacian, k=3 | Randomized SVD full solve | — |
-| `laplacian_build_2000` | 2000-node ring graph | Laplacian construction | — |
-| `components_bfs_2000` | 2000-node ring graph | BFS connected components | — |
-| `full_pipeline/200` | 200-node ring graph | End-to-end spectral_init | — |
-| `full_pipeline/2000` | 2000-node ring graph | End-to-end at medium scale | — |
+| `spmv_csr/200` | 200-node ring Laplacian | SpMV Phase 3 SIMD target | 396 ns |
+| `spmv_csr/2000` | 2000-node ring Laplacian | SpMV at scale | 4.83 µs |
+| `dense_evd_200` | 200-node ring Laplacian | Dense EVD via faer | 12.6 ms |
+| `lobpcg_2000` | 2000-node ring Laplacian, k=3 | LOBPCG full solve | 306 ms |
+| `rsvd_2000` | 2000-node ring Laplacian, k=3 | Randomized SVD full solve | 286 ms |
+| `laplacian_build_2000` | 2000-node ring graph | Laplacian construction | 228 µs |
+| `components_bfs_2000` | 2000-node ring graph | BFS connected components | 7.24 µs |
+| `full_pipeline/200` | 200-node ring graph | End-to-end spectral_init | 14.2 ms |
+| `full_pipeline/2000` | 2000-node ring graph | End-to-end at medium scale | 223 ms |
 
 ## Input Graphs
 
