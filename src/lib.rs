@@ -100,7 +100,7 @@ pub fn spectral_init(
 
     // ── Component E: eigenvector selection ────────────────────────────────
     let selected = selection::select_eigenvectors(
-        eigenvalues.as_slice().unwrap(),
+        eigenvalues.as_slice_memory_order().expect("eigenvalues must be contiguous"),
         &eigenvectors,
         n_components,
     );
