@@ -8,9 +8,9 @@
     "cluster_std": 5.0,
     "seed": 42
   },
-  "generated_at": "2026-03-20T13:52:24.204952+00:00",
+  "generated_at": "2026-03-21T12:07:07.554079+00:00",
   "env": {
-    "python": "3.11.15",
+    "python": "3.13.2",
     "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
     "numpy": "2.2.6",
     "scipy": "1.15.2",

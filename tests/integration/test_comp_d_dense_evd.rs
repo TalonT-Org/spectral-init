@@ -18,9 +18,8 @@ fn run_comp_d_test(dataset: &str, expected_n: usize) {
         common::load_dense(&base.join("comp_d_eigensolver.npz"), "eigenvectors");
     let eigenvalue_gaps: Array1<f64> =
         common::load_dense(&base.join("comp_d_eigensolver.npz"), "eigenvalue_gaps");
-    let k_arr: Array1<i32> =
-        common::load_dense(&base.join("comp_d_eigensolver.npz"), "k");
-    let k = k_arr[0] as usize;
+    // k is a 0-D scalar in the fixture; derive it from the eigenvalues array length.
+    let k = ref_eigenvalues.len();
 
     // Call dense_evd
     let (eigenvalues, eigenvectors) = dense_evd(&laplacian, k)

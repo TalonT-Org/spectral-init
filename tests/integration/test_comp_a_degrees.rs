@@ -20,16 +20,21 @@ fn run_comp_a_test(dataset: &str, expected_n: usize) {
     assert_eq!(degrees.len(), expected_n, "degrees length");
     assert_eq!(sqrt_deg.len(), expected_n, "sqrt_deg length");
 
+    // Tolerance is 1e-5: input graph weights are f32, and Python sums columns
+    // (axis=0) while Rust sums rows. For symmetric graphs both give the same value,
+    // but floating-point summation order differs, yielding ~1e-7 discrepancies.
+    // 1e-5 is safely above f32 precision (≈1.2e-7) while tight enough to catch bugs.
+    let degree_tol = 1e-5_f64;
     for (i, (&got, &want)) in degrees.iter().zip(expected_deg.iter()).enumerate() {
         assert!(
-            (got - want).abs() < 1e-14,
+            (got - want).abs() < degree_tol,
             "degrees[{i}]: got {got}, want {want}, diff {}",
             (got - want).abs()
         );
     }
     for (i, (&got, &want)) in sqrt_deg.iter().zip(expected_sqrt.iter()).enumerate() {
         assert!(
-            (got - want).abs() < 1e-14,
+            (got - want).abs() < degree_tol,
             "sqrt_deg[{i}]: got {got}, want {want}, diff {}",
             (got - want).abs()
         );
