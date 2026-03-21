@@ -192,12 +192,8 @@ mod tests {
 
     #[test]
     fn lobpcg_injects_trivial_eigenvector() {
-        // Diagonal Laplacian: near-zero first eigenvalue (1e-10 rather than exactly 0.0),
-        // others well-separated. Near-trivial eigenvector is e_0 = [1, 0, ..., 0].
-        //
-        // n=20 satisfies n > 5·k=15 (k = n_components+1 = 3) for reliable LOBPCG convergence.
-        // Using diag[0]=1e-10 rather than 0.0 avoids the L·e_0=0 degeneracy that causes
-        // linfa_linalg's LOBPCG to produce a zero column in A·X_init and fail to converge.
+        // Diagonal Laplacian with near-trivial first eigenvalue (1e-10) and well-separated
+        // remaining eigenvalues. n=20 satisfies n > 5·k for LOBPCG convergence (k = n_components+1 = 3).
         let n = 20;
         let mut diag = vec![1e-10_f64]; // near-zero first eigenvalue
         for i in 1..n {
