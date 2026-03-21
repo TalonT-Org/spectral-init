@@ -23,3 +23,7 @@ serde_json = "1"
 [[test]]
 name = "test_comp_e_selection"
 path = "tests/integration/test_comp_e_selection.rs"
+
+[[test]]
+name = "test_comp_a_degrees"
+path = "tests/integration/test_comp_a_degrees.rs"
