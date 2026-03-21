@@ -3,6 +3,7 @@
 mod components;
 mod laplacian;
 mod multi_component;
+pub(crate) mod operator;
 mod scaling;
 mod selection;
 mod solvers;
