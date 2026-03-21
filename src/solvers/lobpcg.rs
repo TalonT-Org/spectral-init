@@ -1,5 +1,4 @@
-use ndarray::Array2;
-use crate::operator::LinearOperator;
+use super::{EigenResult, LinearOperator};
 
 /// LOBPCG iterative eigensolver (Levels 1 and 2).
 /// Level 1: no regularization. Level 2: adds epsilon*I shift.
@@ -8,6 +7,6 @@ pub(crate) fn lobpcg_solve<O: LinearOperator>(
     n_components: usize,
     seed: u64,
     regularize: bool,
-) -> Option<(Array2<f64>, Array2<f64>)> {
+) -> Option<EigenResult> {
     todo!("lobpcg_solve: implement linfa-linalg lobpcg path")
 }

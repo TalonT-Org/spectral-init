@@ -3,7 +3,6 @@
 mod components;
 mod laplacian;
 mod multi_component;
-mod operator;
 mod scaling;
 mod selection;
 mod solvers;
@@ -62,12 +61,5 @@ mod tests {
         assert!(!e.to_string().is_empty());
     }
 
-    #[allow(dead_code)]
-    fn _signature_check(
-        graph: &CsMatI<f32, u32, usize>,
-        n_components: usize,
-        seed: u64,
-    ) -> Result<Array2<f32>, SpectralError> {
-        spectral_init(graph, n_components, seed)
-    }
+
 }
