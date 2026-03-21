@@ -66,3 +66,6 @@ macro_rules! rsvd_test {
 rsvd_test!(comp_d_rsvd_blobs_connected_200, "blobs_connected_200");
 rsvd_test!(comp_d_rsvd_blobs_connected_2000, "blobs_connected_2000");
 rsvd_test!(comp_d_rsvd_blobs_500, "blobs_500");
+rsvd_test!(comp_d_rsvd_moons_200, "moons_200");
+rsvd_test!(comp_d_rsvd_circles_300, "circles_300");
+rsvd_test!(comp_d_rsvd_near_dupes_100, "near_dupes_100");
