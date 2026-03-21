@@ -302,24 +302,13 @@ fn path_laplacian_6() -> CsMatI<f64, usize> {
 
 // ─── Community separation helper ──────────────────────────────────────────────
 
-/// Returns the max pairwise Euclidean distance among rows in `range`.
-fn max_intra_dist(emb: &Array2<f32>, range: std::ops::Range<usize>) -> f32 {
-    let mut max_dist = 0.0f32;
-    for i in range.clone() {
-        for j in range.clone() {
-            if i >= j {
-                continue;
-            }
-            let dist: f32 = (0..2)
-                .map(|d| (emb[[i, d]] - emb[[j, d]]).powi(2))
-                .sum::<f32>()
-                .sqrt();
-            if dist > max_dist {
-                max_dist = dist;
-            }
-        }
-    }
-    max_dist
+/// Returns the range (max − min) of values in column `dim` among rows in `range`.
+/// Used to measure intra-cluster spread along a single eigenvector dimension.
+fn max_intra_1d_spread(emb: &Array2<f32>, range: std::ops::Range<usize>, dim: usize) -> f32 {
+    let vals: Vec<f32> = range.map(|i| emb[[i, dim]]).collect();
+    let min_v = vals.iter().cloned().fold(f32::INFINITY, f32::min);
+    let max_v = vals.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+    max_v - min_v
 }
 
 // ─── Group 1: Correctness tests (no panic, no NaN/Inf, correct shape) ─────────
@@ -444,19 +433,21 @@ fn test_barbell_separates_communities() {
     let graph = make_barbell(20); // n=40; clique_0=nodes[0..20], clique_1=nodes[20..40]
     let emb = spectral_init(&graph, 2, 42, None).unwrap();
 
-    let c0 = emb.slice(s![0..20, ..]).mean_axis(Axis(0)).unwrap();
-    let c1 = emb.slice(s![20..40, ..]).mean_axis(Axis(0)).unwrap();
-    let centroid_dist: f32 = (0..2)
-        .map(|d| (c0[d] - c1[d]).powi(2))
-        .sum::<f32>()
-        .sqrt();
+    // The Fiedler vector (dim 0) encodes community membership: all nodes in each K_20
+    // clique have nearly identical Fiedler values, so separation is measured along dim 0.
+    // The second eigenvector (dim 1) lies in the degenerate intra-clique eigenspace and
+    // spreads nodes within each clique — comparing 2-D pairwise distances would fail.
+    let c0_x = emb.slice(s![0..20, 0]).mean_axis(Axis(0)).unwrap()[[]];
+    let c1_x = emb.slice(s![20..40, 0]).mean_axis(Axis(0)).unwrap()[[]];
+    let centroid_gap: f32 = (c0_x - c1_x).abs();
 
-    let max_intra = max_intra_dist(&emb, 0..20).max(max_intra_dist(&emb, 20..40));
+    let max_intra = max_intra_1d_spread(&emb, 0..20, 0)
+        .max(max_intra_1d_spread(&emb, 20..40, 0));
 
     assert!(
-        centroid_dist > max_intra,
-        "barbell cliques not separated: centroid_dist={centroid_dist:.3}, \
-         max_intra={max_intra:.3}"
+        centroid_gap > max_intra,
+        "barbell cliques not separated in Fiedler direction: \
+         centroid_gap={centroid_gap:.3}, max_intra_dim0={max_intra:.3}"
     );
 }
 
@@ -465,19 +456,20 @@ fn test_epsilon_bridge_separates_communities() {
     let graph = make_epsilon_bridge(20, 1e-6f32); // n=40; same clique layout
     let emb = spectral_init(&graph, 2, 42, None).unwrap();
 
-    let c0 = emb.slice(s![0..20, ..]).mean_axis(Axis(0)).unwrap();
-    let c1 = emb.slice(s![20..40, ..]).mean_axis(Axis(0)).unwrap();
-    let centroid_dist: f32 = (0..2)
-        .map(|d| (c0[d] - c1[d]).powi(2))
-        .sum::<f32>()
-        .sqrt();
+    // Same rationale as test_barbell_separates_communities: compare along the Fiedler
+    // direction (dim 0) where the near-zero bridge weight still produces opposite-sign
+    // Fiedler values for the two cliques.
+    let c0_x = emb.slice(s![0..20, 0]).mean_axis(Axis(0)).unwrap()[[]];
+    let c1_x = emb.slice(s![20..40, 0]).mean_axis(Axis(0)).unwrap()[[]];
+    let centroid_gap: f32 = (c0_x - c1_x).abs();
 
-    let max_intra = max_intra_dist(&emb, 0..20).max(max_intra_dist(&emb, 20..40));
+    let max_intra = max_intra_1d_spread(&emb, 0..20, 0)
+        .max(max_intra_1d_spread(&emb, 20..40, 0));
 
     assert!(
-        centroid_dist > max_intra,
-        "epsilon-bridge cliques not separated: centroid_dist={centroid_dist:.3}, \
-         max_intra={max_intra:.3}"
+        centroid_gap > max_intra,
+        "epsilon-bridge cliques not separated in Fiedler direction: \
+         centroid_gap={centroid_gap:.3}, max_intra_dim0={max_intra:.3}"
     );
 }
 
