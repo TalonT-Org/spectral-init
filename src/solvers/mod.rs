@@ -330,20 +330,37 @@ mod tests {
     }
 
     #[test]
-    fn quality_gate_catches_garbage_at_lobpcg_threshold() {
+    fn quality_gate_accepts_near_eigenvector_at_lobpcg_threshold() {
+        // 3-node path graph Laplacian (same structure as above).
+        // Construct a near-eigenvector v = v0 + δ·v1 where v0=[1,1,1]/√3 (λ=0) and
+        // v1=[1,0,-1]/√2 (λ=1). The residual against eigenvalue 0 is ≈ δ.
+        // With δ=1e-4 the residual sits between DENSE_EVD_QUALITY_THRESHOLD (1e-6) and
+        // LOBPCG_QUALITY_THRESHOLD (1e-3), giving independent coverage of the LOBPCG gate.
         let laplacian = CsMatI::new(
             (3, 3),
             vec![0usize, 2, 5, 7],
             vec![0usize, 1, 0, 1, 2, 1, 2],
             vec![1.0_f64, -1.0, -1.0, 2.0, -1.0, -1.0, 1.0],
         );
+        let delta = 1e-4_f64;
+        let inv_sqrt3 = 1.0_f64 / 3.0_f64.sqrt();
+        let inv_sqrt2 = 1.0_f64 / 2.0_f64.sqrt();
+        // v = v0 + δ·v1: perturbs the exact λ=0 eigenvector toward the λ=1 eigenvector.
+        let eigenvectors = Array2::from_shape_vec(
+            (3, 1),
+            vec![inv_sqrt3 + delta * inv_sqrt2, inv_sqrt3, inv_sqrt3 - delta * inv_sqrt2],
+        )
+        .unwrap();
         let eigenvalues = Array1::from_vec(vec![0.0_f64]);
-        let eigenvectors = Array2::from_shape_vec((3, 1), vec![1.0_f64, 0.0, 0.0]).unwrap();
 
         let residual = max_eigenpair_residual(&laplacian, &eigenvalues, &eigenvectors);
         assert!(
-            residual > LOBPCG_QUALITY_THRESHOLD,
-            "garbage eigenvector residual={residual:.2e} must exceed LOBPCG_QUALITY_THRESHOLD={LOBPCG_QUALITY_THRESHOLD:.2e}"
+            residual > DENSE_EVD_QUALITY_THRESHOLD,
+            "near-eigenvector residual={residual:.2e} should exceed DENSE_EVD_QUALITY_THRESHOLD={DENSE_EVD_QUALITY_THRESHOLD:.2e}"
+        );
+        assert!(
+            residual < LOBPCG_QUALITY_THRESHOLD,
+            "near-eigenvector residual={residual:.2e} should be accepted by LOBPCG gate (< {LOBPCG_QUALITY_THRESHOLD:.2e})"
         );
     }
 
