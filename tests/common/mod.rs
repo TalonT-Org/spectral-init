@@ -92,7 +92,9 @@ pub fn load_sparse_csr(path: &Path) -> CsMat<f64> {
     let rows = shape_arr[0];
     let cols = shape_arr[1];
 
-    // Note: "format" key is a |S3 byte string (b"csr") — ndarray-npy cannot read it, skip it.
+    // Assumes CSR format. ndarray-npy cannot read the |S3 "format" key (b"csr"), so the
+    // storage order is not verified at runtime. Fixtures must be saved as CSR; if saved
+    // as CSC the resulting CsMat will silently hold CSC data under a CSR label.
 
     CsMat::try_new((rows, cols), indptr, indices, data)
         .unwrap_or_else(|e| panic!("fixture CSR structure invalid in {:?}: {:?}", path, e))
