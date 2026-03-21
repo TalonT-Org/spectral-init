@@ -5,7 +5,7 @@ extern crate ndarray16;
 use ndarray16 as nd16;
 
 use linfa_linalg::lobpcg::{lobpcg, Order};
-use ndarray::{Array1, Array2, ArrayView2};
+use ndarray::{Array1, Array2};
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use rand_distr::{Distribution, StandardNormal};
@@ -49,6 +49,14 @@ fn from_nd16_array2(a: nd16::Array2<f64>) -> Array2<f64> {
         .expect("shape/data mismatch converting nd16→nd17 Array2")
 }
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+/// Residual threshold used to accept partially-converged LOBPCG results.
+const LOBPCG_ACCEPT_TOL: f64 = 1e-4;
+
+/// Epsilon shift applied to the operator in Level 2 (regularized) LOBPCG.
+pub const REGULARIZATION_EPS: f64 = 1e-5;
+
 // ─── LOBPCG solver ────────────────────────────────────────────────────────────
 
 /// LOBPCG iterative eigensolver (Levels 1 and 2).
@@ -62,6 +70,11 @@ pub fn lobpcg_solve<O: LinearOperator>(
     let n = op.size();
     let k = n_components + 1; // +1 to include trivial eigenvector slot
 
+    // Validate preconditions: need at least 1 component and block size < matrix size.
+    if n_components == 0 || k >= n {
+        return None;
+    }
+
     // Build random initial block [n, k] in ndarray 0.17, then convert to 0.16 for lobpcg.
     let mut rng = StdRng::seed_from_u64(seed);
     let x_init_17: Array2<f64> =
@@ -71,7 +84,6 @@ pub fn lobpcg_solve<O: LinearOperator>(
     // Convergence tolerance and iteration budget
     let tol: f32 = 1e-4;
     let maxiter = n * 5;
-    let eps = 1e-5_f64;
 
     // The operator closure bridges ndarray 0.16 (lobpcg boundary) ↔ 0.17 (op.apply).
     let result = if regularize {
@@ -80,7 +92,7 @@ pub fn lobpcg_solve<O: LinearOperator>(
                 let x17 = from_nd16_view2(x);
                 let mut y17 = Array2::zeros((n, x17.ncols()));
                 op.apply(x17.view(), &mut y17);
-                y17.zip_mut_with(&x17, |yi, &xi| *yi += eps * xi);
+                y17.zip_mut_with(&x17, |yi, &xi| *yi += REGULARIZATION_EPS * xi);
                 to_nd16_array2(y17)
             },
             x_init,
@@ -115,7 +127,7 @@ pub fn lobpcg_solve<O: LinearOperator>(
     match result {
         Ok(r) => Some(extract(r)),
         Err((_, Some(r))) => {
-            if r.rnorm.iter().all(|&norm| norm < tol as f64) {
+            if r.rnorm.iter().all(|&norm| norm < LOBPCG_ACCEPT_TOL) {
                 Some(extract(r))
             } else {
                 None
@@ -193,21 +205,28 @@ mod tests {
 
         let result = lobpcg_solve(&op, 2, 42, true);
         assert!(result.is_some(), "Level 2 lobpcg_solve returned None on diagonal matrix");
-        let (eigvals, _eigvecs) = result.unwrap();
+        let (eigvals, eigvecs) = result.unwrap();
 
-        // Regularization shifts all eigenvalues up by eps
+        // Regularization shifts all eigenvalues up by REGULARIZATION_EPS
         assert!(
-            (eigvals[0] - (diag[0] + eps)).abs() < 1e-5,
+            (eigvals[0] - (diag[0] + REGULARIZATION_EPS)).abs() < 1e-5,
             "eigenvalue[0] expected ≈ {}, got {}",
-            diag[0] + eps,
+            diag[0] + REGULARIZATION_EPS,
             eigvals[0]
         );
         assert!(
-            (eigvals[1] - (diag[1] + eps)).abs() < 1e-5,
+            (eigvals[1] - (diag[1] + REGULARIZATION_EPS)).abs() < 1e-5,
             "eigenvalue[1] expected ≈ {}, got {}",
-            diag[1] + eps,
+            diag[1] + REGULARIZATION_EPS,
             eigvals[1]
         );
+
+        // Check eigenvector quality via residuals against the original (unshifted) operator.
+        // The regularized operator shifts eigenvalues by REGULARIZATION_EPS; remove that shift.
+        for i in 0..eigvals.len() {
+            let r = residual(&op, eigvecs.column(i), eigvals[i] - REGULARIZATION_EPS);
+            assert!(r < 1e-4, "level2 residual for eigenpair {i}: {r} >= 1e-4");
+        }
     }
 
     #[test]
@@ -233,7 +252,8 @@ mod tests {
 
     #[test]
     fn lobpcg_solve_eigenvectors_orthonormal() {
-        let diag: Vec<f64> = (0..8).map(|i| i as f64 * 0.25).collect();
+        // Start at 0.25 (not 0.0) to avoid a degenerate zero direction in the initial block.
+        let diag: Vec<f64> = (1..=8).map(|i| i as f64 * 0.25).collect();
         let mat = diagonal_csr(&diag);
         let op = CsrOperator(&mat);
 
