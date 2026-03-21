@@ -150,6 +150,17 @@ use sprs::CsMatI;
 
 /// Load a scipy-saved CSR matrix with f32 data and u32 column indices.
 /// Python scipy typically stores indices as int32 (i32), which are cast to u32 here.
+/// Convert a label vector to a set-of-sets, permitting label-invariant comparison.
+/// Two label assignments are equivalent iff they produce the same partition.
+pub fn partition_of(labels: &[usize]) -> std::collections::BTreeSet<std::collections::BTreeSet<usize>> {
+    let mut map: std::collections::BTreeMap<usize, std::collections::BTreeSet<usize>> =
+        std::collections::BTreeMap::new();
+    for (node, &label) in labels.iter().enumerate() {
+        map.entry(label).or_default().insert(node);
+    }
+    map.into_values().collect()
+}
+
 pub fn load_sparse_csr_f32_u32(path: &Path) -> CsMatI<f32, u32, usize> {
     let file = std::fs::File::open(path)
         .unwrap_or_else(|e| panic!("cannot open fixture {:?}: {}", path, e));

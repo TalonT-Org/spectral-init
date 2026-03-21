@@ -40,6 +40,11 @@ name = "test_comp_b_laplacian"
 path = "tests/integration/test_comp_b_laplacian.rs"
 
 [[test]]
+name = "test_comp_c_components"
+path = "tests/integration/test_comp_c_components.rs"
+required-features = ["testing"]
+
+[[test]]
 name = "test_comp_d_dense_evd"
 path = "tests/integration/test_comp_d_dense_evd.rs"
 
