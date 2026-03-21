@@ -106,3 +106,64 @@ pub fn load_metadata(path: &Path) -> serde_json::Value {
     serde_json::from_str(&content)
         .unwrap_or_else(|e| panic!("invalid JSON in {:?}: {}", path, e))
 }
+
+use sprs::CsMatI;
+
+/// Load a scipy-saved CSR matrix with f32 data and u32 column indices.
+/// Python scipy typically stores indices as int32 (i32), which are cast to u32 here.
+pub fn load_sparse_csr_f32_u32(path: &Path) -> CsMatI<f32, u32, usize> {
+    let file = std::fs::File::open(path)
+        .unwrap_or_else(|e| panic!("cannot open fixture {:?}: {}", path, e));
+    let mut npz = NpzReader::new(file)
+        .unwrap_or_else(|e| panic!("cannot open NpzReader for {:?}: {}", path, e));
+
+    // data: f32
+    let data: Vec<f32> = npz
+        .by_name::<ndarray::OwnedRepr<f32>, ndarray::Ix1>("data")
+        .unwrap_or_else(|e| panic!("data key not found in {:?}: {}", path, e))
+        .into_iter()
+        .collect();
+
+    // indices: i32 → u32
+    let indices: Vec<u32> =
+        match npz.by_name::<ndarray::OwnedRepr<i32>, ndarray::Ix1>("indices") {
+            Ok(arr) => arr.iter().map(|&x| x as u32).collect(),
+            Err(ReadNpzError::Npy(ReadNpyError::WrongDescriptor(_))) => {
+                let arr: Array1<i64> = npz
+                    .by_name("indices")
+                    .unwrap_or_else(|e| panic!("indices key not found in {:?}: {}", path, e));
+                arr.iter().map(|&x| x as u32).collect()
+            }
+            Err(e) => panic!("error reading 'indices' from {:?}: {}", path, e),
+        };
+
+    // indptr: i32 → usize
+    let indptr: Vec<usize> =
+        match npz.by_name::<ndarray::OwnedRepr<i32>, ndarray::Ix1>("indptr") {
+            Ok(arr) => arr.iter().map(|&x| x as usize).collect(),
+            Err(ReadNpzError::Npy(ReadNpyError::WrongDescriptor(_))) => {
+                let arr: Array1<i64> = npz
+                    .by_name("indptr")
+                    .unwrap_or_else(|e| panic!("indptr key not found in {:?}: {}", path, e));
+                arr.iter().map(|&x| x as usize).collect()
+            }
+            Err(e) => panic!("error reading 'indptr' from {:?}: {}", path, e),
+        };
+
+    // shape: i32 → usize
+    let shape_arr: Vec<usize> =
+        match npz.by_name::<ndarray::OwnedRepr<i32>, ndarray::Ix1>("shape") {
+            Ok(arr) => arr.iter().map(|&x| x as usize).collect(),
+            Err(ReadNpzError::Npy(ReadNpyError::WrongDescriptor(_))) => {
+                let arr: Array1<i64> = npz
+                    .by_name("shape")
+                    .unwrap_or_else(|e| panic!("shape key not found in {:?}: {}", path, e));
+                arr.iter().map(|&x| x as usize).collect()
+            }
+            Err(e) => panic!("error reading 'shape' from {:?}: {}", path, e),
+        };
+
+    let (rows, cols) = (shape_arr[0], shape_arr[1]);
+    CsMatI::try_new((rows, cols), indptr, indices, data)
+        .unwrap_or_else(|e| panic!("fixture CSR structure invalid in {:?}: {:?}", path, e))
+}
