@@ -73,7 +73,8 @@ pub fn lobpcg_solve<O: LinearOperator>(
     let k = n_components + 1; // +1 to include trivial eigenvector slot
 
     // Validate preconditions: need at least 1 component and block size < matrix size.
-    if n_components == 0 || k >= n {
+    // Also require sqrt_deg to match the operator size to avoid a panic in assign().
+    if n_components == 0 || k >= n || sqrt_deg.len() != n {
         return None;
     }
 
