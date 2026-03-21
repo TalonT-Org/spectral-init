@@ -24,6 +24,23 @@ pub(crate) fn spmv_csr(
     x: &[f64],
     y: &mut [f64],
 ) {
+    debug_assert!(
+        indptr.len() == y.len() + 1,
+        "CSR invariant violated: indptr.len()={} != y.len()+1={}",
+        indptr.len(),
+        y.len() + 1
+    );
+    debug_assert!(
+        indices.iter().all(|&j| j < x.len()),
+        "CSR invariant violated: column index out of bounds (x.len()={})",
+        x.len()
+    );
+    debug_assert!(
+        data.len() >= indptr.last().copied().unwrap_or(0),
+        "CSR invariant violated: data.len()={} < nnz={}",
+        data.len(),
+        indptr.last().copied().unwrap_or(0)
+    );
     for i in 0..y.len() {
         let mut acc = 0.0_f64;
         for k in indptr[i]..indptr[i + 1] {
