@@ -76,32 +76,36 @@ pub(crate) fn solve_eigenproblem(
 
     // Level 0: Dense EVD — exact, used for small n where O(n³) is acceptable.
     if n < DENSE_N_THRESHOLD {
-        if let Ok((eigs, vecs)) = dense_evd(laplacian, n_components + 1) {
-            let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
-            if quality < DENSE_EVD_QUALITY_THRESHOLD {
-                eprintln!(
-                    "[spectral] Level 0 (dense EVD) succeeded (n={n}, max_residual={quality:.2e})"
+        match dense_evd(laplacian, n_components + 1) {
+            Ok((eigs, vecs)) => {
+                let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
+                if quality < DENSE_EVD_QUALITY_THRESHOLD {
+                    log::debug!(
+                        "[spectral] Level 0 (dense EVD) succeeded (n={n}, max_residual={quality:.2e})"
+                    );
+                    return (eigs, vecs);
+                }
+                log::debug!(
+                    "[spectral] Level 0 (dense EVD) poor quality \
+                     (max_residual={quality:.2e}), escalating to Level 1"
                 );
-                return (eigs, vecs);
             }
-            eprintln!(
-                "[spectral] Level 0 (dense EVD) poor quality \
-                 (max_residual={quality:.2e}), escalating to Level 1"
-            );
+            Err(e) => {
+                log::warn!("[spectral] Level 0 (dense EVD) failed ({e}), escalating to Level 1");
+            }
         }
-        // Unexpected failure (e.g. faer edge case) — fall through to iterative.
     }
 
     // Level 1: LOBPCG without regularization.
     if let Some((eigs, vecs)) = lobpcg::lobpcg_solve(&op, n_components, seed, false, sqrt_deg) {
         let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
         if quality < LOBPCG_QUALITY_THRESHOLD {
-            eprintln!(
+            log::debug!(
                 "[spectral] Level 1 (LOBPCG) succeeded (n={n}, max_residual={quality:.2e})"
             );
             return (eigs, vecs);
         }
-        eprintln!(
+        log::debug!(
             "[spectral] Level 1 (LOBPCG) poor quality \
              (max_residual={quality:.2e}), escalating to Level 2"
         );
@@ -113,12 +117,12 @@ pub(crate) fn solve_eigenproblem(
     if let Some((eigs, vecs)) = lobpcg::lobpcg_solve(&op, n_components, seed, true, sqrt_deg) {
         let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
         if quality < LOBPCG_QUALITY_THRESHOLD {
-            eprintln!(
+            log::debug!(
                 "[spectral] Level 2 (LOBPCG+reg) succeeded (n={n}, max_residual={quality:.2e})"
             );
             return (eigs, vecs);
         }
-        eprintln!(
+        log::debug!(
             "[spectral] Level 2 (LOBPCG+reg) poor quality \
              (max_residual={quality:.2e}), escalating to Level 3"
         );
@@ -130,12 +134,12 @@ pub(crate) fn solve_eigenproblem(
         let (eigs, vecs) = rsvd::rsvd_solve(laplacian, n_components, seed);
         let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
         if quality < RSVD_QUALITY_THRESHOLD {
-            eprintln!(
+            log::debug!(
                 "[spectral] Level 3 (rSVD) succeeded (n={n}, max_residual={quality:.2e})"
             );
             return (eigs, vecs);
         }
-        eprintln!(
+        log::debug!(
             "[spectral] Level 3 (rSVD) poor quality (max_residual={quality:.2e}), \
              escalating to Level 4"
         );
@@ -146,7 +150,7 @@ pub(crate) fn solve_eigenproblem(
     // If it returns Err, that indicates an OOM or a faer bug — both are
     // unrecoverable and should surface as an assertion failure, not a silent
     // ConvergenceFailure that would produce a garbage embedding.
-    eprintln!("[spectral] Level 4 (forced dense EVD) (n={n})");
+    log::debug!("[spectral] Level 4 (forced dense EVD) (n={n})");
     dense_evd(laplacian, n_components + 1).expect(
         "solve_eigenproblem: Level 4 forced dense EVD failed — \
          this is a bug; the spectral theorem guarantees eigenvectors \
