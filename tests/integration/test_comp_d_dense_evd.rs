@@ -84,3 +84,8 @@ fn comp_d_dense_evd_near_dupes_100() {
 fn comp_d_dense_evd_circles_300() {
     run_comp_d_test("circles_300", 300);
 }
+
+#[test]
+fn comp_d_dense_evd_blobs_connected_2000() {
+    run_comp_d_test("blobs_connected_2000", 2000);
+}
