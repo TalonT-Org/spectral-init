@@ -2,6 +2,8 @@ mod dense;
 mod lobpcg;
 mod rsvd;
 
+pub use dense::dense_evd;
+
 use ndarray::{Array1, Array2};
 pub(crate) use crate::operator::LinearOperator;
 use sprs::CsMatI;

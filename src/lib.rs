@@ -15,6 +15,8 @@ pub use crate::selection::select_eigenvectors;
 pub use crate::laplacian::compute_degrees;
 #[doc(hidden)]
 pub use crate::laplacian::build_normalized_laplacian;
+#[doc(hidden)]
+pub use crate::solvers::dense_evd;
 
 use ndarray::Array2;
 use sprs::CsMatI;
