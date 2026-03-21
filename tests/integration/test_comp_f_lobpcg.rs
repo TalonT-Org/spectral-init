@@ -18,6 +18,7 @@ fn lobpcg_blobs_connected_2000_eigenvalues() {
 
     let deg_path = fixture_dir.join("comp_a_degrees.npz");
     let sqrt_deg: ndarray::Array1<f64> = common::load_dense(&deg_path, "sqrt_deg");
+    assert_eq!(sqrt_deg.len(), laplacian.rows(), "sqrt_deg length must match Laplacian dimension");
 
     let result = lobpcg_solve(&op, 2, 42, false, &sqrt_deg);
     assert!(result.is_some(), "lobpcg_solve returned None on blobs_connected_2000 Laplacian");
@@ -57,6 +58,7 @@ fn lobpcg_blobs_connected_2000_level2() {
 
     let deg_path = fixture_dir.join("comp_a_degrees.npz");
     let sqrt_deg: ndarray::Array1<f64> = common::load_dense(&deg_path, "sqrt_deg");
+    assert_eq!(sqrt_deg.len(), laplacian.rows(), "sqrt_deg length must match Laplacian dimension");
 
     let result = lobpcg_solve(&op, 2, 42, true, &sqrt_deg);
     assert!(
