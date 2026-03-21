@@ -73,8 +73,9 @@ impl<'a> LinearOperator for CsrOperator<'a> {
         y.fill(0.0);
         let k = x.shape()[1];
         if k == 1 {
-            // Single-vector path: route through spmv_csr, the Phase 3 SIMD replacement
-            // point. Collecting x to a Vec handles non-contiguous column strides safely.
+            // Single-vector path: routes through the spmv_csr raw-slice SpMV kernel.
+            // Avoids column buffer allocation when the layout is contiguous; falls back
+            // to a Vec for strided column views.
             let mat = self.0;
             let x_col: Vec<f64> = x.column(0).iter().copied().collect();
             let mut y_col = vec![0.0_f64; mat.rows()];
