@@ -100,11 +100,14 @@ fn extract_subgraph(
     let mut data: Vec<f32> = Vec::new();
 
     for (local_row, &orig_row) in node_indices.iter().enumerate() {
+        debug_assert!(orig_row < n_global, "node index {orig_row} out of bounds (graph has {n_global} rows)");
         if let Some(row_vec) = graph.outer_view(orig_row) {
             for (orig_col_u32, &weight) in row_vec.iter() {
                 let orig_col = orig_col_u32 as usize;
                 if lookup[orig_col] != usize::MAX {
-                    indices.push(lookup[orig_col] as u32);
+                    let local_col = u32::try_from(lookup[orig_col])
+                        .expect("local index overflows u32; component size exceeds u32::MAX");
+                    indices.push(local_col);
                     data.push(weight);
                 }
             }
@@ -115,25 +118,29 @@ fn extract_subgraph(
     CsMatI::<f32, u32, usize>::new((n_comp, n_comp), indptr, indices, data)
 }
 
-/// Orthogonal meta-embedding for `n_comp <= 2 * dim`.
-/// Row `i`: `+e_{i % dim}` for `i < dim`, `-e_{i % dim}` for `i >= dim`.
-fn orthogonal_meta_embedding(n_comp: usize, dim: usize) -> Array2<f64> {
-    let mut m = Array2::<f64>::zeros((n_comp, dim));
+/// Orthogonal meta-embedding for `n_comp <= 2 * n_embedding_dims`.
+/// Row `i`: `+e_{i % n_embedding_dims}` for `i < n_embedding_dims`, `-e_{i % n_embedding_dims}` for `i >= n_embedding_dims`.
+fn orthogonal_meta_embedding(n_comp: usize, n_embedding_dims: usize) -> Array2<f64> {
+    debug_assert!(
+        n_comp <= 2 * n_embedding_dims,
+        "orthogonal_meta_embedding requires n_comp ({n_comp}) <= 2 * n_embedding_dims ({n_embedding_dims})"
+    );
+    let mut m = Array2::<f64>::zeros((n_comp, n_embedding_dims));
     for row in 0..n_comp {
-        let d = row % dim;
-        let sign = if row < dim { 1.0 } else { -1.0 };
+        let d = row % n_embedding_dims;
+        let sign = if row < n_embedding_dims { 1.0 } else { -1.0 };
         m[[row, d]] = sign;
     }
     m
 }
 
 /// Spectral meta-embedding using Gaussian affinity between component centroids.
-/// Used when `n_comp > 2 * dim` (requires data).
+/// Used when `n_comp > 2 * n_embedding_dims` (requires data).
 fn spectral_meta_embedding(
     data: &ArrayView2<f32>,
     component_members: &[Vec<usize>],
     n_comp: usize,
-    dim: usize,
+    n_embedding_dims: usize,
     seed: u64,
 ) -> Result<Array2<f64>, SpectralError> {
     let n_features = data.ncols();
@@ -169,9 +176,11 @@ fn spectral_meta_embedding(
         }
     }
 
-    // Normalized Laplacian of the n_comp x n_comp centroid affinity graph
+    // Normalized Laplacian of the n_comp x n_comp centroid affinity graph.
+    // Degrees sum only off-diagonal entries (no self-loops) to match the
+    // standard formula L = I - D^{-1/2} W D^{-1/2} where W has zero diagonal.
     let degrees: Vec<f64> = (0..n_comp)
-        .map(|i| (0..n_comp).map(|j| aff[[i, j]]).sum())
+        .map(|i| (0..n_comp).filter(|&j| j != i).map(|j| aff[[i, j]]).sum())
         .collect();
     let inv_sqrt_d: Vec<f64> = degrees
         .iter()
@@ -189,14 +198,11 @@ fn spectral_meta_embedding(
     }
     let centroid_laplacian = tri.to_csr();
 
-    let (evals, evecs) = solve_eigenproblem(&centroid_laplacian, dim, seed);
-    let selected = select_eigenvectors(
-        evals
-            .as_slice_memory_order()
-            .expect("eigenvalues must be contiguous"),
-        &evecs,
-        dim,
-    );
+    let (evals, evecs) = solve_eigenproblem(&centroid_laplacian, n_embedding_dims, seed);
+    let evals_slice = evals
+        .as_slice_memory_order()
+        .ok_or(SpectralError::ConvergenceFailure)?;
+    let selected = select_eigenvectors(evals_slice, &evecs, n_embedding_dims);
 
     let max_abs = selected.fold(0.0_f64, |a, &x| a.max(x.abs()));
     if max_abs == 0.0 {
@@ -276,13 +282,10 @@ fn embed_single_component(
         .collect();
     let laplacian = build_normalized_laplacian(&sub_graph, &inv_sqrt_deg);
     let (evals, evecs) = solve_eigenproblem(&laplacian, n_embedding_dims, seed);
-    let mut coords = select_eigenvectors(
-        evals
-            .as_slice_memory_order()
-            .expect("eigenvalues must be contiguous"),
-        &evecs,
-        n_embedding_dims,
-    );
+    let evals_slice = evals
+        .as_slice_memory_order()
+        .ok_or(SpectralError::ConvergenceFailure)?;
+    let mut coords = select_eigenvectors(evals_slice, &evecs, n_embedding_dims);
 
     // Scale to data_range
     let max_abs = coords.fold(0.0_f64, |a, &x| a.max(x.abs()));
