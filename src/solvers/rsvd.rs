@@ -91,6 +91,11 @@ pub(crate) fn rsvd_solve(
     seed: u64,
 ) -> EigenResult {
     let n = laplacian.rows();
+    assert!(n_components > 0, "rsvd_solve: n_components must be >= 1, got 0");
+    assert!(
+        n_components < n,
+        "rsvd_solve: n_components ({n_components}) must be < n ({n})"
+    );
     // rank = n_components + 1: request one extra so we can discard the trivial vector
     let rank = n_components + 1;
     // k = total random vectors (rank + oversampling for accuracy)
