@@ -20,11 +20,14 @@ fn run_comp_a_test(dataset: &str, expected_n: usize) {
     assert_eq!(degrees.len(), expected_n, "degrees length");
     assert_eq!(sqrt_deg.len(), expected_n, "sqrt_deg length");
 
-    // Tolerance is 1e-5: input graph weights are f32, and Python sums columns
+    // Tolerance is 5e-7: input graph weights are f32, and Python sums columns
     // (axis=0) while Rust sums rows. For symmetric graphs both give the same value,
     // but floating-point summation order differs, yielding ~1e-7 discrepancies.
-    // 1e-5 is safely above f32 precision (≈1.2e-7) while tight enough to catch bugs.
-    let degree_tol = 1e-5_f64;
+    // f32 machine epsilon is ≈1.2e-7; at unit node weight, 1 ULP ≈ 1.2e-7. Using
+    // 5e-7 (≈4 ULPs) follows the float-cmp guideline of 4–8 ULPs headroom for a
+    // short computation chain, providing a robust buffer above the summation-order
+    // noise floor while catching genuine degree-computation bugs.
+    let degree_tol = 5e-7_f64;
     for (i, (&got, &want)) in degrees.iter().zip(expected_deg.iter()).enumerate() {
         assert!(
             (got - want).abs() < degree_tol,
