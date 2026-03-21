@@ -1,4 +1,5 @@
 mod dense;
+#[doc(hidden)]
 pub mod lobpcg;
 mod rsvd;
 
@@ -6,7 +7,7 @@ mod rsvd;
 pub use dense::dense_evd;
 
 use ndarray::{Array1, Array2};
-pub use crate::operator::LinearOperator;
+use crate::operator::LinearOperator;
 use sprs::CsMatI;
 use crate::SpectralError;
 use crate::operator::CsrOperator;
@@ -34,8 +35,8 @@ pub(crate) fn solve(
         return Ok(result);
     }
 
-    // Level 3: rSVD (P2-11)
-    todo!("Level 3: rsvd_solve — implement in P2-11")
+    // Level 3: rSVD (P2-11) — not yet implemented
+    Err(SpectralError::ConvergenceFailure)
 }
 
 // ─── Unit Tests ──────────────────────────────────────────────────────────────
