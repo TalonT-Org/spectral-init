@@ -60,6 +60,16 @@ pub struct CsrOperator<'a>(pub &'a CsMatI<f64, usize>);
 
 impl<'a> LinearOperator for CsrOperator<'a> {
     fn apply(&self, x: ArrayView2<f64>, y: &mut Array2<f64>) {
+        debug_assert_eq!(
+            x.shape()[0], self.0.rows(),
+            "CsrOperator::apply: x row count {} != matrix rows {}",
+            x.shape()[0], self.0.rows()
+        );
+        debug_assert_eq!(
+            y.shape()[0], self.0.rows(),
+            "CsrOperator::apply: y row count {} != matrix rows {}",
+            y.shape()[0], self.0.rows()
+        );
         y.fill(0.0);
         let k = x.shape()[1];
         if k == 1 {
