@@ -49,8 +49,8 @@ fn max_eigenpair_residual(
 
 /// Solver escalation chain. Tries five levels in order, advancing only on failure.
 ///
-/// Returns `k+1` eigenpairs (including the trivial λ≈0 vector at index 0) so that
-/// the caller can apply `select_eigenvectors` uniformly across all solver paths.
+/// Returns `n_components+1` eigenpairs (including the trivial λ≈0 vector at index 0)
+/// so that the caller can apply `select_eigenvectors` uniformly across all solver paths.
 ///
 /// # Panics
 ///
@@ -58,7 +58,7 @@ fn max_eigenpair_residual(
 /// The spectral theorem guarantees eigenvectors exist for any symmetric PSD matrix.
 pub(crate) fn solve_eigenproblem(
     laplacian: &CsMatI<f64, usize>,
-    k: usize,
+    n_components: usize,
     seed: u64,
 ) -> Result<EigenResult, SpectralError> {
     let n = laplacian.rows();
@@ -66,7 +66,7 @@ pub(crate) fn solve_eigenproblem(
 
     // Level 0: Dense EVD — exact, used for small n where O(n³) is acceptable.
     if n < DENSE_N_THRESHOLD {
-        if let Ok(result) = dense_evd(laplacian, k + 1) {
+        if let Ok(result) = dense_evd(laplacian, n_components + 1) {
             eprintln!("[spectral] Level 0 (dense EVD) succeeded (n={n})");
             return Ok(result);
         }
@@ -74,13 +74,13 @@ pub(crate) fn solve_eigenproblem(
     }
 
     // Level 1: LOBPCG without regularization.
-    if let Some(result) = lobpcg::lobpcg_solve(&op, k, seed, false) {
+    if let Some(result) = lobpcg::lobpcg_solve(&op, n_components, seed, false) {
         eprintln!("[spectral] Level 1 (LOBPCG) succeeded (n={n})");
         return Ok(result);
     }
 
     // Level 2: LOBPCG with ε·I regularization — widens eigengap.
-    if let Some(result) = lobpcg::lobpcg_solve(&op, k, seed, true) {
+    if let Some(result) = lobpcg::lobpcg_solve(&op, n_components, seed, true) {
         eprintln!("[spectral] Level 2 (LOBPCG+reg) succeeded (n={n})");
         return Ok(result);
     }
@@ -88,7 +88,7 @@ pub(crate) fn solve_eigenproblem(
     // Level 3: Randomized SVD via 2I-L trick.
     // rsvd_solve is infallible; gate on output quality via residual check.
     {
-        let (eigs, vecs) = rsvd::rsvd_solve(laplacian, k, seed);
+        let (eigs, vecs) = rsvd::rsvd_solve(laplacian, n_components, seed);
         let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
         if quality < RSVD_QUALITY_THRESHOLD {
             eprintln!(
@@ -108,7 +108,7 @@ pub(crate) fn solve_eigenproblem(
     // unrecoverable and should surface as an assertion failure, not a silent
     // ConvergenceFailure that would produce a garbage embedding.
     eprintln!("[spectral] Level 4 (forced dense EVD) (n={n})");
-    let result = dense_evd(laplacian, k + 1).expect(
+    let result = dense_evd(laplacian, n_components + 1).expect(
         "solve_eigenproblem: Level 4 forced dense EVD failed — \
          this is a bug; the spectral theorem guarantees eigenvectors \
          exist for any symmetric positive semidefinite matrix",
