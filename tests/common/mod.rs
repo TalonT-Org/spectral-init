@@ -100,6 +100,25 @@ pub fn load_sparse_csr(path: &Path) -> CsMat<f64> {
         .unwrap_or_else(|e| panic!("fixture CSR structure invalid in {:?}: {:?}", path, e))
 }
 
+/// Compute the relative residual ||L·v - λ·v|| / ||v|| for an eigenpair.
+pub fn residual_spmv(
+    laplacian: &sprs::CsMat<f64>,
+    eigvec: ndarray::ArrayView1<f64>,
+    eigval: f64,
+) -> f64 {
+    let n = laplacian.rows();
+    let mut lv = vec![0.0f64; n];
+    for (val, (row, col)) in laplacian.iter() {
+        lv[row] += val * eigvec[col];
+    }
+    let diff_norm: f64 = lv.iter().zip(eigvec.iter())
+        .map(|(&lvi, &vi)| (lvi - eigval * vi).powi(2))
+        .sum::<f64>()
+        .sqrt();
+    let v_norm: f64 = eigvec.iter().map(|&vi| vi.powi(2)).sum::<f64>().sqrt();
+    diff_norm / v_norm
+}
+
 pub fn load_metadata(path: &Path) -> serde_json::Value {
     let content = std::fs::read_to_string(path)
         .unwrap_or_else(|e| panic!("cannot read metadata {:?}: {}", path, e));
