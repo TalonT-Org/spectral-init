@@ -71,12 +71,26 @@ pub fn load_sparse_csr(path: &Path) -> CsMat<f64> {
             Err(e) => panic!("error reading 'indptr' from {:?}: {}", path, e),
         };
 
-    // shape: 1D array of 2 i32 elements
-    let shape_arr: Array1<i32> = npz
-        .by_name("shape")
-        .unwrap_or_else(|e| panic!("shape key not found in {:?}: {}", path, e));
-    let rows = shape_arr[0] as usize;
-    let cols = shape_arr[1] as usize;
+    // shape: try i32 first (most common), then i64 (SciPy on some 64-bit platforms)
+    let shape_arr: Vec<usize> =
+        match npz.by_name::<ndarray::OwnedRepr<i32>, ndarray::Ix1>("shape") {
+            Ok(arr) => arr.iter().map(|&x| x as usize).collect(),
+            Err(ReadNpzError::Npy(ReadNpyError::WrongDescriptor(_))) => {
+                let arr: Array1<i64> = npz
+                    .by_name("shape")
+                    .unwrap_or_else(|e| panic!("shape key not found in {:?}: {}", path, e));
+                arr.iter().map(|&x| x as usize).collect()
+            }
+            Err(e) => panic!("error reading 'shape' from {:?}: {}", path, e),
+        };
+    assert!(
+        shape_arr.len() >= 2,
+        "shape key in {:?} has {} elements, expected 2",
+        path,
+        shape_arr.len()
+    );
+    let rows = shape_arr[0];
+    let cols = shape_arr[1];
 
     // Note: "format" key is a |S3 byte string (b"csr") — ndarray-npy cannot read it, skip it.
 
