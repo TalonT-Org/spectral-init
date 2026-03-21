@@ -9,7 +9,8 @@ use ndarray::{Array1, Array2};
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use rand_distr::{Distribution, StandardNormal};
-use super::{EigenResult, LinearOperator};
+use super::EigenResult;
+use crate::operator::LinearOperator;
 
 // ─── ndarray 0.16 ↔ 0.17 conversion helpers ──────────────────────────────────
 

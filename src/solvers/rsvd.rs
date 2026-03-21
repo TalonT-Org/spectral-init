@@ -1,5 +1,5 @@
 use sprs::{CsMatI, TriMat};
-use ndarray::Array2;
+use ndarray::{Array1, Array2};
 use rand::SeedableRng;
 use rand_distr::{Distribution, StandardNormal};
 use faer::{Mat as FaerMat, Side};
@@ -136,36 +136,33 @@ pub(crate) fn rsvd_solve(
     // ── Step G: Recover full eigenvectors V = Q U_B ───────────────────────────
     let v = q.dot(&u_b);                         // [n, k]
 
-    // ── Step H: Extract non-trivial eigenpairs ────────────────────────────────
-    // M eigenvalues (ascending): m_eigenvals[k-1] ≈ 2.0 is the trivial one.
-    // We want the n_components next-largest M eigenvalues (at indices k-2..k-1-n_components).
-    // These correspond to the smallest non-trivial L eigenvalues in ascending order:
-    //   λ_L[0] = 2 - m_eigenvals[k-2]   (smallest non-trivial)
-    //   λ_L[1] = 2 - m_eigenvals[k-3]
-    //   ...
-    //   λ_L[n_components-1] = 2 - m_eigenvals[k-1-n_components]
+    // ── Step I: Build output — trivial vector first, then n_components non-trivial ──
+    //
+    // M eigenvalues (ascending): index actual_n-1 is the trivial (λ_M ≈ 2.0 → λ_L ≈ 0).
+    // Non-trivial L eigenvalues (ascending): indices actual_n-2, actual_n-3, ...,
+    //   actual_n-1-n_components in the M ascending array.
     let actual_n = m_eigenvals.len();
-    let eig_vals_vec: Vec<f64> = (0..n_components)
-        .map(|i| {
-            // Index into ascending eigenval array: skip trivial (last), take in descending M order
-            let idx = actual_n.saturating_sub(2 + i);
-            2.0 - m_eigenvals[idx]
-        })
-        .collect();
+    let trivial_m_idx = actual_n - 1;
+    let mut eig_vals_vec: Vec<f64> = Vec::with_capacity(n_components + 1);
+    let mut eig_col_indices: Vec<usize> = Vec::with_capacity(n_components + 1);
 
-    // Corresponding eigenvectors: columns of v at same indices (reversed)
-    let eig_col_indices: Vec<usize> = (0..n_components)
-        .map(|i| actual_n.saturating_sub(2 + i))
-        .collect();
-    let mut eigenvectors = Array2::<f64>::zeros((n, n_components));
+    // Trivial pair (λ_L ≈ 0)
+    eig_vals_vec.push(2.0 - m_eigenvals[trivial_m_idx]);
+    eig_col_indices.push(trivial_m_idx);
+
+    // Non-trivial pairs in ascending L eigenvalue order
+    for i in 0..n_components {
+        let idx = actual_n.saturating_sub(2 + i);
+        eig_vals_vec.push(2.0 - m_eigenvals[idx]);
+        eig_col_indices.push(idx);
+    }
+
+    let mut eigenvectors = Array2::<f64>::zeros((n, n_components + 1));
     for (out_col, &in_col) in eig_col_indices.iter().enumerate() {
         eigenvectors.column_mut(out_col).assign(&v.column(in_col));
     }
 
-    // ── Step I: Package eigenvalues as Array2 shape [1, n_components] ─────────
-    let eigenvalues = Array2::from_shape_vec((1, n_components), eig_vals_vec)
-        .expect("rsvd_solve: eigenvalue reshape failed");
-
+    let eigenvalues = Array1::from_vec(eig_vals_vec);
     (eigenvalues, eigenvectors)
 }
 
@@ -254,8 +251,8 @@ mod tests {
         let n_components = 2;
         let (eigenvalues, eigenvectors) = rsvd_solve(&l, n_components, 42);
 
-        assert_eq!(eigenvalues.shape(), &[1, n_components], "eigenvalues shape");
-        assert_eq!(eigenvectors.shape(), &[n, n_components], "eigenvectors shape");
+        assert_eq!(eigenvalues.shape(), &[n_components + 1], "eigenvalues shape");
+        assert_eq!(eigenvectors.shape(), &[n, n_components + 1], "eigenvectors shape");
 
         // Eigenvalue range: [0, 2] for normalized Laplacian
         for &lambda in eigenvalues.iter() {
@@ -265,10 +262,11 @@ mod tests {
             );
         }
 
-        // Orthonormality: |V^T V - I| < 1e-10
+        // Orthonormality: |V^T V - I| < 1e-10  (all n_components+1 columns)
+        let ncols = n_components + 1;
         let vt_v = eigenvectors.t().dot(&eigenvectors);
-        for i in 0..n_components {
-            for j in 0..n_components {
+        for i in 0..ncols {
+            for j in 0..ncols {
                 let expected = if i == j { 1.0 } else { 0.0 };
                 let diff = (vt_v[[i, j]] - expected).abs();
                 assert!(
@@ -300,18 +298,24 @@ mod tests {
 
         let eig_slice = eigenvalues.as_slice().unwrap();
 
-        // Analytical eigenvalues: both non-trivial eigenvalues of the 6-ring are 0.5
-        let expected = [0.5f64, 0.5f64];
-        for i in 0..n_components {
-            let err = (eig_slice[i] - expected[i]).abs();
+        // Index 0 is the trivial eigenvector (λ ≈ 0)
+        assert!(
+            eig_slice[0].abs() < 1e-3,
+            "trivial eigenvalue={:.8}, expected ≈ 0", eig_slice[0]
+        );
+
+        // Non-trivial eigenvalues of the 6-ring are 0.5 (indices 1..=n_components)
+        for i in 1..=n_components {
+            let err = (eig_slice[i] - 0.5_f64).abs();
             assert!(
                 err < 1e-4,
-                "eigenvalue[{i}] = {:.8}, expected {:.8}, err = {:.2e} (threshold 1e-4)",
-                eig_slice[i], expected[i], err
+                "eigenvalue[{i}] = {:.8}, expected 0.5, err = {:.2e} (threshold 1e-4)",
+                eig_slice[i], err
             );
         }
 
-        for i in 0..n_components {
+        // Residual checks for non-trivial eigenpairs (index 1..=n_components)
+        for i in 1..=n_components {
             let v = eigenvectors.column(i).to_owned();
             let lambda = eig_slice[i];
 
