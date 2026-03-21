@@ -1,16 +1,16 @@
 mod common;
 
+/// Run with `cargo test -- --ignored` after generating fixtures:
+///   python tests/generate_fixtures.py
 #[test]
+#[ignore = "requires generated fixtures; run `python tests/generate_fixtures.py` first"]
 fn smoke_load_comp_a_degrees_blobs_connected_200() {
     let path = common::fixture_path("blobs_connected_200", "comp_a_degrees.npz");
-    if !path.exists() {
-        // Fixture not generated yet — skip gracefully with a message
-        eprintln!(
-            "SKIP: fixture not found at {:?}. Generate with: python tests/generate_fixtures.py",
-            path
-        );
-        return;
-    }
+    assert!(
+        path.exists(),
+        "fixture not found at {:?}; run: python tests/generate_fixtures.py",
+        path
+    );
 
     let degrees: ndarray::Array1<f64> = common::load_dense(&path, "degrees");
     let sqrt_deg: ndarray::Array1<f64> = common::load_dense(&path, "sqrt_deg");
