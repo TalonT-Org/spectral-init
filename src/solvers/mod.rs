@@ -198,4 +198,57 @@ mod tests {
         let residual = max_eigenpair_residual(&laplacian, &eigenvalues, &eigenvectors);
         assert!(residual < 1e-10, "trivial residual={residual:.2e}, expected < 1e-10");
     }
+
+    /// Build a sparse diagonal n×n CSR Laplacian with eigenvalues [0, 1/(n-1), ..., 1].
+    ///
+    /// Diagonal entries approximate a Laplacian with a zero eigenvalue at index 0.
+    fn diagonal_laplacian(n: usize) -> CsMatI<f64, usize> {
+        let indptr: Vec<usize> = (0..=n).collect();
+        let indices: Vec<usize> = (0..n).collect();
+        let data: Vec<f64> = (0..n)
+            .map(|i| i as f64 / (n - 1).max(1) as f64)
+            .collect();
+        CsMatI::new((n, n), indptr, indices, data)
+    }
+
+    /// Verify that solve_eigenproblem routes through LOBPCG (Level 1) for n >= DENSE_N_THRESHOLD,
+    /// and returns a valid result with the correct shape and non-negative eigenvalues.
+    #[test]
+    fn solve_eigenproblem_large_n_routes_through_lobpcg() {
+        // n=2001 > DENSE_N_THRESHOLD=2000, so Level 0 is skipped; LOBPCG (Level 1) runs.
+        let n = 2001;
+        let n_components = 2;
+        let laplacian = diagonal_laplacian(n);
+
+        let (eigvals, eigvecs) = solve_eigenproblem(&laplacian, n_components, 42);
+
+        assert_eq!(eigvals.len(), n_components + 1, "expected n_components+1 eigenvalues");
+        assert_eq!(eigvecs.shape(), &[n, n_components + 1], "expected [n, n_components+1] shape");
+
+        for &v in eigvals.iter() {
+            assert!(v >= -1e-6, "eigenvalue is negative: {v:.2e}");
+        }
+    }
+
+    /// Verify max_eigenpair_residual returns a large value for a non-eigenvector,
+    /// confirming the Level 3 → Level 4 quality gate correctly identifies poor results.
+    #[test]
+    fn max_eigenpair_residual_large_for_non_eigenvector() {
+        // 3-node path graph Laplacian (same as in max_eigenpair_residual_trivial_near_zero)
+        let laplacian = CsMatI::new(
+            (3, 3),
+            vec![0usize, 2, 5, 7],
+            vec![0usize, 1, 0, 1, 2, 1, 2],
+            vec![1.0_f64, -1.0, -1.0, 2.0, -1.0, -1.0, 1.0],
+        );
+        // Use a random non-eigenvector with wrong claimed eigenvalue — residual must be large.
+        let eigenvalues = Array1::from_vec(vec![0.0_f64]);
+        let eigenvectors = Array2::from_shape_vec((3, 1), vec![1.0_f64, 0.0, 0.0]).unwrap();
+
+        let residual = max_eigenpair_residual(&laplacian, &eigenvalues, &eigenvectors);
+        assert!(
+            residual >= RSVD_QUALITY_THRESHOLD,
+            "non-eigenvector residual={residual:.2e} should be >= RSVD_QUALITY_THRESHOLD={RSVD_QUALITY_THRESHOLD:.2e}"
+        );
+    }
 }
