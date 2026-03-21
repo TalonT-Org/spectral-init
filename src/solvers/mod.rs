@@ -44,7 +44,7 @@ fn max_eigenpair_residual(
             let v_norm = v.dot(&v).sqrt().max(f64::EPSILON);
             diff.dot(&diff).sqrt() / v_norm
         })
-        .fold(0.0_f64, f64::max)
+        .fold(0.0_f64, |a, b| if a.is_nan() || b.is_nan() { f64::NAN } else { a.max(b) })
 }
 
 /// Solver escalation chain. Tries five levels in order, advancing only on failure.
