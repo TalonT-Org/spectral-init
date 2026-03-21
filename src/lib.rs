@@ -31,6 +31,14 @@ pub fn rsvd_solve_pub(
 
 #[cfg(feature = "testing")]
 #[doc(hidden)]
+/// Exposes `solve_eigenproblem` for integration tests that need to assert which
+/// solver level was reached.
+///
+/// **Test-only seam — not part of the stable public API.**  The returned `u8`
+/// encodes the solver level (0 = dense EVD, 1 = LOBPCG, 2 = LOBPCG+reg,
+/// 3 = rSVD, 4 = forced dense EVD) and may change if the escalation chain is
+/// reordered or extended.  Test code that asserts on this value is intentionally
+/// coupled to the current chain ordering.
 pub fn solve_eigenproblem_pub(
     laplacian: &sprs::CsMatI<f64, usize>,
     n_components: usize,
