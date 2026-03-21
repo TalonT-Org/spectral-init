@@ -12,7 +12,6 @@ pub use dense::dense_evd;
 
 use ndarray::{Array1, Array2};
 use sprs::CsMatI;
-use crate::SpectralError;
 use crate::operator::CsrOperator;
 
 /// Eigendecomposition result: (eigenvalues shape [k], eigenvectors shape [n, k]).
@@ -60,7 +59,7 @@ pub(crate) fn solve_eigenproblem(
     laplacian: &CsMatI<f64, usize>,
     n_components: usize,
     seed: u64,
-) -> Result<EigenResult, SpectralError> {
+) -> EigenResult {
     let n = laplacian.rows();
     let op = CsrOperator(laplacian);
 
@@ -68,7 +67,7 @@ pub(crate) fn solve_eigenproblem(
     if n < DENSE_N_THRESHOLD {
         if let Ok(result) = dense_evd(laplacian, n_components + 1) {
             eprintln!("[spectral] Level 0 (dense EVD) succeeded (n={n})");
-            return Ok(result);
+            return result;
         }
         // Unexpected failure (e.g. faer edge case) — fall through to iterative.
     }
@@ -76,13 +75,13 @@ pub(crate) fn solve_eigenproblem(
     // Level 1: LOBPCG without regularization.
     if let Some(result) = lobpcg::lobpcg_solve(&op, n_components, seed, false) {
         eprintln!("[spectral] Level 1 (LOBPCG) succeeded (n={n})");
-        return Ok(result);
+        return result;
     }
 
     // Level 2: LOBPCG with ε·I regularization — widens eigengap.
     if let Some(result) = lobpcg::lobpcg_solve(&op, n_components, seed, true) {
         eprintln!("[spectral] Level 2 (LOBPCG+reg) succeeded (n={n})");
-        return Ok(result);
+        return result;
     }
 
     // Level 3: Randomized SVD via 2I-L trick.
@@ -94,7 +93,7 @@ pub(crate) fn solve_eigenproblem(
             eprintln!(
                 "[spectral] Level 3 (rSVD) succeeded (n={n}, max_residual={quality:.2e})"
             );
-            return Ok((eigs, vecs));
+            return (eigs, vecs);
         }
         eprintln!(
             "[spectral] Level 3 (rSVD) poor quality (max_residual={quality:.2e}), \
@@ -108,12 +107,11 @@ pub(crate) fn solve_eigenproblem(
     // unrecoverable and should surface as an assertion failure, not a silent
     // ConvergenceFailure that would produce a garbage embedding.
     eprintln!("[spectral] Level 4 (forced dense EVD) (n={n})");
-    let result = dense_evd(laplacian, n_components + 1).expect(
+    dense_evd(laplacian, n_components + 1).expect(
         "solve_eigenproblem: Level 4 forced dense EVD failed — \
          this is a bug; the spectral theorem guarantees eigenvectors \
          exist for any symmetric positive semidefinite matrix",
-    );
-    Ok(result)
+    )
 }
 
 // ─── Unit Tests ──────────────────────────────────────────────────────────────
@@ -157,10 +155,7 @@ mod tests {
     #[test]
     fn solve_eigenproblem_eigenvalues_nonneg_and_sorted() {
         let laplacian = path_graph_laplacian_6();
-        let result = solve_eigenproblem(&laplacian, 2, 42);
-        assert!(result.is_ok(), "solve_eigenproblem() returned Err: {:?}", result.err());
-
-        let (eigvals, _) = result.unwrap();
+        let (eigvals, _) = solve_eigenproblem(&laplacian, 2, 42);
 
         // All eigenvalues must be non-negative
         for &v in eigvals.iter() {
@@ -180,9 +175,9 @@ mod tests {
     #[test]
     fn solve_eigenproblem_returns_k_plus_one_pairs() {
         // 6-node path graph (n=6 < 2000 → Level 0 dense EVD)
-        let (eigs, vecs) = solve_eigenproblem(&path_graph_laplacian_6(), 2, 42).unwrap();
-        assert_eq!(eigs.len(), 3, "expected k+1=3 eigenvalues");
-        assert_eq!(vecs.shape(), &[6, 3], "expected [n, k+1] = [6, 3] eigenvectors");
+        let (eigs, vecs) = solve_eigenproblem(&path_graph_laplacian_6(), 2, 42);
+        assert_eq!(eigs.len(), 3, "expected n_components+1=3 eigenvalues");
+        assert_eq!(vecs.shape(), &[6, 3], "expected [n, n_components+1] = [6, 3] eigenvectors");
     }
 
     #[test]
