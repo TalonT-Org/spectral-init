@@ -18,7 +18,7 @@ pub trait LinearOperator {
 /// This is the Phase 3 SIMD replacement point. The raw-slice signature exposes
 /// the memory layout that AVX-512 / SELL-C-sigma intrinsics require. Do not
 /// change the signature; replace the body in Phase 3.
-pub(crate) fn spmv_csr(
+fn spmv_csr_inner(
     indptr: &[usize],
     indices: &[usize],
     data: &[f64],
@@ -49,6 +49,17 @@ pub(crate) fn spmv_csr(
         }
         y[i] = acc;
     }
+}
+
+#[cfg(feature = "testing")]
+#[doc(hidden)]
+pub fn spmv_csr(indptr: &[usize], indices: &[usize], data: &[f64], x: &[f64], y: &mut [f64]) {
+    spmv_csr_inner(indptr, indices, data, x, y)
+}
+
+#[cfg(not(feature = "testing"))]
+pub(crate) fn spmv_csr(indptr: &[usize], indices: &[usize], data: &[f64], x: &[f64], y: &mut [f64]) {
+    spmv_csr_inner(indptr, indices, data, x, y)
 }
 
 // ─── CsrOperator ─────────────────────────────────────────────────────────────

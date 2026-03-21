@@ -21,6 +21,14 @@ pub use crate::solvers::dense_evd;
 
 #[cfg(feature = "testing")]
 #[doc(hidden)]
+pub fn find_components(
+    graph: &sprs::CsMatI<f32, u32, usize>,
+) -> (Vec<usize>, usize) {
+    components::find_components(graph)
+}
+
+#[cfg(feature = "testing")]
+#[doc(hidden)]
 pub fn rsvd_solve_pub(
     laplacian: &sprs::CsMatI<f64, usize>,
     n_components: usize,
