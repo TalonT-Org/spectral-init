@@ -6,35 +6,58 @@ use rand_distr::{Distribution, Normal};
 /// Internal helper: deterministic scaling only (no noise).
 /// Scales `coords` so the global max absolute value equals `max_coord`, then
 /// casts to f32.
-pub(crate) fn scale_coords(coords: &Array2<f64>, max_coord: f64) -> Array2<f32> {
+pub(crate) fn scale_coords(
+    coords: &Array2<f64>,
+    max_coord: f64,
+) -> Result<Array2<f32>, crate::SpectralError> {
     let max_abs = coords.iter().cloned().map(f64::abs).fold(0.0_f64, f64::max);
-    assert!(
-        max_abs > 0.0,
-        "scale_coords: embedding is all-zero; cannot scale to max={max_coord}"
-    );
+    if max_abs <= 0.0 {
+        return Err(crate::SpectralError::InvalidGraph(format!(
+            "scale_coords: embedding is all-zero; cannot scale to max={max_coord}"
+        )));
+    }
     let expansion = max_coord / max_abs;
-    coords.mapv(|x| (x * expansion) as f32)
+    Ok(coords.mapv(|x| (x * expansion) as f32))
 }
 
 /// Internal helper: scale then add per-element Gaussian noise.
-fn noisy_scale_coords(
+pub(crate) fn noisy_scale_coords(
     coords: &Array2<f64>,
     rng: &mut impl rand::Rng,
     max_coord: f64,
     noise_scale: f64,
-) -> Array2<f32> {
-    let mut scaled = scale_coords(coords, max_coord);
-    let normal = Normal::<f32>::new(0.0, noise_scale as f32)
-        .expect("noise_scale must be finite and positive");
+) -> Result<Array2<f32>, crate::SpectralError> {
+    if !noise_scale.is_finite() || noise_scale <= 0.0 {
+        return Err(crate::SpectralError::InvalidGraph(format!(
+            "noise_scale must be finite and positive, got {noise_scale}"
+        )));
+    }
+    let noise_scale_f32 = noise_scale as f32;
+    if noise_scale_f32 <= 0.0 {
+        return Err(crate::SpectralError::InvalidGraph(format!(
+            "noise_scale {noise_scale} underflows to zero when cast to f32"
+        )));
+    }
+    let mut scaled = scale_coords(coords, max_coord)?;
+    let normal = Normal::<f32>::new(0.0, noise_scale_f32)
+        .expect("noise_scale_f32 is validated positive and finite");
     for elem in scaled.iter_mut() {
         *elem += normal.sample(rng);
     }
-    scaled
+    Ok(scaled)
 }
 
 /// Scales columns so max absolute value is 10.0, then adds Gaussian noise
 /// with scale=0.0001. Downcasts to f32.
-pub(crate) fn scale_and_add_noise(coords: Array2<f64>, seed: u64) -> Array2<f32> {
+pub(crate) fn scale_and_add_noise(
+    coords: Array2<f64>,
+    seed: u64,
+) -> Result<Array2<f32>, crate::SpectralError> {
+    if coords.is_empty() {
+        return Err(crate::SpectralError::InvalidGraph(
+            "scale_and_add_noise: input embedding is empty".to_string(),
+        ));
+    }
     let mut rng = StdRng::seed_from_u64(seed);
     noisy_scale_coords(&coords, &mut rng, 10.0, 0.0001)
 }
@@ -42,8 +65,7 @@ pub(crate) fn scale_and_add_noise(coords: Array2<f64>, seed: u64) -> Array2<f32>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ndarray::Array0;
-    use ndarray_npy::NpzReader;
+    use ndarray_npy::{NpzReader, ReadableElement};
     use std::path::PathBuf;
 
     fn fixture_path(dataset: &str, file: &str) -> PathBuf {
@@ -55,23 +77,10 @@ mod tests {
             .join(file)
     }
 
-    fn npz_f64_array2(path: &PathBuf, key: &str) -> Option<ndarray::Array2<f64>> {
+    fn npz_array2<T: ReadableElement>(path: &PathBuf, key: &str) -> Option<ndarray::Array2<T>> {
         let file = std::fs::File::open(path).ok()?;
         let mut reader = NpzReader::new(file).ok()?;
         reader.by_name(key).ok()
-    }
-
-    fn npz_f32_array2(path: &PathBuf, key: &str) -> Option<ndarray::Array2<f32>> {
-        let file = std::fs::File::open(path).ok()?;
-        let mut reader = NpzReader::new(file).ok()?;
-        reader.by_name(key).ok()
-    }
-
-    fn npz_f64_scalar(path: &PathBuf, key: &str) -> Option<f64> {
-        let file = std::fs::File::open(path).ok()?;
-        let mut reader = NpzReader::new(file).ok()?;
-        let arr: Array0<f64> = reader.by_name(key).ok()?;
-        Some(arr.into_scalar())
     }
 
     fn check_pre_noise_exact(dataset: &str) {
@@ -79,23 +88,18 @@ mod tests {
         let f_path = fixture_path(dataset, "comp_f_scaling.npz");
 
         if !e_path.exists() || !f_path.exists() {
-            eprintln!(
-                "check_pre_noise_exact({dataset}): fixture files absent, skipping"
-            );
-            return;
+            panic!("check_pre_noise_exact({dataset}): fixture files absent");
         }
 
-        let embedding = npz_f64_array2(&e_path, "embedding").expect("embedding key missing");
+        let embedding = npz_array2::<f64>(&e_path, "embedding").expect("embedding key missing");
         let expected_pre_noise =
-            npz_f32_array2(&f_path, "pre_noise").expect("pre_noise key missing");
-        let expansion = npz_f64_scalar(&f_path, "expansion").expect("expansion key missing");
+            npz_array2::<f32>(&f_path, "pre_noise").expect("pre_noise key missing");
 
-        let result = scale_coords(&embedding, 10.0);
+        let result = scale_coords(&embedding, 10.0).expect("scale_coords failed");
 
         // Verify element-wise exact equality
-        let shape = result.shape().to_vec();
-        for i in 0..shape[0] {
-            for j in 0..shape[1] {
+        for i in 0..result.nrows() {
+            for j in 0..result.ncols() {
                 approx::assert_abs_diff_eq!(
                     result[[i, j]],
                     expected_pre_noise[[i, j]],
@@ -111,15 +115,6 @@ mod tests {
             .map(f32::abs)
             .fold(0.0f32, f32::max);
         approx::assert_abs_diff_eq!(max_abs, 10.0f32, epsilon = 1e-5f32);
-
-        // Verify expansion matches Python
-        let max_abs_f64 = embedding
-            .iter()
-            .cloned()
-            .map(f64::abs)
-            .fold(0.0_f64, f64::max);
-        let expected_expansion = 10.0 / max_abs_f64;
-        approx::assert_abs_diff_eq!(expansion, expected_expansion, epsilon = 1e-12);
     }
 
     #[test]
@@ -137,15 +132,14 @@ mod tests {
     fn test_noise_distribution_blobs_50() {
         let e_path = fixture_path("blobs_50", "comp_e_selection.npz");
         if !e_path.exists() {
-            eprintln!("test_noise_distribution_blobs_50: fixture absent, skipping");
-            return;
+            panic!("test_noise_distribution_blobs_50: fixture absent");
         }
 
-        let embedding = npz_f64_array2(&e_path, "embedding").expect("embedding key missing");
+        let embedding = npz_array2::<f64>(&e_path, "embedding").expect("embedding key missing");
         let n = embedding.len();
 
-        let final_result = scale_and_add_noise(embedding.clone(), 42);
-        let pre_noise = scale_coords(&embedding, 10.0);
+        let final_result = scale_and_add_noise(embedding.clone(), 42).expect("scale_and_add_noise failed");
+        let pre_noise = scale_coords(&embedding, 10.0).expect("scale_coords failed");
 
         let noise: ndarray::Array2<f32> = &final_result - &pre_noise;
         let noise_flat: Vec<f32> = noise.iter().cloned().collect();
@@ -175,23 +169,19 @@ mod tests {
         for dataset in &["blobs_50", "moons_200", "circles_300"] {
             let e_path = fixture_path(dataset, "comp_e_selection.npz");
             if !e_path.exists() {
-                eprintln!("test_max_abs_is_10({dataset}): fixture absent, skipping");
-                continue;
+                panic!("test_max_abs_is_10({dataset}): fixture absent");
             }
 
-            let embedding = npz_f64_array2(&e_path, "embedding").expect("embedding key missing");
-            let pre_noise = scale_coords(&embedding, 10.0);
+            let embedding =
+                npz_array2::<f64>(&e_path, "embedding").expect("embedding key missing");
+            let pre_noise = scale_coords(&embedding, 10.0).expect("scale_coords failed");
             let max_abs = pre_noise
                 .iter()
                 .cloned()
                 .map(f32::abs)
                 .fold(0.0f32, f32::max);
 
-            approx::assert_abs_diff_eq!(
-                max_abs,
-                10.0f32,
-                epsilon = 1e-5f32
-            );
+            approx::assert_abs_diff_eq!(max_abs, 10.0f32, epsilon = 1e-5f32);
         }
     }
 }
