@@ -1,7 +1,8 @@
-import subprocess, sys
+import sys
 import numpy as np
 import pytest
 from pathlib import Path
+from conftest import run_fixture_pipeline
 
 CONNECTED_DATASETS = [
     "moons_200", "circles_300", "near_dupes_100",
@@ -9,18 +10,9 @@ CONNECTED_DATASETS = [
 ]
 DISCONNECTED_DATASETS = ["blobs_50", "blobs_500", "blobs_5000", "disconnected_200"]
 ALL_DATASETS = CONNECTED_DATASETS + DISCONNECTED_DATASETS
-SCRIPT = Path(__file__).parent / "generate_fixtures.py"
 
 
 # ── Session fixture ────────────────────────────────────────────────────────────
-
-def _run(datasets: list[str], outdir: str, extra_args: list[str] | None = None) -> None:
-    cmd = [sys.executable, str(SCRIPT), "--output-dir", outdir, "--datasets"] + datasets
-    if extra_args:
-        cmd += extra_args
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    assert result.returncode == 0, f"CMD: {cmd}\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
-
 
 @pytest.fixture(scope="session")
 def comp_d_e_f_outdir(tmp_path_factory: pytest.TempPathFactory) -> Path:
@@ -29,7 +21,7 @@ def comp_d_e_f_outdir(tmp_path_factory: pytest.TempPathFactory) -> Path:
     Note: pytest-xdist (``-n auto``) is not supported; run without ``-n`` flag.
     """
     td = tmp_path_factory.mktemp("comp_d_e_f")
-    _run(ALL_DATASETS, str(td))
+    run_fixture_pipeline(ALL_DATASETS, str(td))
     return td
 
 
@@ -257,9 +249,9 @@ def test_comp_d_e_gap_aware_comparison_reports_method(name, comp_d_e_f_outdir):
 
 def test_byte_identical_reruns(tmp_path):
     """Running the generator twice produces byte-identical comp_f_scaling.npz."""
-    _run(["blobs_50"], str(tmp_path / "run1"))
+    run_fixture_pipeline(["blobs_50"], str(tmp_path / "run1"))
     first = (tmp_path / "run1" / "blobs_50" / "comp_f_scaling.npz").read_bytes()
-    _run(["blobs_50"], str(tmp_path / "run2"))
+    run_fixture_pipeline(["blobs_50"], str(tmp_path / "run2"))
     second = (tmp_path / "run2" / "blobs_50" / "comp_f_scaling.npz").read_bytes()
     assert first == second
 
@@ -270,8 +262,8 @@ def test_byte_identical_reruns(tmp_path):
 
 def test_verify_exact_path_passes_for_blobs_50(tmp_path):
     """Test 15: verify_exact_path returns empty failures list for a generated exact run."""
-    _run(["blobs_50"], str(tmp_path), ["--knn-method", "exact"])
-    sys.path.insert(0, str(SCRIPT.parent))
+    run_fixture_pipeline(["blobs_50"], str(tmp_path), ["--knn-method", "exact"])
+    sys.path.insert(0, str(Path(__file__).parent))
     import verify_fixtures
     failures = verify_fixtures.verify_exact_path(tmp_path / "blobs_50", n_samples=50, n_neighbors=15)
     assert failures == [], f"verify_exact_path reported failures:\n" + "\n".join(failures)
@@ -279,8 +271,8 @@ def test_verify_exact_path_passes_for_blobs_50(tmp_path):
 
 def test_verify_detects_exact_files_via_main(tmp_path):
     """Test 16: verify_fixtures.main returns True (all pass) for a 'both' run."""
-    _run(["blobs_50"], str(tmp_path), ["--knn-method", "both"])
-    sys.path.insert(0, str(SCRIPT.parent))
+    run_fixture_pipeline(["blobs_50"], str(tmp_path), ["--knn-method", "both"])
+    sys.path.insert(0, str(Path(__file__).parent))
     import verify_fixtures
     result = verify_fixtures.main(tmp_path, ["blobs_50"])
     assert result is True, "verify_fixtures.main should return True when all checks pass"
