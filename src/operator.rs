@@ -57,6 +57,7 @@ pub fn spmv_csr(
 }
 
 #[cfg(not(feature = "testing"))]
+#[allow(dead_code)] // only used in #[cfg(test)] unit tests
 pub(crate) fn spmv_csr(
     indptr: &[usize],
     indices: &[usize],
