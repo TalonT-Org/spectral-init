@@ -43,7 +43,8 @@ fn make_ring_graph(n: usize, half: usize) -> sprs::CsMatI<f32, u32, usize> {
         indptr[i + 1] = indptr[i] + nnz;
     }
 
-    sprs::CsMatI::new((n, n), indptr, indices, data)
+    sprs::CsMatI::try_new((n, n), indptr, indices, data)
+        .expect("ring graph CSR construction failed")
 }
 
 /// Build the symmetric normalized Laplacian for an `n`-node ring graph with
