@@ -8,14 +8,13 @@ mod scaling;
 mod selection;
 mod solvers;
 
-// Exported for integration tests only; not part of the stable public API.
-#[doc(hidden)]
+// Re-exported for component-level integration tests. These are internal pipeline
+// functions, not part of the stable public API.
 pub use crate::selection::select_eigenvectors;
-#[doc(hidden)]
 pub use crate::laplacian::compute_degrees;
-#[doc(hidden)]
 pub use crate::laplacian::build_normalized_laplacian;
-#[doc(hidden)]
+/// Dense EVD solver. Exposed for component-level integration tests; not part of the
+/// stable public API and may change without notice.
 pub use crate::solvers::dense_evd;
 
 use ndarray::Array2;
