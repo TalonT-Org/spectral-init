@@ -27,6 +27,10 @@ fn run_e2e_residual_check(dataset: &str, n: usize) {
     let scaling_path = common::fixture_path(dataset, "comp_f_scaling.npz");
     let expansion: ndarray::Array0<f64> = common::load_dense(&scaling_path, "expansion");
     let expansion_val = expansion.into_scalar();
+    assert!(
+        expansion_val.is_normal() && expansion_val > 0.0,
+        "fixture expansion value must be positive and normal, got {expansion_val}"
+    );
 
     // Load Laplacian and reference eigenvalues
     let laplacian =
@@ -116,7 +120,12 @@ fn test_e2e_subspace_circles_300() {
 
     let scaling_path = common::fixture_path(dataset, "comp_f_scaling.npz");
     let expansion: ndarray::Array0<f64> = common::load_dense(&scaling_path, "expansion");
-    let descaled = descale_embedding(&result, expansion.into_scalar());
+    let expansion_val = expansion.into_scalar();
+    assert!(
+        expansion_val.is_normal() && expansion_val > 0.0,
+        "fixture expansion value must be positive and normal, got {expansion_val}"
+    );
+    let descaled = descale_embedding(&result, expansion_val);
 
     // Reference eigenvectors: columns 1 and 2 (skip trivial column 0)
     let ref_evecs: ndarray::Array2<f64> = common::load_dense(
@@ -166,7 +175,12 @@ fn test_e2e_subspace_near_dupes_100() {
 
     let scaling_path = common::fixture_path(dataset, "comp_f_scaling.npz");
     let expansion: ndarray::Array0<f64> = common::load_dense(&scaling_path, "expansion");
-    let descaled = descale_embedding(&result, expansion.into_scalar());
+    let expansion_val = expansion.into_scalar();
+    assert!(
+        expansion_val.is_normal() && expansion_val > 0.0,
+        "fixture expansion value must be positive and normal, got {expansion_val}"
+    );
+    let descaled = descale_embedding(&result, expansion_val);
 
     let ref_evecs: ndarray::Array2<f64> = common::load_dense(
         &common::fixture_path(dataset, "comp_d_eigensolver.npz"),
