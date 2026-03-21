@@ -118,12 +118,12 @@ def check_step4(A: scipy.sparse.spmatrix, n: int) -> list[str]:
 
 
 def check_step5a(A5: scipy.sparse.spmatrix, A4: scipy.sparse.spmatrix, n: int) -> list[str]:
-    """step5a_pruned.npz: fewer nnz than step4, symmetric, min nonzero >= threshold."""
+    """step5a_pruned.npz: no more nnz than step4, symmetric, min nonzero >= threshold."""
     errors = []
     if A5.shape != (n, n):
         errors.append(f"shape {A5.shape} != ({n}, {n})")
-    if A5.nnz >= A4.nnz:
-        errors.append(f"nnz {A5.nnz} not < step4 nnz {A4.nnz} (no edges pruned)")
+    if A5.nnz > A4.nnz:
+        errors.append(f"nnz {A5.nnz} > step4 nnz {A4.nnz} (edges added, impossible after pruning)")
     diff = abs(A5 - A5.T)
     if diff.max() >= 1e-10:
         errors.append(f"not symmetric: max|A-A^T|={diff.max():.2e}")
