@@ -53,3 +53,7 @@ required-features = ["testing"]
 [[test]]
 name = "test_pipeline"
 path = "tests/integration/test_pipeline.rs"
+
+[[test]]
+name = "test_e2e_validation"
+path = "tests/integration/test_e2e_validation.rs"

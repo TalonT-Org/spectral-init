@@ -265,26 +265,127 @@ mod tests {
         }
     }
 
-    // ─── Fixture-gated stubs ─────────────────────────────────────────────────
-    // These tests require fixture generation (tests/generate_fixtures.py) and
-    // will be implemented once the public API and fixture schema are stable.
+    // ─── Fixture-gated tests ─────────────────────────────────────────────────
+
+    /// Load the blobs_connected_200 Laplacian (f64 CSR with i32 indices) from a fixture NPZ.
+    fn load_fixture_laplacian() -> CsMatI<f64, usize> {
+        use ndarray::Array1;
+        use ndarray_npy::NpzReader;
+        use std::path::Path;
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/blobs_connected_200/comp_b_laplacian.npz");
+        let file = std::fs::File::open(&path)
+            .unwrap_or_else(|e| panic!("cannot open {:?}: {}", path, e));
+        let mut npz = NpzReader::new(file)
+            .unwrap_or_else(|e| panic!("NpzReader error for {:?}: {}", path, e));
+        let data: Vec<f64> = npz
+            .by_name::<ndarray::OwnedRepr<f64>, ndarray::Ix1>("data")
+            .unwrap()
+            .into_iter()
+            .collect();
+        let indices: Vec<usize> = npz
+            .by_name::<ndarray::OwnedRepr<i32>, ndarray::Ix1>("indices")
+            .unwrap()
+            .iter()
+            .map(|&x| x as usize)
+            .collect();
+        let indptr: Vec<usize> = npz
+            .by_name::<ndarray::OwnedRepr<i32>, ndarray::Ix1>("indptr")
+            .unwrap()
+            .iter()
+            .map(|&x| x as usize)
+            .collect();
+        let shape_arr: ndarray::Array1<i64> = npz.by_name("shape").unwrap();
+        let rows = shape_arr[0] as usize;
+        let cols = shape_arr[1] as usize;
+        CsMatI::try_new((rows, cols), indptr, indices, data)
+            .expect("fixture Laplacian CSR invalid")
+    }
 
     #[test]
     #[ignore = "requires fixture generation: run tests/generate_fixtures.py first"]
     fn test_eigenpair_residual_from_fixture() {
-        // Load tests/fixtures/blobs_500/comp_b_laplacian.npz and
-        // tests/fixtures/blobs_500/comp_d_eigensolver.npz, reconstruct the CSR
-        // Laplacian, and assert residual ||L*v - λ*v|| / ||v|| < 1e-10 for each
-        // eigenpair in the fixture.
-        todo!("implement once fixtures are generated and public API is stable")
+        use ndarray_npy::NpzReader;
+        use std::path::Path;
+
+        let laplacian = load_fixture_laplacian();
+        let n = laplacian.rows();
+
+        // Load eigenvalues and eigenvectors from comp_d_eigensolver.npz
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/blobs_connected_200/comp_d_eigensolver.npz");
+        let file = std::fs::File::open(&path).unwrap();
+        let mut npz = NpzReader::new(file).unwrap();
+        let eigenvalues: ndarray::Array1<f64> = npz.by_name("eigenvalues").unwrap();
+        let eigenvectors: ndarray::Array2<f64> = npz.by_name("eigenvectors").unwrap();
+        let k = eigenvalues.len();
+        assert_eq!(eigenvectors.shape()[0], n);
+        assert_eq!(eigenvectors.shape()[1], k);
+
+        // For each eigenpair, assert residual ||L*v - λ*v|| / ||v|| < 1e-10.
+        // These are Python reference eigenvectors computed by numpy.linalg.eigh,
+        // so near-exact residuals are expected.
+        for j in 0..k {
+            let v = eigenvectors.column(j);
+            let lambda = eigenvalues[j];
+            let mut lv = vec![0.0f64; n];
+            for (val, (row, col)) in laplacian.iter() {
+                lv[row] += val * v[col];
+            }
+            let diff_norm: f64 = lv
+                .iter()
+                .zip(v.iter())
+                .map(|(&lvi, &vi)| (lvi - lambda * vi).powi(2))
+                .sum::<f64>()
+                .sqrt();
+            let v_norm: f64 = v.iter().map(|&vi| vi.powi(2)).sum::<f64>().sqrt();
+            let residual = diff_norm / v_norm.max(1e-300);
+            assert!(
+                residual < 1e-10,
+                "eigenpair {j}: residual={residual:.3e} >= 1e-10 (lambda={lambda:.6e})"
+            );
+        }
     }
 
     #[test]
     #[ignore = "requires fixture generation: run tests/generate_fixtures.py first"]
     fn test_multi_vector_matches_sequential_from_fixture() {
-        // Same fixture Laplacian. Apply CsrOperator to the full eigenvector matrix
-        // (all k columns at once) and compare to applying column-by-column.
-        // Assert all values match within 1e-14.
-        todo!("implement once fixtures are generated and public API is stable")
+        use ndarray_npy::NpzReader;
+        use std::path::Path;
+
+        let mat = load_fixture_laplacian();
+        let op = CsrOperator(&mat);
+        let n = mat.rows();
+
+        // Load eigenvectors as input matrix
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/blobs_connected_200/comp_d_eigensolver.npz");
+        let file = std::fs::File::open(&path).unwrap();
+        let mut npz = NpzReader::new(file).unwrap();
+        let eigenvectors: ndarray::Array2<f64> = npz.by_name("eigenvectors").unwrap();
+        let k = eigenvectors.shape()[1];
+
+        // Apply CsrOperator to the full (n, k) matrix at once.
+        let mut y_block = ndarray::Array2::<f64>::zeros((n, k));
+        op.apply(eigenvectors.view(), &mut y_block);
+
+        // Apply column-by-column and compare.
+        for j in 0..k {
+            let x_col = eigenvectors
+                .column(j)
+                .to_owned()
+                .insert_axis(ndarray::Axis(1));
+            let mut y_col = ndarray::Array2::<f64>::zeros((n, 1));
+            op.apply(x_col.view(), &mut y_col);
+            for i in 0..n {
+                assert!(
+                    (y_block[[i, j]] - y_col[[i, 0]]).abs() < 1e-14,
+                    "block vs sequential mismatch at row={i} col={j}: \
+                     block={} seq={}",
+                    y_block[[i, j]],
+                    y_col[[i, 0]]
+                );
+            }
+        }
     }
 }
