@@ -67,25 +67,6 @@ fn spectral_init_output_close_to_pre_noise_blobs_connected_200() {
     }
 }
 
-// ── API signature change ──────────────────────────────────────────────────────
-
-#[test]
-fn spectral_init_connected_with_none_data_unchanged() {
-    // 4-node path graph: 0-1-2-3 (connected, no data needed)
-    let g = CsMatI::<f32, u32, usize>::new(
-        (4, 4),
-        vec![0usize, 1, 3, 5, 6],
-        vec![1u32, 0u32, 2u32, 1u32, 3u32, 2u32],
-        vec![1.0f32; 6],
-    );
-    let result = spectral_init(&g, 2, 42, None);
-    let arr = result.expect("spectral_init on connected graph with None data should succeed");
-    assert_eq!(arr.shape(), &[4, 2]);
-    for &v in arr.iter() {
-        assert!(v.is_finite(), "output contains non-finite value: {v}");
-    }
-}
-
 // ── disconnected graph handling ───────────────────────────────────────────────
 
 fn make_two_clique_graph() -> CsMatI<f32, u32, usize> {
@@ -138,6 +119,28 @@ fn spectral_init_synthetic_disconnected_produces_valid_embedding() {
     for &v in arr.iter() {
         assert!(v.is_finite(), "output contains non-finite value: {v}");
     }
+
+    // Nodes from different clusters (0..3 vs 3..6) should be further apart
+    // than nodes within the same cluster, because the data places cluster A
+    // near (0,0) and cluster B near (100,0).
+    let mut max_intra = 0.0f32;
+    let mut min_inter = f32::INFINITY;
+    for i in 0..6 {
+        for j in (i + 1)..6 {
+            let dx = arr[[i, 0]] - arr[[j, 0]];
+            let dy = arr[[i, 1]] - arr[[j, 1]];
+            let dist = (dx * dx + dy * dy).sqrt();
+            if i / 3 == j / 3 {
+                max_intra = max_intra.max(dist);
+            } else {
+                min_inter = min_inter.min(dist);
+            }
+        }
+    }
+    assert!(
+        max_intra < min_inter,
+        "max intra-cluster dist {max_intra} should be < min inter-cluster dist {min_inter}"
+    );
 }
 
 #[test]
@@ -174,20 +177,6 @@ fn spectral_init_synthetic_disconnected_preserves_component_structure() {
 #[test]
 #[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
 fn spectral_init_disconnected_200_shape_and_finite() {
-    let path = common::fixture_path("disconnected_200", "step5a_pruned.npz");
-    let graph = common::load_sparse_csr_f32_u32(&path);
-
-    let result = spectral_init(&graph, 2, 42, None);
-    let arr = result.expect("spectral_init on disconnected_200 should succeed");
-    assert_eq!(arr.shape()[1], 2);
-    for &v in arr.iter() {
-        assert!(v.is_finite(), "output contains non-finite value: {v}");
-    }
-}
-
-#[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
-fn spectral_init_disconnected_200_preserves_component_structure() {
     let path = common::fixture_path("disconnected_200", "step5a_pruned.npz");
     let graph = common::load_sparse_csr_f32_u32(&path);
 
