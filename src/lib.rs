@@ -8,6 +8,10 @@ mod scaling;
 mod selection;
 mod solvers;
 
+// Exported for integration tests only; not part of the stable public API.
+#[doc(hidden)]
+pub use crate::selection::select_eigenvectors;
+
 use ndarray::Array2;
 use sprs::CsMatI;
 
