@@ -49,7 +49,7 @@ pub enum SpectralError {
     TooFewNodes { n: usize, dims: usize },
 
     /// The graph has more than one connected component.
-    /// Use `multi_component_layout` (implemented in P2-14) to handle disconnected graphs.
+    /// Use `multi_component_layout` to handle disconnected graphs.
     #[error("graph is disconnected; spectral_init requires a connected graph")]
     DisconnectedGraph,
 }
