@@ -77,11 +77,28 @@ impl<'a> LinearOperator for CsrOperator<'a> {
             // Avoids column buffer allocation when the layout is contiguous; falls back
             // to a Vec for strided column views.
             let mat = self.0;
-            let x_col: Vec<f64> = x.column(0).iter().copied().collect();
-            let mut y_col = vec![0.0_f64; mat.rows()];
-            spmv_csr(mat.indptr().raw_storage(), mat.indices(), mat.data(), &x_col, &mut y_col);
-            for (i, v) in y_col.into_iter().enumerate() {
-                y[[i, 0]] = v;
+            // x: use contiguous slice directly when possible; collect otherwise.
+            let x_col0 = x.column(0);
+            let x_col_vec: Vec<f64>;
+            let x_col: &[f64] = match x_col0.as_slice() {
+                Some(s) => s,
+                None => {
+                    x_col_vec = x_col0.iter().copied().collect();
+                    &x_col_vec
+                }
+            };
+            // y: write into the column slice directly when possible; scatter otherwise.
+            match y.column_mut(0).as_slice_mut() {
+                Some(y_col) => {
+                    spmv_csr(mat.indptr().raw_storage(), mat.indices(), mat.data(), x_col, y_col);
+                }
+                None => {
+                    let mut y_col = vec![0.0_f64; mat.rows()];
+                    spmv_csr(mat.indptr().raw_storage(), mat.indices(), mat.data(), x_col, &mut y_col);
+                    for (i, v) in y_col.into_iter().enumerate() {
+                        y[[i, 0]] = v;
+                    }
+                }
             }
         } else {
             // Block-vector path: csr_mulacc_dense_rowmaj handles k>1 efficiently
