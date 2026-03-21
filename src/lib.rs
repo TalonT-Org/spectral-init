@@ -25,7 +25,7 @@ pub fn rsvd_solve_pub(
     laplacian: &sprs::CsMatI<f64, usize>,
     n_components: usize,
     seed: u64,
-) -> (ndarray::Array2<f64>, ndarray::Array2<f64>) {
+) -> (ndarray::Array1<f64>, ndarray::Array2<f64>) {
     crate::solvers::rsvd::rsvd_solve(laplacian, n_components, seed)
 }
 
