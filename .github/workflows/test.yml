@@ -1,0 +1,50 @@
+name: Tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+permissions:
+  checks: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  test:
+    name: cargo nextest
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      - name: Run tests (CI profile)
+        run: cargo nextest run --profile ci --features testing
+
+      - name: Upload JUnit XML
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: junit-results
+          path: target/nextest/ci/junit.xml
+          retention-days: 30
+
+      - name: Report test results
+        uses: mikepenz/action-junit-report@v6
+        if: always()
+        with:
+          report_paths: target/nextest/ci/junit.xml
+          fail_on_failure: false
+          annotate_only: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
