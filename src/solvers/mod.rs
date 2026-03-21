@@ -1,7 +1,7 @@
 mod dense;
 #[doc(hidden)]
 pub mod lobpcg;
-mod rsvd;
+pub(crate) mod rsvd;
 
 // pub (not pub(crate)) so lib.rs can re-export it for integration tests.
 pub use dense::dense_evd;
