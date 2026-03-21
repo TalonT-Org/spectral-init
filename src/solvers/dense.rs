@@ -6,7 +6,7 @@ use super::EigenResult;
 
 /// Dense eigendecomposition via faer for small n.
 /// Returns (eigenvalues shape [k], eigenvectors shape [n, k]) sorted ascending by eigenvalue.
-pub(crate) fn dense_evd(
+pub fn dense_evd(
     laplacian: &CsMatI<f64, usize>,
     k: usize,
 ) -> Result<EigenResult, SpectralError> {
