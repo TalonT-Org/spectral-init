@@ -296,6 +296,7 @@ mod tests {
             .map(|&x| x as usize)
             .collect();
         let shape_arr: ndarray::Array1<i64> = npz.by_name("shape").unwrap();
+        assert_eq!(shape_arr.len(), 2, "shape array must have 2 elements");
         let rows = shape_arr[0] as usize;
         let cols = shape_arr[1] as usize;
         CsMatI::try_new((rows, cols), indptr, indices, data)
