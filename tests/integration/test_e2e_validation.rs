@@ -108,7 +108,6 @@ fn test_e2e_residual_quality_near_dupes_100() {
 #[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py --knn-method both"]
 fn test_e2e_subspace_circles_300() {
     let dataset = "circles_300";
-    let n = 300usize;
 
     let graph_path = common::fixture_path(dataset, "step5a_pruned.npz");
     let graph = common::load_sparse_csr_f32_u32(&graph_path);
@@ -142,7 +141,6 @@ fn test_e2e_subspace_circles_300() {
     let n_ref_v2 = norm(ref_v2);
     let n_rust_v1 = norm(rust_v1);
     let n_rust_v2 = norm(rust_v2);
-    let _ = n; // n used for clarity above
 
     let a = dot(ref_v1, rust_v1) / (n_ref_v1 * n_rust_v1);
     let b = dot(ref_v1, rust_v2) / (n_ref_v1 * n_rust_v2);
@@ -160,7 +158,6 @@ fn test_e2e_subspace_circles_300() {
 #[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py --knn-method both"]
 fn test_e2e_subspace_near_dupes_100() {
     let dataset = "near_dupes_100";
-    let n = 100usize;
 
     let graph_path = common::fixture_path(dataset, "step5a_pruned.npz");
     let graph = common::load_sparse_csr_f32_u32(&graph_path);
@@ -185,7 +182,6 @@ fn test_e2e_subspace_near_dupes_100() {
     let dot = |a: ndarray::ArrayView1<f64>, b: ndarray::ArrayView1<f64>| {
         a.iter().zip(b.iter()).map(|(x, y)| x * y).sum::<f64>()
     };
-    let _ = n;
 
     let a = dot(ref_v1, rust_v1) / (norm(ref_v1) * norm(rust_v1));
     let b = dot(ref_v1, rust_v2) / (norm(ref_v1) * norm(rust_v2));
