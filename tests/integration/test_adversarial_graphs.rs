@@ -277,6 +277,11 @@ fn large_path_laplacian(n: usize) -> CsMatI<f64, usize> {
 
 /// 6-node unnormalized path-graph Laplacian, mirroring `path_graph_laplacian_6` in
 /// `src/solvers/mod.rs` unit tests.
+///
+/// Intentionally unnormalized: `test_level_0_dense_evd_for_small_n` only checks that
+/// `n < 2000` routes to Level 0 (dense EVD) — it does not validate eigenvector quality
+/// or residuals. The escalation-level selection is purely size-based, so the
+/// normalization form of the matrix is irrelevant for that test.
 fn path_laplacian_6() -> CsMatI<f64, usize> {
     CsMatI::new(
         (6, 6),
