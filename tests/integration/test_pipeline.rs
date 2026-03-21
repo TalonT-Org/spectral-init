@@ -5,6 +5,7 @@ use spectral_init::spectral_init;
 use sprs::CsMatI;
 
 #[test]
+#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
 fn spectral_init_output_shape_all_connected_datasets() {
     let datasets = [
         ("blobs_50", 50usize),
@@ -34,6 +35,7 @@ fn spectral_init_output_shape_all_connected_datasets() {
 }
 
 #[test]
+#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
 fn spectral_init_output_close_to_pre_noise_blobs_connected_200() {
     // spectral_init() returns the post-noise output (scale_and_add_noise is its final step,
     // adding Gaussian noise with sigma=0.0001 on coordinates scaled to max 10.0).
@@ -173,6 +175,7 @@ fn spectral_init_synthetic_disconnected_preserves_component_structure() {
 // ── fixture-gated tests (require generated .npz files) ───────────────────────
 
 #[test]
+#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
 fn spectral_init_disconnected_200_shape_and_finite() {
     let path = common::fixture_path("disconnected_200", "step5a_pruned.npz");
     let graph = common::load_sparse_csr_f32_u32(&path);
@@ -186,6 +189,7 @@ fn spectral_init_disconnected_200_shape_and_finite() {
 }
 
 #[test]
+#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
 fn spectral_init_blobs_50_produces_valid_embedding() {
     // blobs_50 has 3 tight clusters that may be disconnected in the k-NN graph
     let path = common::fixture_path("blobs_50", "step5a_pruned.npz");
