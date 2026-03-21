@@ -83,8 +83,7 @@ pub fn lobpcg_solve<O: LinearOperator>(
     let mut x_init_17: Array2<f64> =
         Array2::from_shape_fn((n, k), |_| StandardNormal.sample(&mut rng));
 
-    // Inject analytically-known trivial eigenvector (sqrt_deg / ||sqrt_deg||) into
-    // column 0. This mirrors Python UMAP: X[:, 0] = sqrt_deg / norm(sqrt_deg).
+    // Inject trivial eigenvector hint (sqrt_deg/||sqrt_deg||) into column 0, mirroring Python UMAP.
     let sqrt_deg_norm = sqrt_deg.dot(sqrt_deg).sqrt();
     if sqrt_deg_norm > 0.0 {
         x_init_17.column_mut(0).assign(&sqrt_deg.mapv(|x| x / sqrt_deg_norm));
