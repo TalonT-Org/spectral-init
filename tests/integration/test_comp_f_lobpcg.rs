@@ -2,7 +2,7 @@
 mod common;
 
 use spectral_init::operator::{CsrOperator, LinearOperator};
-use spectral_init::solvers::lobpcg::lobpcg_solve;
+use spectral_init::solvers::lobpcg::{lobpcg_solve, REGULARIZATION_EPS};
 
 /// Verify that lobpcg_solve returns eigenpairs close to Python UMAP's reference
 /// eigenvalues and that all residuals ||L*v - λ*v|| / ||v|| < 1e-4.
@@ -15,7 +15,6 @@ fn lobpcg_blobs_connected_2000_eigenvalues() {
 
     let laplacian = common::load_sparse_csr(&lap_path);
     let op = CsrOperator(&laplacian);
-    let n = op.size();
 
     let result = lobpcg_solve(&op, 2, 42, false);
     assert!(result.is_some(), "lobpcg_solve returned None on blobs_connected_2000 Laplacian");
@@ -38,23 +37,8 @@ fn lobpcg_blobs_connected_2000_eigenvalues() {
 
     // Check residuals ||L*v - λ*v|| / ||v|| < 1e-4 for all eigenpairs
     for i in 0..eigvals.len() {
-        let col: ndarray::Array2<f64> =
-            eigvecs.column(i).to_owned().insert_axis(ndarray::Axis(1));
-        let mut av = ndarray::Array2::zeros((n, 1));
-        op.apply(col.view(), &mut av);
-        let mut sq = 0.0_f64;
-        let mut norm_sq = 0.0_f64;
-        let lam = eigvals[i];
-        for r in 0..n {
-            let diff = av[[r, 0]] - lam * col[[r, 0]];
-            sq += diff * diff;
-            norm_sq += col[[r, 0]] * col[[r, 0]];
-        }
-        let residual = sq.sqrt() / norm_sq.sqrt().max(1e-300);
-        assert!(
-            residual < 1e-4,
-            "residual for eigenpair {i}: {residual} >= 1e-4"
-        );
+        let residual = common::eigenpair_residual(&op, eigvecs.column(i), eigvals[i]);
+        assert!(residual < 1e-4, "residual for eigenpair {i}: {residual} >= 1e-4");
     }
 }
 
@@ -67,7 +51,6 @@ fn lobpcg_blobs_connected_2000_level2() {
 
     let laplacian = common::load_sparse_csr(&lap_path);
     let op = CsrOperator(&laplacian);
-    let n = op.size();
 
     let result = lobpcg_solve(&op, 2, 42, true);
     assert!(
@@ -76,27 +59,11 @@ fn lobpcg_blobs_connected_2000_level2() {
     );
     let (eigvals, eigvecs) = result.unwrap();
 
-    // All residuals must be < 1e-4 for the regularized operator (which shifts by eps=1e-5).
-    // For the original Laplacian, the effective residual is still bounded.
+    // All residuals must be < 1e-4 against the original (unshifted) Laplacian.
+    // Level 2 eigenvalues include the REGULARIZATION_EPS shift; remove it before checking.
     for i in 0..eigvals.len() {
-        let col: ndarray::Array2<f64> =
-            eigvecs.column(i).to_owned().insert_axis(ndarray::Axis(1));
-        let mut av = ndarray::Array2::zeros((n, 1));
-        op.apply(col.view(), &mut av);
-        let mut sq = 0.0_f64;
-        let mut norm_sq = 0.0_f64;
-        // For level 2, eigenvalue includes eps shift; remove it for the residual check
-        let eps = 1e-5_f64;
-        let lam_unshifted = eigvals[i] - eps;
-        for r in 0..n {
-            let diff = av[[r, 0]] - lam_unshifted * col[[r, 0]];
-            sq += diff * diff;
-            norm_sq += col[[r, 0]] * col[[r, 0]];
-        }
-        let residual = sq.sqrt() / norm_sq.sqrt().max(1e-300);
-        assert!(
-            residual < 1e-4,
-            "level2 residual for eigenpair {i}: {residual} >= 1e-4"
-        );
+        let residual =
+            common::eigenpair_residual(&op, eigvecs.column(i), eigvals[i] - REGULARIZATION_EPS);
+        assert!(residual < 1e-4, "level2 residual for eigenpair {i}: {residual} >= 1e-4");
     }
 }
