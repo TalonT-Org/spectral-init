@@ -190,7 +190,7 @@ mod tests {
                 .fold(0.0f32, f32::max);
 
             // Tolerance is 1e-6f32: deterministic f64→f32 cast; max element rounds
-            // to 10.0 with at most ~1.2e-7 (f32 ULP at 10.0); 1e-6 gives headroom.
+            // to 10.0 with at most ~9.5e-7 (f32 ULP at 10.0 = 2^(3-23)); 1e-6 gives headroom.
             approx::assert_abs_diff_eq!(max_abs, 10.0f32, epsilon = 1e-6f32);
         }
     }
