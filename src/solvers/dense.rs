@@ -11,27 +11,29 @@ pub fn dense_evd(
     k: usize,
 ) -> Result<EigenResult, SpectralError> {
     let n = laplacian.rows();
+    if k > n {
+        return Err(SpectralError::TooFewNodes { n, dims: k });
+    }
 
-    // Convert sparse Laplacian to dense faer matrix
     let mut dense = Mat::<f64>::zeros(n, n);
     for (val, (row, col)) in laplacian.iter() {
         *dense.get_mut(row, col) = *val;
     }
 
-    // Compute full symmetric eigendecomposition (eigenvalues in nondecreasing order)
     let evd = dense
         .self_adjoint_eigen(Side::Lower)
-        .map_err(|_| SpectralError::ConvergenceFailure)?;
+        .map_err(|e| {
+            eprintln!("dense_evd: faer self_adjoint_eigen failed: {e:?}");
+            SpectralError::ConvergenceFailure
+        })?;
 
-    let s = evd.S(); // DiagRef<f64> — eigenvalues in nondecreasing order
-    let u = evd.U(); // MatRef<f64> shape [n, n] — columns are eigenvectors
+    let s = evd.S();
+    let u = evd.U();
 
-    // k smallest eigenvalues → Array1<f64>
     let eigenvalues = Array1::from_iter(
         s.column_vector().iter().take(k).copied()
     );
 
-    // Corresponding eigenvectors → Array2<f64> shape [n, k]
     let mut eigenvectors = Array2::<f64>::zeros((n, k));
     for j in 0..k {
         let col = u.col(j);
