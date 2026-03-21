@@ -67,6 +67,7 @@ pub fn lobpcg_solve<O: LinearOperator>(
     n_components: usize,
     seed: u64,
     regularize: bool,
+    sqrt_deg: &Array1<f64>,
 ) -> Option<EigenResult> {
     let n = op.size();
     let k = n_components + 1; // +1 to include trivial eigenvector slot
@@ -78,8 +79,16 @@ pub fn lobpcg_solve<O: LinearOperator>(
 
     // Build random initial block [n, k] in ndarray 0.17, then convert to 0.16 for lobpcg.
     let mut rng = StdRng::seed_from_u64(seed);
-    let x_init_17: Array2<f64> =
+    let mut x_init_17: Array2<f64> =
         Array2::from_shape_fn((n, k), |_| StandardNormal.sample(&mut rng));
+
+    // Inject analytically-known trivial eigenvector (sqrt_deg / ||sqrt_deg||) into
+    // column 0. This mirrors Python UMAP: X[:, 0] = sqrt_deg / norm(sqrt_deg).
+    let sqrt_deg_norm = sqrt_deg.dot(sqrt_deg).sqrt();
+    if sqrt_deg_norm > 0.0 {
+        x_init_17.column_mut(0).assign(&sqrt_deg.mapv(|x| x / sqrt_deg_norm));
+    }
+
     let x_init = to_nd16_array2(x_init_17);
 
     // Convergence tolerance and iteration budget
@@ -182,12 +191,57 @@ mod tests {
     }
 
     #[test]
+    fn lobpcg_injects_trivial_eigenvector() {
+        // Diagonal Laplacian: near-zero first eigenvalue (1e-10 rather than exactly 0.0),
+        // others well-separated. Near-trivial eigenvector is e_0 = [1, 0, ..., 0].
+        //
+        // n=20 satisfies n > 5·k=15 (k = n_components+1 = 3) for reliable LOBPCG convergence.
+        // Using diag[0]=1e-10 rather than 0.0 avoids the L·e_0=0 degeneracy that causes
+        // linfa_linalg's LOBPCG to produce a zero column in A·X_init and fail to converge.
+        let n = 20;
+        let mut diag = vec![1e-10_f64]; // near-zero first eigenvalue
+        for i in 1..n {
+            diag.push(i as f64 * 0.1); // 0.1, 0.2, ..., 1.9
+        }
+        let mat = diagonal_csr(&diag);
+        let op = CsrOperator(&mat);
+
+        // sqrt_deg points at e_0 (the near-trivial direction), injection: col_0 ≈ e_0.
+        let mut sqrt_deg = Array1::zeros(n);
+        sqrt_deg[0] = 1.0;
+
+        let result = lobpcg_solve(&op, 2, 42, false, &sqrt_deg);
+        assert!(result.is_some(), "lobpcg_solve returned None with trivial eigenvector injection");
+        let (eigvals, eigvecs) = result.unwrap();
+
+        // First eigenvalue must be near zero (the near-trivial eigenvalue is 1e-10).
+        assert!(
+            eigvals[0] < 1e-6,
+            "eigenvalue[0] expected ≈ 0.0 (near-trivial), got {}",
+            eigvals[0]
+        );
+
+        // First eigenvector must be close to ±e_0.
+        let dot = eigvecs.column(0)[0].abs();
+        assert!(
+            dot > 1.0 - 1e-6,
+            "eigvec col 0 should align with e_0: |dot| = {dot}"
+        );
+
+        // All residuals must be below tolerance.
+        for i in 0..eigvals.len() {
+            let r = residual(&op, eigvecs.column(i), eigvals[i]);
+            assert!(r < 1e-4, "residual for eigenpair {i}: {r} >= 1e-4");
+        }
+    }
+
+    #[test]
     fn lobpcg_solve_diagonal_level1() {
         let diag = [0.0_f64, 0.1, 0.3, 0.7, 1.2, 2.0];
         let mat = diagonal_csr(&diag);
         let op = CsrOperator(&mat);
 
-        let result = lobpcg_solve(&op, 2, 42, false);
+        let result = lobpcg_solve(&op, 2, 42, false, &Array1::from_vec(vec![1.0_f64; 6]));
         assert!(result.is_some(), "Level 1 lobpcg_solve returned None on diagonal matrix");
         let (eigvals, eigvecs) = result.unwrap();
 
@@ -214,8 +268,8 @@ mod tests {
         let mat = diagonal_csr(&diag);
         let op = CsrOperator(&mat);
 
-        let result = lobpcg_solve(&op, 2, 42, true);
-        assert!(result.is_some(), "Level 2 lobpcg_solve returned None");
+        let result = lobpcg_solve(&op, 2, 42, true, &Array1::from_vec(vec![1.0_f64; 6]));
+        assert!(result.is_some(), "Level 2 lobpcg_solve returned None on diagonal matrix");
         let (eigvals, eigvecs) = result.unwrap();
 
         // Acceptance criterion: eigenvalues within 1e-6 of true Laplacian eigenvalues.
@@ -253,7 +307,7 @@ mod tests {
         let op = CsrOperator(&mat);
 
         let n_components = 3;
-        let result = lobpcg_solve(&op, n_components, 42, false);
+        let result = lobpcg_solve(&op, n_components, 42, false, &Array1::ones(30));
         assert!(result.is_some(), "lobpcg_solve returned None for n=30 diagonal");
         let (eigvals, eigvecs) = result.unwrap();
 
@@ -270,7 +324,7 @@ mod tests {
         let mat = diagonal_csr(&diag);
         let op = CsrOperator(&mat);
 
-        let result = lobpcg_solve(&op, 3, 42, false);
+        let result = lobpcg_solve(&op, 3, 42, false, &Array1::ones(8));
         assert!(result.is_some(), "lobpcg_solve returned None");
         let (_eigvals, eigvecs) = result.unwrap();
 

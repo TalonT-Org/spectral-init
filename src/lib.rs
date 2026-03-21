@@ -103,7 +103,7 @@ pub fn spectral_init(
     let lap = laplacian::build_normalized_laplacian(graph, &inv_sqrt_deg);
 
     // ── Component D: eigensolver escalation chain ─────────────────────────
-    let (eigenvalues, eigenvectors) = solvers::solve_eigenproblem(&lap, n_components, seed);
+    let (eigenvalues, eigenvectors) = solvers::solve_eigenproblem(&lap, n_components, seed, &sqrt_deg);
 
     // ── Component E: eigenvector selection ────────────────────────────────
     let selected = selection::select_eigenvectors(
