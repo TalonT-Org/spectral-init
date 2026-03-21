@@ -311,7 +311,6 @@ mod tests {
 
     /// Load the blobs_connected_200 Laplacian (f64 CSR with i32 indices) from a fixture NPZ.
     fn load_fixture_laplacian() -> CsMatI<f64, usize> {
-        use ndarray::Array1;
         use ndarray_npy::NpzReader;
         use std::path::Path;
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
