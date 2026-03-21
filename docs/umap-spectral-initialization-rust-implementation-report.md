@@ -19,8 +19,8 @@
 10. [Fortran Performance Parity & SIMD Optimization](#10-fortran-performance-parity--simd-optimization)
 11. [Mathematical Reference](#11-mathematical-reference)
 12. [Risk Assessment & Mitigations](#12-risk-assessment--mitigations)
-13. [Phase 2 Implementation Completion Status](#13-phase-2-implementation-completion-status)
-14. [Audit Findings & Remediation Status](#14-audit-findings--remediation-status)
+13. [Phase 1 Completion & Phase 2 Status](#13-phase-1-completion--phase-2-status)
+14. [Phase 2 Implementation Audit (2026-03-21)](#14-phase-2-implementation-audit-2026-03-21)
 15. [Sources](#15-sources)
 
 ---
@@ -1472,15 +1472,12 @@ For typical UMAP: `n=50k`, `k=15 neighbors`, `nnz ~ 750k`, requesting 2–3 eige
 
 ### 12.3 Performance at Scale
 
-| Scale | Strategy | Measured Baseline (ring graph) | Notes |
-|-------|----------|-------------------------------|-------|
-| n = 200 | Dense faer EVD (Level 0) | 396 ns SpMV; 12.6 ms dense EVD standalone; 14.2 ms full pipeline | Exact; cannot fail |
-| n = 2000 | LOBPCG (Level 1) | 223 ms full pipeline; 4.83 µs SpMV; 306 ms LOBPCG standalone | Iterative; may escalate |
-| n = 2000 | Randomized SVD (Level 3) | 286 ms standalone | Different failure modes than LOBPCG |
-| n = 2000 | Laplacian construction | 228 µs | One-time cost |
-| n = 2000 | BFS connected components | 7.24 µs | One-time cost |
-
-> **Note:** Baselines measured on ring graphs (`make_ring_graph(n, 2)`). Real UMAP kNN graphs have non-uniform degree distributions; expect 2–4× slower SpMV in practice. See `benches/README.md` for full details and Phase 3 optimization targets.
+| Scale | Strategy | Expected Time |
+|-------|----------|---------------|
+| n < 2k | Dense faer EVD | < 100ms |
+| 2k < n < 100k | LOBPCG | 1-10s |
+| 100k < n < 2M | LOBPCG with preconditioning | 10-60s |
+| n > 2M | Randomized SVD (2I-L trick) | 30-120s |
 
 ### 12.4 Missing Pieces in the Ecosystem
 
@@ -1493,103 +1490,164 @@ For typical UMAP: `n=50k`, `k=15 neighbors`, `nnz ~ 750k`, requesting 2–3 eige
 
 ---
 
-## 13. Phase 2 Implementation Completion Status
+## 13. Phase 1 Completion & Phase 2 Status
 
-**Status: COMPLETE** (as of 2026-03-21)
+### 13.1 Phase 1: Reference Data Validation (COMPLETE)
 
-All Phase 2 components have been implemented, tested against Python reference fixtures, and merged. Phase 2 produced a fully functional `spectral_init()` public API matching Python UMAP's spectral initialization output within tolerance.
+All Phase 1 issues are closed. The Python fixture infrastructure is complete and validated:
 
-### 13.1 Phase 2 Work Items
+| Issue | Title | Status |
+|-------|-------|--------|
+| #1 | Set up micromamba Python environment | DONE |
+| #2 | Create fixture infrastructure and dataset generators | DONE |
+| #3 | Implement KNN pipeline steps | DONE |
+| #4 | Implement graph construction steps | DONE |
+| #5 | Implement Laplacian construction steps | DONE |
+| #6 | Implement eigendecomposition chain | DONE |
+| #7 | Add pipeline references, verification, documentation | DONE |
+| #16 | Add guaranteed-connected datasets | DONE |
+| #17 | Add exact-distance fixture path | DONE |
+| #18 | Fix verification false positives | DONE |
+| #19 | Add solver metadata to eigensolver fixtures | DONE |
+| #20 | Fix test code connectivity assumptions | DONE |
 
-| Issue | ID | Title | Status | PR |
-|-------|----|-------|--------|----|
-| [#27](https://github.com/TalonT-Org/spectral-init/issues/27) | P2-01 | Project scaffolding and module structure | ✅ COMPLETE | — |
-| [#28](https://github.com/TalonT-Org/spectral-init/issues/28) | P2-02 | NPZ fixture loading infrastructure for Rust tests | ✅ COMPLETE | — |
-| [#29](https://github.com/TalonT-Org/spectral-init/issues/29) | P2-03 | Component A — Degree vector computation | ✅ COMPLETE | — |
-| [#30](https://github.com/TalonT-Org/spectral-init/issues/30) | P2-04 | Component C — Connected components (BFS) | ✅ COMPLETE | — |
-| [#34](https://github.com/TalonT-Org/spectral-init/issues/34) | P2-05 | Component B — Normalized Laplacian construction | ✅ COMPLETE | — |
-| [#31](https://github.com/TalonT-Org/spectral-init/issues/31) | P2-06 | Component E — Eigenvector selection | ✅ COMPLETE | — |
-| [#32](https://github.com/TalonT-Org/spectral-init/issues/32) | P2-07 | Component F — Coordinate scaling and noise | ✅ COMPLETE | — |
-| [#33](https://github.com/TalonT-Org/spectral-init/issues/33) | P2-08 | LinearOperator trait and SpMV implementation | ✅ COMPLETE | — |
-| [#35](https://github.com/TalonT-Org/spectral-init/issues/35) | P2-09 | Dense EVD solver via faer (Level 0 / Level 4) | ✅ COMPLETE | [#52](https://github.com/TalonT-Org/spectral-init/pull/52) |
-| [#36](https://github.com/TalonT-Org/spectral-init/issues/36) | P2-10 | LOBPCG iterative eigensolver (Level 1–2) | ✅ COMPLETE | [#50](https://github.com/TalonT-Org/spectral-init/pull/50) |
-| [#37](https://github.com/TalonT-Org/spectral-init/issues/37) | P2-11 | Randomized SVD solver via 2I-L trick (Level 3) | ✅ COMPLETE | [#51](https://github.com/TalonT-Org/spectral-init/pull/51) |
-| [#38](https://github.com/TalonT-Org/spectral-init/issues/38) | P2-12 | Solver escalation chain | ✅ COMPLETE | [#53](https://github.com/TalonT-Org/spectral-init/pull/53) |
-| [#39](https://github.com/TalonT-Org/spectral-init/issues/39) | P2-13 | Pipeline integration — spectral_init() public API | ✅ COMPLETE | [#54](https://github.com/TalonT-Org/spectral-init/pull/54) |
-| [#40](https://github.com/TalonT-Org/spectral-init/issues/40) | P2-14 | Component G — Multi-component layout for disconnected graphs | ✅ COMPLETE | [#55](https://github.com/TalonT-Org/spectral-init/pull/55) |
-| [#41](https://github.com/TalonT-Org/spectral-init/issues/41) | P2-15 | End-to-end validation against all fixtures | ✅ COMPLETE | [#56](https://github.com/TalonT-Org/spectral-init/pull/56) |
+Nine datasets in the registry: `blobs_50`, `blobs_500`, `moons_200`, `blobs_5000`, `circles_300`, `near_dupes_100`, `disconnected_200`, `blobs_connected_200`, `blobs_connected_2000`. Each produces 14 fixture files. Small datasets also have exact-distance KNN fixtures.
 
-> Items P2-01 through P2-08 were implemented as part of the initial scaffolding commits without dedicated feature PRs.
+### 13.2 Phase 2: Rust Implementation Status
 
-### 13.2 Phase 2 Deliverables
+All Phase 2 implementation tasks have been completed as GitHub issues #27-#41. The Rust implementation includes:
 
-| Deliverable | Location |
-|-------------|----------|
-| Public API | `src/lib.rs` → `spectral_init()` |
-| Solver chain | `src/solvers/mod.rs` (Level 0–4) |
-| Dense EVD | `src/solvers/dense.rs` |
-| LOBPCG | `src/solvers/lobpcg.rs` |
-| Randomized SVD | `src/solvers/rsvd.rs` |
-| Normalized Laplacian | `src/laplacian.rs` |
-| Connected components | `src/components.rs` |
-| Multi-component layout | `src/multi_component.rs` |
-| Coordinate scaling | `src/scaling.rs` |
-| Integration tests | `tests/integration/` (9 datasets) |
-| Python fixtures | `tests/fixtures/*.npz` |
+| Component | File | Status | Notes |
+|-----------|------|--------|-------|
+| A: Degree vector | `src/laplacian.rs` | Implemented | f32→f64 upcast, zero-degree guard |
+| B: Normalized Laplacian | `src/laplacian.rs` | Implemented | f64 throughout, COO→CSR construction |
+| C: Connected components | `src/components.rs` | Implemented | BFS, CSR debug_assert, partition-based comparison |
+| D: Dense EVD | `src/solvers/dense.rs` | Implemented | faer self_adjoint_eigen, Level 0/4 |
+| D: LOBPCG | `src/solvers/lobpcg.rs` | Implemented | linfa-linalg, Level 1/2, regularization |
+| D: Randomized SVD | `src/solvers/rsvd.rs` | Implemented | 2I-L trick, pure Rust, Halko-Tropp |
+| D: Escalation chain | `src/solvers/mod.rs` | Implemented | 5-level chain with residual gating on Level 3 |
+| E: Eigenvector selection | `src/selection.rs` | Implemented | Sort + skip trivial |
+| F: Coordinate scaling | `src/scaling.rs` | Implemented | max_abs=10, f64→f32 cast, noise |
+| G: Multi-component | `src/multi_component.rs` | Implemented | Full 492-line implementation, not a stub |
+| LinearOperator + SpMV | `src/operator.rs` | Implemented | Trait + standalone spmv_csr function |
+| Pipeline integration | `src/lib.rs` | Implemented | Full spectral_init() public API |
+| NPZ test loading | `tests/common/mod.rs` | Implemented | Dense + sparse loaders, residual helpers |
+
+### 13.3 Test Isolation (Verified Correct)
+
+Every component test loads its inputs from Python fixtures, NOT from the Rust output of the previous step:
+
+| Test | Input Source | Reference Source | Correctly Isolated? |
+|------|-------------|-----------------|---------------------|
+| Component A | `step5a_pruned.npz` (Python) | `comp_a_degrees.npz` (Python) | Yes |
+| Component B | `step5a_pruned.npz` + `comp_a_degrees.npz` (both Python) | `comp_b_laplacian.npz` (Python) | Yes |
+| Component D (all solvers) | `comp_b_laplacian.npz` (Python) | `comp_d_eigensolver.npz` (Python) | Yes |
+| Component E | `comp_d_eigensolver.npz` (Python) | `comp_e_selection.npz` (Python) | Yes |
+| Component F | `comp_e_selection.npz` (Python) | `comp_f_scaling.npz` (Python) | Yes |
+
+No test chains Rust step N-1 output into step N. Error accumulation between steps is not possible.
 
 ---
 
-## 14. Audit Findings & Remediation Status
+## 14. Phase 2 Implementation Audit (2026-03-21)
 
-Following Phase 2 completion, an audit identified 13 findings across correctness, test coverage, code quality, and tooling. **12 of 13 are RESOLVED**; 1 (accuracy report generator) is in progress.
+Full audit of the Rust implementation by 10 parallel agents examining every source file, test file, tolerance, and architectural decision.
 
-### 14.1 Findings Summary
+### 14.1 Critical Issues
 
-| # | Issue | Title | Category | Severity | Status | Resolution PR |
-|---|-------|-------|----------|----------|--------|---------------|
-| 1 | [#58](https://github.com/TalonT-Org/spectral-init/issues/58) | Fix 2 failing pipeline tests missing `#[ignore]` guards | Test Quality | High | ✅ RESOLVED | [#76](https://github.com/TalonT-Org/spectral-init/pull/76) |
-| 2 | [#59](https://github.com/TalonT-Org/spectral-init/issues/59) | Add dedicated Component C (connected components) integration test | Test Coverage | High | ✅ RESOLVED | [#82](https://github.com/TalonT-Org/spectral-init/pull/82) |
-| 3 | [#60](https://github.com/TalonT-Org/spectral-init/issues/60) | Inject known trivial eigenvector in LOBPCG initialization | Correctness | High | ✅ RESOLVED | [#79](https://github.com/TalonT-Org/spectral-init/pull/79) |
-| 4 | [#61](https://github.com/TalonT-Org/spectral-init/issues/61) | Add residual quality gates to solver Levels 0, 1, and 2 | Correctness | High | ✅ RESOLVED | [#74](https://github.com/TalonT-Org/spectral-init/pull/74) |
-| 5 | [#62](https://github.com/TalonT-Org/spectral-init/issues/62) | Subtract regularization epsilon from Level 2 eigenvalues | Correctness | High | ✅ RESOLVED | [#75](https://github.com/TalonT-Org/spectral-init/pull/75) |
-| 6 | [#63](https://github.com/TalonT-Org/spectral-init/issues/63) | Wire spmv_csr into CsrOperator or document intentional dead code | Code Quality | Medium | ✅ RESOLVED | [#73](https://github.com/TalonT-Org/spectral-init/pull/73) |
-| 7 | [#64](https://github.com/TalonT-Org/spectral-init/issues/64) | Fix Component E integration test dataset reference | Test Quality | Medium | ✅ RESOLVED | [#83](https://github.com/TalonT-Org/spectral-init/pull/83) |
-| 8 | [#65](https://github.com/TalonT-Org/spectral-init/issues/65) | Expand component integration tests to all 9 datasets | Test Coverage | Medium | ✅ RESOLVED | [#84](https://github.com/TalonT-Org/spectral-init/pull/84) |
-| 9 | [#66](https://github.com/TalonT-Org/spectral-init/issues/66) | Tighten test tolerances to match numerical precision | Test Quality | Medium | ✅ RESOLVED | [#72](https://github.com/TalonT-Org/spectral-init/pull/72) |
-| 10 | [#67](https://github.com/TalonT-Org/spectral-init/issues/67) | Add adversarial synthetic graph test suite for solver escalation | Test Coverage | Medium | ✅ RESOLVED | [#77](https://github.com/TalonT-Org/spectral-init/pull/77) |
-| 11 | [#68](https://github.com/TalonT-Org/spectral-init/issues/68) | Add cargo-nextest with JUnit XML output and CI profile | Tooling | Low | ✅ RESOLVED | [#81](https://github.com/TalonT-Org/spectral-init/pull/81) |
-| 12 | [#70](https://github.com/TalonT-Org/spectral-init/issues/70) | Add criterion benchmark baselines for SpMV, dense EVD, LOBPCG, rSVD | Observability | Low | ✅ RESOLVED | [#78](https://github.com/TalonT-Org/spectral-init/pull/78) |
-| 13 | [#69](https://github.com/TalonT-Org/spectral-init/issues/69) | Add numerical accuracy report generator | Observability | Low | ⏳ IN PROGRESS | — |
+**Issue A: Missing fixture files for `blobs_connected_200` and `blobs_connected_2000`.**
 
-### 14.2 Finding Details
+These two datasets have `meta.json` stubs but NO `.npz` fixture files on disk. The Python fixture generator was run before these datasets were added to the DATASETS registry (Issue #16 added them to `fixture_utils.py`, but `generate_fixtures.py` was never re-run).
 
-**Finding 1 — #58: Missing `#[ignore]` guards on pipeline tests**
-Two tests in `test_pipeline.rs` referenced `blobs_connected_200` fixtures without `#[ignore]` guards, causing `cargo test` to fail unconditionally on clean checkouts. Fixed by adding `#[ignore]` with the standard message, consistent with all other fixture-dependent tests.
+Impact: 2 tests in `test_pipeline.rs` FAIL because they reference these datasets without `#[ignore]` guards. All other tests referencing them are `#[ignore]`-gated, hiding the gap. This also means the LOBPCG integration tests (`test_comp_f_lobpcg.rs`) targeting `blobs_connected_2000` have never actually run.
 
-**Finding 3 — #60: LOBPCG trivial eigenvector injection**
-LOBPCG was initialized with random vectors, giving the solver no prior knowledge of the trivial eigenvector (eigenvalue = 0). Injecting the known first eigenvector (`sqrt(degree_i)` normalized) significantly improves convergence for near-degenerate spectra and eliminates a class of convergence failures.
+**Fix required:** Re-run `python tests/generate_fixtures.py` to generate `.npz` files for both datasets. Then add `#[ignore]` to the two failing pipeline tests, or fix the fixture dependency.
 
-**Finding 4 — #61: Solver residual quality gates**
-Levels 0, 1, and 2 returned eigenvectors without checking `||L·v - λ·v|| / ||v||`. Adding residual checks ensures solvers only return results meeting numerical quality thresholds; otherwise they propagate errors to the next escalation level.
+**Issue B: Missing exact-distance KNN fixtures.**
 
-**Finding 5 — #62: Level 2 eigenvalue bias**
-Level 2 (LOBPCG + regularization) adds `ε·I` to the Laplacian to separate eigenvalue 0 from near-zero eigenvalues. The returned eigenvalues were not corrected for this shift, producing eigenvalues biased high by `ε`. Fixed by subtracting `REGULARIZATION_EPS` from Level 2 output eigenvalues.
+`step5a_pruned_exact.npz` files don't exist on disk for any dataset. The `generate_step1_knn_exact` function was added to `generate_fixtures.py` (Issue #17) but the fixtures were never regenerated.
 
-**Finding 13 — #69: Accuracy report generator (IN PROGRESS)**
-No tool exists to generate a structured per-dataset accuracy report showing solver level selected, eigenvalue error, per-eigenvector residuals, subspace alignment (Gram determinant), and tolerance margin. This is needed to validate numerical quality across all 9 datasets in a single pass. Implementation tracked in issue #69.
+**Fix required:** Re-run the fixture generator with the exact-distance path enabled.
 
-### 14.3 Accuracy Report (Pending — Issue #69)
+**Issue C: No dedicated Component C test.**
 
-Once issue #69 is resolved, an accuracy report will be generated at `target/accuracy-report.md` covering:
+There is no `test_comp_c_components.rs`. The BFS connected components implementation is only tested indirectly through the pipeline. There is no test that directly compares Rust's `find_components()` output against Python's `comp_c_components.npz` for all 9 datasets.
 
-- Solver level selected per dataset
-- Eigenvalue accuracy vs Python reference (absolute and relative error)
-- Per-eigenvector residual `||L·v - λ·v|| / ||v||`
-- Pre-noise scaling accuracy vs Python `comp_f_scaling.npz`
-- Subspace alignment (Gram determinant) vs Python eigenvectors
-- Tolerance margin analysis (how close each test is to its threshold)
+**Fix required:** Create `tests/integration/test_comp_c_components.rs` that loads `step5a_pruned.npz`, calls `find_components()`, and compares by partition grouping against `comp_c_components.npz`.
 
-This appendix will be updated when that report is first generated.
+**Issue D: Component E integration test references non-existent fixture.**
+
+`test_comp_e_selection.rs` references `blobs_connected_200` which has no fixtures on disk. The test is `#[ignore]`-gated so the breakage is invisible.
+
+**Fix required:** After generating `blobs_connected_200` fixtures, this test will work. Also add tests for additional datasets.
+
+### 14.2 Correctness Concerns
+
+**Issue E: LOBPCG does not inject known trivial eigenvector.**
+
+Python UMAP explicitly sets column 0 of the LOBPCG initial block to `d^{1/2} / ||d^{1/2}||` — the analytically known first eigenvector of the symmetric normalized Laplacian. This accelerates convergence by giving LOBPCG one "free" converged vector. Our implementation uses purely random initialization for all columns.
+
+Impact: Slower convergence, potential failure on graphs where the eigengap near zero is small. The escalation chain mitigates this (if LOBPCG fails, rSVD takes over), but it's an unnecessary fragility.
+
+**Fix required:** In `lobpcg.rs`, set `x_init.column_mut(0).assign(&(sqrt_deg / sqrt_deg_norm))` before calling `lobpcg()`.
+
+**Issue F: Level 2 eigenvalue shift not removed.**
+
+When LOBPCG Level 2 adds `REGULARIZATION_EPS = 1e-5` to the Laplacian diagonal, the returned eigenvalues are shifted by `1e-5`. This shift is not subtracted before returning. The sort-and-skip logic in `select_eigenvectors` still works correctly (relative ordering preserved), but the actual eigenvalue magnitudes in the output are wrong by `1e-5`.
+
+Impact: Low — eigenvalues are not used downstream except for the sort order. But the residual quality checks in `mod.rs` would compute slightly wrong residuals when checking against the shifted operator.
+
+**Fix required:** Subtract `REGULARIZATION_EPS` from eigenvalues before returning from Level 2.
+
+**Issue G: No residual quality gate on Levels 0, 1, 2.**
+
+Only Level 3 (rSVD) has a post-hoc residual quality gate (`RSVD_QUALITY_THRESHOLD = 1e-2`). Dense EVD and LOBPCG results are accepted without checking residual quality. If faer or linfa-linalg had a regression, bad eigenvectors would pass silently.
+
+**Fix required:** Add residual check after Level 0/1/2 results. Gate at `1e-6` for dense EVD, `1e-3` for LOBPCG.
+
+**Issue H: `spmv_csr` function is unused.**
+
+The standalone SIMD-forward SpMV function exists with an explicit comment marking it as the "Phase 3 SIMD replacement point," but `CsrOperator::apply` actually calls `sprs::prod::csr_mulacc_dense_rowmaj` instead. The compiler warns: "function `spmv_csr` is never used."
+
+**Fix required:** Either wire `CsrOperator::apply` to use `spmv_csr` (preserving the SIMD boundary), or acknowledge this as intentional (sprs's block-vector multiply is faster for multi-column operations) and add `#[allow(dead_code)]` with a comment explaining the Phase 3 intent.
+
+### 14.3 Tolerance Tightening Opportunities
+
+| Location | Current | Should Be | Rationale |
+|----------|---------|-----------|-----------|
+| `test_e2e_validation.rs:61` | `0.05` | `0.005` | Dense EVD residual pre-noise is ~1e-8; noise+f32 adds ~1e-4; 0.05 is 500x too loose |
+| `test_comp_a_degrees.rs:27` | `1e-5` | `1e-7` | f64 accumulation of f32 weights; summation order difference is ~1e-7 |
+| `scaling.rs:117` | `1e-5` | `1e-6` | max_abs should be exactly 10.0 after deterministic f64→f32 cast |
+| `solvers/mod.rs:229` | `-1e-6` | `-1e-10` | Inconsistent with other non-negativity guards using `-1e-10` |
+
+### 14.4 Test Coverage Gaps
+
+| Component | Datasets Tested | Datasets Available | Gap |
+|-----------|----------------|-------------------|-----|
+| A (degrees) | 3 (connected_200, connected_2000, disconnected_200) | 9 | 6 untested |
+| B (Laplacian) | 3 (same) | 9 | 6 untested |
+| C (components) | 0 (no dedicated test) | 9 | 9 untested |
+| D (dense EVD) | 4 (connected_200, moons_200, near_dupes_100, circles_300) | 5 connected | 1 untested |
+| D (LOBPCG) | 1 (connected_2000) | 5 connected | 4 untested |
+| D (rSVD) | 3 (connected_200, connected_2000, blobs_500) | 5 connected | 2 untested |
+| E (selection) | 1 (connected_200, broken) | 5 connected | 4+ untested |
+| F (scaling) | 3 (blobs_50, moons_200, circles_300) | 9 | 6 untested |
+
+### 14.5 Remediation Priority
+
+**Must fix before Phase 3:**
+1. Generate missing fixtures (re-run `python tests/generate_fixtures.py`) — unblocks all `#[ignore]` tests
+2. Fix the 2 failing pipeline tests (missing `#[ignore]` or generate fixtures)
+3. Add Component C dedicated test
+4. Inject trivial eigenvector in LOBPCG initialization
+5. Add residual quality gates to Levels 0, 1, 2
+
+**Should fix:**
+6. Subtract regularization shift from Level 2 eigenvalues
+7. Tighten tolerances per Section 14.3
+8. Expand test coverage to all 9 datasets per component
+9. Wire `spmv_csr` into `CsrOperator` or document the dead code
+10. Fix Component E test dataset reference
 
 ---
 
@@ -1621,4 +1679,4 @@ This appendix will be updated when that report is first generated.
 
 ---
 
-*Report originally generated 2026-03-10 via multi-agent research investigation. Last updated 2026-03-21: added Phase 2 completion status (Section 13), audit remediation record (Section 14), and actual performance baselines.*
+*Report generated 2026-03-10 via multi-agent research investigation. Updated 2026-03-21 with Phase 1 completion status, Phase 2 implementation status, and 10-agent audit findings.*
