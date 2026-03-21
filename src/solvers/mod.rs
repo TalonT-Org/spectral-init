@@ -2,6 +2,7 @@ mod dense;
 mod lobpcg;
 mod rsvd;
 
+// pub (not pub(crate)) so lib.rs can re-export it for integration tests.
 pub use dense::dense_evd;
 
 use ndarray::{Array1, Array2};
