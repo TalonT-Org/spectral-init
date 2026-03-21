@@ -58,3 +58,8 @@ path = "tests/integration/test_pipeline.rs"
 [[test]]
 name = "test_e2e_validation"
 path = "tests/integration/test_e2e_validation.rs"
+
+[[test]]
+name = "test_adversarial_graphs"
+path = "tests/integration/test_adversarial_graphs.rs"
+required-features = ["testing"]
