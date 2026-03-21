@@ -56,7 +56,7 @@ fn max_eigenpair_residual(
 ///
 /// Panics at Level 4 exhaustion — this represents a bug, not a user error.
 /// The spectral theorem guarantees eigenvectors exist for any symmetric PSD matrix.
-pub fn solve_eigenproblem(
+pub(crate) fn solve_eigenproblem(
     laplacian: &CsMatI<f64, usize>,
     k: usize,
     seed: u64,
