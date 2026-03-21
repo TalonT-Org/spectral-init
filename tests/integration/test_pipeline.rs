@@ -35,7 +35,11 @@ fn spectral_init_output_shape_all_connected_datasets() {
 
 #[test]
 #[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
-fn spectral_init_pre_noise_matches_python_blobs_connected_200() {
+fn spectral_init_output_close_to_pre_noise_blobs_connected_200() {
+    // spectral_init() returns the post-noise output (scale_and_add_noise is its final step,
+    // adding Gaussian noise with sigma=0.0001 on coordinates scaled to max 10.0).
+    // We compare against the pre-noise fixture with epsilon=0.01 to verify the output is
+    // in the correct numeric range — the noise is negligible relative to this tolerance.
     let dataset = "blobs_connected_200";
     let graph_path = common::fixture_path(dataset, "step5a_pruned.npz");
     let graph = common::load_sparse_csr_f32_u32(&graph_path);
