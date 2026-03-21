@@ -18,6 +18,7 @@ rand = "0.9"
 rand_distr = "0.5"
 thiserror = "2"
 linfa-linalg = "0.2"        # pure-Rust LOBPCG; no LAPACK backend required
+log = "0.4"                 # logging facade for library diagnostics
 ndarray16 = { package = "ndarray", version = "0.16" }  # linfa-linalg uses ndarray 0.16; alias for bridging
 
 [dev-dependencies]

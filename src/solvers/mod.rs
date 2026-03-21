@@ -25,6 +25,16 @@ const DENSE_N_THRESHOLD: usize = 2000;
 /// graphs; 1e-2 accepts all such results while correctly escalating pathological cases.
 const RSVD_QUALITY_THRESHOLD: f64 = 1e-2;
 
+/// Maximum acceptable max-residual from dense EVD before escalating.
+/// Dense EVD via faer is numerically exact (machine precision); 1e-6 leaves
+/// a generous margin while catching any pathological faer regression.
+const DENSE_EVD_QUALITY_THRESHOLD: f64 = 1e-6;
+
+/// Maximum acceptable max-residual from LOBPCG before escalating.
+/// LOBPCG is iterative; 1e-3 matches its practical convergence tolerance
+/// while being tighter than rSVD (1e-2).
+const LOBPCG_QUALITY_THRESHOLD: f64 = 1e-3;
+
 /// Returns the maximum relative residual ||L·v - λ·v|| / ||v|| over all
 /// eigenpairs (i, λ_i, v_i) in the result.
 fn max_eigenpair_residual(
@@ -66,23 +76,56 @@ pub(crate) fn solve_eigenproblem(
 
     // Level 0: Dense EVD — exact, used for small n where O(n³) is acceptable.
     if n < DENSE_N_THRESHOLD {
-        if let Ok(result) = dense_evd(laplacian, n_components + 1) {
-            eprintln!("[spectral] Level 0 (dense EVD) succeeded (n={n})");
-            return result;
+        match dense_evd(laplacian, n_components + 1) {
+            Ok((eigs, vecs)) => {
+                let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
+                if quality < DENSE_EVD_QUALITY_THRESHOLD {
+                    log::debug!(
+                        "[spectral] Level 0 (dense EVD) succeeded (n={n}, max_residual={quality:.2e})"
+                    );
+                    return (eigs, vecs);
+                }
+                log::debug!(
+                    "[spectral] Level 0 (dense EVD) poor quality \
+                     (max_residual={quality:.2e}), escalating to Level 1"
+                );
+            }
+            Err(e) => {
+                log::warn!("[spectral] Level 0 (dense EVD) failed ({e}), escalating to Level 1");
+            }
         }
-        // Unexpected failure (e.g. faer edge case) — fall through to iterative.
     }
 
     // Level 1: LOBPCG without regularization.
-    if let Some(result) = lobpcg::lobpcg_solve(&op, n_components, seed, false, sqrt_deg) {
-        eprintln!("[spectral] Level 1 (LOBPCG) succeeded (n={n})");
-        return result;
+    if let Some((eigs, vecs)) = lobpcg::lobpcg_solve(&op, n_components, seed, false, sqrt_deg) {
+        let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
+        if quality < LOBPCG_QUALITY_THRESHOLD {
+            log::debug!(
+                "[spectral] Level 1 (LOBPCG) succeeded (n={n}, max_residual={quality:.2e})"
+            );
+            return (eigs, vecs);
+        }
+        log::debug!(
+            "[spectral] Level 1 (LOBPCG) poor quality \
+             (max_residual={quality:.2e}), escalating to Level 2"
+        );
     }
 
     // Level 2: LOBPCG with ε·I regularization — widens eigengap.
-    if let Some(result) = lobpcg::lobpcg_solve(&op, n_components, seed, true, sqrt_deg) {
-        eprintln!("[spectral] Level 2 (LOBPCG+reg) succeeded (n={n})");
-        return result;
+    // lobpcg_solve(regularize=true) already subtracts REGULARIZATION_EPS internally,
+    // so eigs are true Laplacian eigenvalues and can be passed directly to the residual check.
+    if let Some((eigs, vecs)) = lobpcg::lobpcg_solve(&op, n_components, seed, true, sqrt_deg) {
+        let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
+        if quality < LOBPCG_QUALITY_THRESHOLD {
+            log::debug!(
+                "[spectral] Level 2 (LOBPCG+reg) succeeded (n={n}, max_residual={quality:.2e})"
+            );
+            return (eigs, vecs);
+        }
+        log::debug!(
+            "[spectral] Level 2 (LOBPCG+reg) poor quality \
+             (max_residual={quality:.2e}), escalating to Level 3"
+        );
     }
 
     // Level 3: Randomized SVD via 2I-L trick.
@@ -91,12 +134,12 @@ pub(crate) fn solve_eigenproblem(
         let (eigs, vecs) = rsvd::rsvd_solve(laplacian, n_components, seed);
         let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
         if quality < RSVD_QUALITY_THRESHOLD {
-            eprintln!(
+            log::debug!(
                 "[spectral] Level 3 (rSVD) succeeded (n={n}, max_residual={quality:.2e})"
             );
             return (eigs, vecs);
         }
-        eprintln!(
+        log::debug!(
             "[spectral] Level 3 (rSVD) poor quality (max_residual={quality:.2e}), \
              escalating to Level 4"
         );
@@ -107,7 +150,7 @@ pub(crate) fn solve_eigenproblem(
     // If it returns Err, that indicates an OOM or a faer bug — both are
     // unrecoverable and should surface as an assertion failure, not a silent
     // ConvergenceFailure that would produce a garbage embedding.
-    eprintln!("[spectral] Level 4 (forced dense EVD) (n={n})");
+    log::debug!("[spectral] Level 4 (forced dense EVD) (n={n})");
     dense_evd(laplacian, n_components + 1).expect(
         "solve_eigenproblem: Level 4 forced dense EVD failed — \
          this is a bug; the spectral theorem guarantees eigenvectors \
@@ -250,6 +293,86 @@ mod tests {
         assert!(
             residual >= RSVD_QUALITY_THRESHOLD,
             "non-eigenvector residual={residual:.2e} should be >= RSVD_QUALITY_THRESHOLD={RSVD_QUALITY_THRESHOLD:.2e}"
+        );
+    }
+
+    #[test]
+    fn threshold_ordering_is_strict() {
+        // Dense EVD is exact: 1e-6 must be tighter than LOBPCG (1e-3) and rSVD (1e-2).
+        assert!(
+            DENSE_EVD_QUALITY_THRESHOLD < LOBPCG_QUALITY_THRESHOLD,
+            "Dense EVD threshold must be stricter than LOBPCG threshold"
+        );
+        assert!(
+            LOBPCG_QUALITY_THRESHOLD < RSVD_QUALITY_THRESHOLD,
+            "LOBPCG threshold must be stricter than rSVD threshold"
+        );
+    }
+
+    #[test]
+    fn quality_gate_catches_garbage_at_dense_evd_threshold() {
+        // 3-node path graph Laplacian: exact eigenvector of lambda=0 is [1/√3, 1/√3, 1/√3].
+        // Use [1, 0, 0] (not an eigenvector) — residual must exceed DENSE_EVD_QUALITY_THRESHOLD.
+        let laplacian = CsMatI::new(
+            (3, 3),
+            vec![0usize, 2, 5, 7],
+            vec![0usize, 1, 0, 1, 2, 1, 2],
+            vec![1.0_f64, -1.0, -1.0, 2.0, -1.0, -1.0, 1.0],
+        );
+        let eigenvalues = Array1::from_vec(vec![0.0_f64]);
+        let eigenvectors = Array2::from_shape_vec((3, 1), vec![1.0_f64, 0.0, 0.0]).unwrap();
+
+        let residual = max_eigenpair_residual(&laplacian, &eigenvalues, &eigenvectors);
+        assert!(
+            residual > DENSE_EVD_QUALITY_THRESHOLD,
+            "garbage eigenvector residual={residual:.2e} must exceed DENSE_EVD_QUALITY_THRESHOLD={DENSE_EVD_QUALITY_THRESHOLD:.2e}"
+        );
+    }
+
+    #[test]
+    fn quality_gate_accepts_near_eigenvector_at_lobpcg_threshold() {
+        // 3-node path graph Laplacian (same structure as above).
+        // Construct a near-eigenvector v = v0 + δ·v1 where v0=[1,1,1]/√3 (λ=0) and
+        // v1=[1,0,-1]/√2 (λ=1). The residual against eigenvalue 0 is ≈ δ.
+        // With δ=1e-4 the residual sits between DENSE_EVD_QUALITY_THRESHOLD (1e-6) and
+        // LOBPCG_QUALITY_THRESHOLD (1e-3), giving independent coverage of the LOBPCG gate.
+        let laplacian = CsMatI::new(
+            (3, 3),
+            vec![0usize, 2, 5, 7],
+            vec![0usize, 1, 0, 1, 2, 1, 2],
+            vec![1.0_f64, -1.0, -1.0, 2.0, -1.0, -1.0, 1.0],
+        );
+        let delta = 1e-4_f64;
+        let inv_sqrt3 = 1.0_f64 / 3.0_f64.sqrt();
+        let inv_sqrt2 = 1.0_f64 / 2.0_f64.sqrt();
+        // v = v0 + δ·v1: perturbs the exact λ=0 eigenvector toward the λ=1 eigenvector.
+        let eigenvectors = Array2::from_shape_vec(
+            (3, 1),
+            vec![inv_sqrt3 + delta * inv_sqrt2, inv_sqrt3, inv_sqrt3 - delta * inv_sqrt2],
+        )
+        .unwrap();
+        let eigenvalues = Array1::from_vec(vec![0.0_f64]);
+
+        let residual = max_eigenpair_residual(&laplacian, &eigenvalues, &eigenvectors);
+        assert!(
+            residual > DENSE_EVD_QUALITY_THRESHOLD,
+            "near-eigenvector residual={residual:.2e} should exceed DENSE_EVD_QUALITY_THRESHOLD={DENSE_EVD_QUALITY_THRESHOLD:.2e}"
+        );
+        assert!(
+            residual < LOBPCG_QUALITY_THRESHOLD,
+            "near-eigenvector residual={residual:.2e} should be accepted by LOBPCG gate (< {LOBPCG_QUALITY_THRESHOLD:.2e})"
+        );
+    }
+
+    #[test]
+    fn level0_result_passes_dense_evd_quality_gate() {
+        // 6-node path graph, n=6 < 2000 → Level 0 dense EVD.
+        let laplacian = path_graph_laplacian_6();
+        let (eigs, vecs) = solve_eigenproblem(&laplacian, 2, 42, &ndarray::Array1::ones(6));
+        let residual = max_eigenpair_residual(&laplacian, &eigs, &vecs);
+        assert!(
+            residual < DENSE_EVD_QUALITY_THRESHOLD,
+            "Level 0 dense EVD residual={residual:.2e} should be < DENSE_EVD_QUALITY_THRESHOLD={DENSE_EVD_QUALITY_THRESHOLD:.2e}"
         );
     }
 }
