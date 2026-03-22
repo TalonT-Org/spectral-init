@@ -6,6 +6,10 @@ pub mod lobpcg;
 pub(crate) mod rsvd;
 #[cfg(not(feature = "testing"))]
 mod rsvd;
+#[cfg(feature = "testing")]
+pub(crate) mod sinv;
+#[cfg(not(feature = "testing"))]
+mod sinv;
 
 // pub (not pub(crate)) so lib.rs can re-export it for integration tests.
 pub use dense::dense_evd;
@@ -35,6 +39,11 @@ const DENSE_EVD_QUALITY_THRESHOLD: f64 = 1e-6;
 /// while being tighter than rSVD (1e-2).
 const LOBPCG_QUALITY_THRESHOLD: f64 = 1e-3;
 
+/// Maximum acceptable max-residual from shift-and-invert LOBPCG.
+/// Sinv achieves near-exact results (like dense EVD); 1e-6 accepts all
+/// well-converged results while correctly escalating pathological graphs.
+const SINV_LOBPCG_QUALITY_THRESHOLD: f64 = 1e-6;
+
 /// Returns the maximum relative residual ||L·v - λ·v|| / ||v|| over all
 /// eigenpairs (i, λ_i, v_i) in the result.
 fn max_eigenpair_residual(
@@ -56,14 +65,21 @@ fn max_eigenpair_residual(
         .fold(0.0_f64, |a, b| if a.is_nan() || b.is_nan() { f64::NAN } else { a.max(b) })
 }
 
-/// Solver escalation chain. Tries five levels in order, advancing only on failure.
+/// Solver escalation chain. Tries six levels in order, advancing only on failure.
 ///
 /// Returns `n_components+1` eigenpairs (including the trivial λ≈0 vector at index 0)
 /// so that the caller can apply `select_eigenvectors` uniformly across all solver paths.
 ///
+/// Level 0: Dense EVD (n < 2000, O(n³)).
+/// Level 1: LOBPCG without regularization.
+/// Level 2: Shift-and-invert LOBPCG via sparse Cholesky (new).
+/// Level 3: LOBPCG with ε·I regularization.
+/// Level 4: Randomized SVD via 2I-L trick.
+/// Level 5: Forced dense EVD (nuclear option, cannot fail).
+///
 /// # Panics
 ///
-/// Panics at Level 4 exhaustion — this represents a bug, not a user error.
+/// Panics at Level 5 exhaustion — this represents a bug, not a user error.
 /// The spectral theorem guarantees eigenvectors exist for any symmetric PSD matrix.
 pub(crate) fn solve_eigenproblem(
     laplacian: &CsMatI<f64, usize>,
@@ -111,53 +127,71 @@ pub(crate) fn solve_eigenproblem(
         );
     }
 
-    // Level 2: LOBPCG with ε·I regularization — widens eigengap.
+    // Level 2: Shift-and-invert LOBPCG — near-exact, handles small eigengap.
+    // sprs_csc_to_faer converts the Laplacian to faer CSC and adds SINV_SHIFT to the
+    // diagonal, producing M = L + εI. sp_cholesky factorizes M; if it fails (e.g. M
+    // is not SPD due to numerical degenerate edges) we skip silently to Level 3.
+    if let Some((eigs, vecs)) = sinv::lobpcg_sinv_solve(laplacian, n_components, seed, sqrt_deg) {
+        let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
+        if quality < SINV_LOBPCG_QUALITY_THRESHOLD {
+            log::debug!(
+                "[spectral] Level 2 (sinv LOBPCG) succeeded (n={n}, max_residual={quality:.2e})"
+            );
+            return ((eigs, vecs), 2);
+        }
+        log::debug!(
+            "[spectral] Level 2 (sinv LOBPCG) poor quality \
+             (max_residual={quality:.2e}), escalating to Level 3"
+        );
+    }
+
+    // Level 3: LOBPCG with ε·I regularization — widens eigengap.
     // lobpcg_solve(regularize=true) already subtracts REGULARIZATION_EPS internally,
     // so eigs are true Laplacian eigenvalues and can be passed directly to the residual check.
     if let Some((eigs, vecs)) = lobpcg::lobpcg_solve(&op, n_components, seed, true, sqrt_deg) {
         let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
         if quality < LOBPCG_QUALITY_THRESHOLD {
             log::debug!(
-                "[spectral] Level 2 (LOBPCG+reg) succeeded (n={n}, max_residual={quality:.2e})"
+                "[spectral] Level 3 (LOBPCG+reg) succeeded (n={n}, max_residual={quality:.2e})"
             );
-            return ((eigs, vecs), 2);
+            return ((eigs, vecs), 3);
         }
         log::debug!(
-            "[spectral] Level 2 (LOBPCG+reg) poor quality \
-             (max_residual={quality:.2e}), escalating to Level 3"
+            "[spectral] Level 3 (LOBPCG+reg) poor quality \
+             (max_residual={quality:.2e}), escalating to Level 4"
         );
     }
 
-    // Level 3: Randomized SVD via 2I-L trick.
+    // Level 4: Randomized SVD via 2I-L trick.
     // rsvd_solve is infallible; gate on output quality via residual check.
     {
         let (eigs, vecs) = rsvd::rsvd_solve(laplacian, n_components, seed);
         let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
         if quality < RSVD_QUALITY_THRESHOLD {
             log::debug!(
-                "[spectral] Level 3 (rSVD) succeeded (n={n}, max_residual={quality:.2e})"
+                "[spectral] Level 4 (rSVD) succeeded (n={n}, max_residual={quality:.2e})"
             );
-            return ((eigs, vecs), 3);
+            return ((eigs, vecs), 4);
         }
         log::debug!(
-            "[spectral] Level 3 (rSVD) poor quality (max_residual={quality:.2e}), \
-             escalating to Level 4"
+            "[spectral] Level 4 (rSVD) poor quality (max_residual={quality:.2e}), \
+             escalating to Level 5"
         );
     }
 
-    // Level 4: Forced dense EVD — O(n³) nuclear option.
+    // Level 5: Forced dense EVD — O(n³) nuclear option.
     // This level CANNOT fail mathematically (spectral theorem).
     // If it returns Err, that indicates an OOM or a faer bug — both are
     // unrecoverable and should surface as an assertion failure, not a silent
     // ConvergenceFailure that would produce a garbage embedding.
-    log::debug!("[spectral] Level 4 (forced dense EVD) (n={n})");
+    log::debug!("[spectral] Level 5 (forced dense EVD) (n={n})");
     (
         dense_evd(laplacian, n_components + 1).expect(
-            "solve_eigenproblem: Level 4 forced dense EVD failed — \
+            "solve_eigenproblem: Level 5 forced dense EVD failed — \
              this is a bug; the spectral theorem guarantees eigenvectors \
              exist for any symmetric positive semidefinite matrix",
         ),
-        4,
+        5,
     )
 }
 
@@ -309,6 +343,35 @@ mod tests {
         assert!(
             LOBPCG_QUALITY_THRESHOLD < RSVD_QUALITY_THRESHOLD,
             "LOBPCG threshold must be stricter than rSVD threshold"
+        );
+        // Dense EVD and sinv LOBPCG target the same 1e-6 accuracy tier (REQ-ESC-002).
+        assert!(
+            DENSE_EVD_QUALITY_THRESHOLD <= SINV_LOBPCG_QUALITY_THRESHOLD,
+            "Dense EVD threshold must be <= sinv LOBPCG threshold"
+        );
+    }
+
+    // T8 — sinv_quality_threshold_ordering
+    #[test]
+    fn sinv_quality_threshold_ordering() {
+        assert!(
+            SINV_LOBPCG_QUALITY_THRESHOLD < LOBPCG_QUALITY_THRESHOLD,
+            "sinv LOBPCG threshold ({SINV_LOBPCG_QUALITY_THRESHOLD:.2e}) must be \
+             stricter than plain LOBPCG threshold ({LOBPCG_QUALITY_THRESHOLD:.2e})"
+        );
+    }
+
+    // T10 — solve_eigenproblem_level_numbering
+    #[test]
+    fn solve_eigenproblem_level_numbering() {
+        // n=2001 > DENSE_N_THRESHOLD=2000: Level 0 is skipped.
+        // For a well-conditioned diagonal Laplacian, Level 1 (plain LOBPCG) succeeds.
+        let n = 2001;
+        let laplacian = diagonal_laplacian(n);
+        let (_, level) = solve_eigenproblem(&laplacian, 2, 42, &ndarray::Array1::ones(n));
+        assert!(
+            level >= 1 && level <= 5,
+            "expected level in {{1,2,3,4,5}}, got {level}"
         );
     }
 

@@ -63,10 +63,10 @@ pub fn rsvd_solve(
 /// solver level was reached.
 ///
 /// **Test-only seam — not part of the stable public API.**  The returned `u8`
-/// encodes the solver level (0 = dense EVD, 1 = LOBPCG, 2 = LOBPCG+reg,
-/// 3 = rSVD, 4 = forced dense EVD) and may change if the escalation chain is
-/// reordered or extended.  Test code that asserts on this value is intentionally
-/// coupled to the current chain ordering.
+/// encodes the solver level (0 = dense EVD, 1 = LOBPCG, 2 = sinv LOBPCG,
+/// 3 = LOBPCG+reg, 4 = rSVD, 5 = forced dense EVD) and may change if the
+/// escalation chain is reordered or extended.  Test code that asserts on this
+/// value is intentionally coupled to the current chain ordering.
 pub fn solve_eigenproblem_pub(
     laplacian: &sprs::CsMatI<f64, usize>,
     n_components: usize,
@@ -102,6 +102,10 @@ pub fn embed_disconnected(
         compute_mode,
     )
 }
+
+#[cfg(feature = "testing")]
+#[doc(hidden)]
+pub use crate::solvers::sinv::lobpcg_sinv_solve;
 
 use ndarray::{Array2, ArrayView2};
 use sprs::CsMatI;
