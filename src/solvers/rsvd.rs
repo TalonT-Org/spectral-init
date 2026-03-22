@@ -236,6 +236,7 @@ pub(crate) fn rsvd_solve_accurate(
 mod tests {
     use super::*;
     use crate::laplacian::build_normalized_laplacian;
+    use crate::ComputeMode;
 
     /// Build a sparse graph (CSR f32/u32) from a list of undirected (row, col, weight) edges.
     fn make_graph(n: usize, edges: &[(usize, usize, f32)]) -> sprs::CsMatI<f32, u32, usize> {
@@ -260,7 +261,7 @@ mod tests {
     #[test]
     fn test_two_i_minus_laplacian_path_3() {
         let graph = make_graph(3, &[(0, 1, 1.0), (1, 2, 1.0)]);
-        let (_, sqrt_deg) = crate::laplacian::compute_degrees(&graph);
+        let (_, sqrt_deg) = crate::laplacian::compute_degrees(&graph, ComputeMode::PythonCompat);
         let inv_sqrt_deg = sqrt_deg.mapv(|x| if x == 0.0 { 0.0 } else { 1.0 / x });
         let l = build_normalized_laplacian(&graph, inv_sqrt_deg.as_slice().unwrap());
         let m = two_i_minus_laplacian(&l);
@@ -310,7 +311,7 @@ mod tests {
             .flat_map(|i| (i + 1..n).map(move |j| (i, j, 1.0f32)))
             .collect();
         let graph = make_graph(n, &edges);
-        let (_, sqrt_deg) = crate::laplacian::compute_degrees(&graph);
+        let (_, sqrt_deg) = crate::laplacian::compute_degrees(&graph, ComputeMode::PythonCompat);
         let inv_sqrt_deg = sqrt_deg.mapv(|x| if x == 0.0 { 0.0 } else { 1.0 / x });
         let l = build_normalized_laplacian(&graph, inv_sqrt_deg.as_slice().unwrap());
 
@@ -355,7 +356,7 @@ mod tests {
         let edges: Vec<(usize, usize, f32)> =
             (0..n).map(|i| (i, (i + 1) % n, 1.0f32)).collect();
         let graph = make_graph(n, &edges);
-        let (_, sqrt_deg) = crate::laplacian::compute_degrees(&graph);
+        let (_, sqrt_deg) = crate::laplacian::compute_degrees(&graph, ComputeMode::PythonCompat);
         let inv_sqrt_deg = sqrt_deg.mapv(|x| if x == 0.0 { 0.0 } else { 1.0 / x });
         let l = build_normalized_laplacian(&graph, inv_sqrt_deg.as_slice().unwrap());
 

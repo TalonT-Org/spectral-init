@@ -171,7 +171,7 @@ pub fn spectral_init(
     }
 
     // ── Component B: degrees and inverse-square-root degrees ──────────────
-    let (_degrees, sqrt_deg) = laplacian::compute_degrees(graph);
+    let (_degrees, sqrt_deg) = laplacian::compute_degrees(graph, config.compute_mode);
     let inv_sqrt_deg: Vec<f64> = sqrt_deg
         .iter()
         .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })

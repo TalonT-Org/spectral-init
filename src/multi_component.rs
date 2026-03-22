@@ -264,7 +264,7 @@ fn embed_single_component(
     data_range: f64,
     meta_pos: &ArrayView1<f64>,
     seed: u64,
-    _compute_mode: ComputeMode,
+    compute_mode: ComputeMode,
 ) -> Result<Array2<f64>, SpectralError> {
     let size = members.len();
 
@@ -281,7 +281,7 @@ fn embed_single_component(
 
     // Large component: run the standard spectral pipeline on the subgraph
     let sub_graph = extract_subgraph(graph, members);
-    let (_degrees, sqrt_deg) = compute_degrees(&sub_graph);
+    let (_degrees, sqrt_deg) = compute_degrees(&sub_graph, compute_mode);
     let inv_sqrt_deg: Vec<f64> = sqrt_deg
         .iter()
         .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })

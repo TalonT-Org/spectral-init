@@ -8,7 +8,7 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use spectral_init::{
     build_normalized_laplacian, compute_degrees, dense_evd, find_components, lobpcg_solve,
-    rsvd_solve, spectral_init,
+    rsvd_solve, spectral_init, ComputeMode,
 };
 use spectral_init::operator::{spmv_csr, CsrOperator};
 use std::hint::black_box;
@@ -52,7 +52,7 @@ fn make_ring_graph(n: usize, half: usize) -> sprs::CsMatI<f32, u32, usize> {
 /// to SpMV, dense EVD, LOBPCG, and rSVD benchmarks.
 fn make_laplacian(n: usize, half: usize) -> sprs::CsMatI<f64, usize> {
     let graph = make_ring_graph(n, half);
-    let (_deg, sqrt_deg) = compute_degrees(&graph);
+    let (_deg, sqrt_deg) = compute_degrees(&graph, ComputeMode::PythonCompat);
     let inv_sqrt_deg: Vec<f64> = sqrt_deg
         .iter()
         .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
@@ -124,7 +124,7 @@ fn bench_rsvd(c: &mut Criterion) {
 /// Laplacian construction: degrees + D^{-1/2} W D^{-1/2} build.
 fn bench_laplacian_build(c: &mut Criterion) {
     let graph = make_ring_graph(2000, 2);
-    let (_deg, sqrt_deg) = compute_degrees(&graph);
+    let (_deg, sqrt_deg) = compute_degrees(&graph, ComputeMode::PythonCompat);
     let inv_sqrt_deg: Vec<f64> = sqrt_deg
         .iter()
         .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
