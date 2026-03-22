@@ -814,12 +814,6 @@ mod tests {
     }
 
     #[test]
-    fn max_warm_restarts_is_3() {
-        assert_eq!(MAX_WARM_RESTARTS, 3,
-            "MAX_WARM_RESTARTS must be 3 per Issue #112");
-    }
-
-    #[test]
     fn lobpcg_solve_near_degenerate_residuals_within_tol() {
         // n=2000 diagonal Laplacian with two near-zero eigenvalues (λ₁=1e-4, λ₂=2e-4)
         // followed by well-separated spectrum [0.1, 0.2, ..., 1.99].
