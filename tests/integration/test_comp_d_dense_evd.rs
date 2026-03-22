@@ -29,7 +29,7 @@ fn run_comp_d_test(dataset: &str, expected_n: usize) {
     for i in 0..k {
         let diff = (eigenvalues[i] - ref_eigenvalues[i]).abs();
         assert!(
-            diff < 1e-8,
+            diff < 1e-9,
             "eigenvalue[{i}]: got {}, ref {}, diff {}",
             eigenvalues[i], ref_eigenvalues[i], diff
         );
