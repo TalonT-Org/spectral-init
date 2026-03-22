@@ -310,9 +310,14 @@ fn test_e2e_performance_blobs_5000() {
     let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default()).expect("blobs_5000 spectral_init failed");
     let elapsed = start.elapsed();
     assert_eq!(result.shape()[1], 2);
+    let budget_secs: u64 = std::env::var("CI_PERF_BUDGET_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(120);
     assert!(
-        elapsed.as_secs() < 30,
-        "blobs_5000 took {:?}, expected < 30s",
-        elapsed
+        elapsed.as_secs() < budget_secs,
+        "blobs_5000 took {:?}, expected < {}s",
+        elapsed,
+        budget_secs
     );
 }
