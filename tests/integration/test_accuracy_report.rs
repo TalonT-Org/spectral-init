@@ -427,7 +427,7 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
     });
 
     // comp_b chained: Rust compute_degrees() → Rust Laplacian
-    // Inherits f32 graph weight precision; tolerance 1e-7 is appropriate.
+    // PythonCompat mode matches Python accumulation order, dropping Laplacian error to ~1e-15.
     let mut worst_lap_chain = 0.0f64;
     for metric in all_metrics {
         let base = common::fixture_path(&metric.dataset, "");
@@ -446,10 +446,10 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
     }
     margins.push(ToleranceMarginEntry {
         component: "comp_b Laplacian (chained: Rust degrees)".to_string(),
-        tolerance: 1e-7,
+        tolerance: 1e-14,
         tolerance_type: "absolute",
         worst_actual: worst_lap_chain,
-        margin_factor: if worst_lap_chain == 0.0 { f64::INFINITY } else { 1e-7 / worst_lap_chain },
+        margin_factor: if worst_lap_chain == 0.0 { f64::INFINITY } else { 1e-14 / worst_lap_chain },
     });
 
     // comp_d: eigenvalue errors — split by n (dense EVD: n<2000, LOBPCG: n>=2000)
@@ -461,10 +461,10 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
         .fold(0.0f64, f64::max);
     margins.push(ToleranceMarginEntry {
         component: "comp_d eigenvalues, Dense EVD (n<2000)".to_string(),
-        tolerance: 1e-8,
+        tolerance: 1e-9,
         tolerance_type: "absolute",
         worst_actual: worst_eig_dense,
-        margin_factor: if worst_eig_dense == 0.0 { f64::INFINITY } else { 1e-8 / worst_eig_dense },
+        margin_factor: if worst_eig_dense == 0.0 { f64::INFINITY } else { 1e-9 / worst_eig_dense },
     });
 
     let worst_eig_lobpcg = all_metrics.iter()
@@ -763,11 +763,11 @@ fn generate_accuracy_report() {
         "Isolated comp_b tolerance must be 1e-14, got {iso_tol}"
     );
 
-    // REQ-SPLIT-003: chained row tolerance must be 1e-7
+    // REQ-SPLIT-003: chained row tolerance must be 1e-14
     let chain_tol = chained_row.unwrap()["tolerance"].as_f64().unwrap();
     assert!(
-        (chain_tol - 1e-7).abs() < 1e-13,
-        "Chained comp_b tolerance must be 1e-7, got {chain_tol}"
+        (chain_tol - 1e-14).abs() < 1e-20,
+        "Chained comp_b tolerance must be 1e-14, got {chain_tol}"
     );
 
     // REQ-SPLIT-004: the old conflated row must no longer exist
