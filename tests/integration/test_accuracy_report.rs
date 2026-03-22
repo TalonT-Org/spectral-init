@@ -36,7 +36,8 @@ struct DatasetMetrics {
     per_eigenvec_residuals: Vec<f64>,
     max_residual: f64,
     subspace_gram_det: Option<f64>,
-    pre_noise_max_err: f64,
+    pre_noise_max_err: f64,         // chained: Rust eigenvectors → Rust scaling vs Python ref
+    pre_noise_isolated_err: f64,     // isolated: Python eigenvectors → Rust scaling vs Python ref
     e2e_max_residual: Option<f64>,
     component_count_matches: bool,
     disconnected_path: Option<DisconnectedPathMetrics>,
@@ -299,6 +300,7 @@ fn process_dataset(dataset: &str, n: usize, is_connected: bool, expected_n_compo
             max_residual: 0.0,
             subspace_gram_det: None,
             pre_noise_max_err: 0.0,
+            pre_noise_isolated_err: 0.0,
             e2e_max_residual: None,
             component_count_matches,
             disconnected_path,
@@ -340,6 +342,12 @@ fn process_dataset(dataset: &str, n: usize, is_connected: bool, expected_n_compo
     let rust_pre_noise = compute_rust_pre_noise(&selected);
     let pn_max_err = pre_noise_max_err(&rust_pre_noise, &ref_pre_noise);
 
+    // Isolated scaling test: feed Python's comp_e embedding into Rust's scaler
+    let ref_e_embedding: Array2<f64> =
+        common::load_dense(&base.join("comp_e_selection.npz"), "embedding");
+    let rust_pre_noise_isolated = compute_rust_pre_noise(&ref_e_embedding);
+    let pn_isolated_err = pre_noise_max_err(&rust_pre_noise_isolated, &ref_pre_noise);
+
     let e2e_max_residual = if is_connected {
         let result = spectral_init(&graph, n_components_dim, 42, None, SpectralInitConfig::default())
             .unwrap_or_else(|e| panic!("{dataset}: spectral_init failed: {e}"));
@@ -370,6 +378,7 @@ fn process_dataset(dataset: &str, n: usize, is_connected: bool, expected_n_compo
         max_residual,
         subspace_gram_det,
         pre_noise_max_err: pn_max_err,
+        pre_noise_isolated_err: pn_isolated_err,
         e2e_max_residual,
         component_count_matches,
         disconnected_path: None,
@@ -520,17 +529,30 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
         margin_factor: if worst_e2e == 0.0 { f64::INFINITY } else { 5e-3 / worst_e2e },
     });
 
-    // comp_f pre_noise scaling
-    let worst_pn = all_metrics.iter()
-        .map(|m| m.pre_noise_max_err)
+    // comp_f pre_noise scaling (isolated: Python eigenvectors → Rust scaler)
+    let worst_pn_isolated = all_metrics.iter()
+        .map(|m| m.pre_noise_isolated_err)
         .fold(0.0f64, f64::max);
     let f32_eps = f32::EPSILON as f64;
     margins.push(ToleranceMarginEntry {
-        component: "comp_f pre_noise scaling".to_string(),
+        component: "comp_f pre_noise scaling (isolated: Python eigvecs)".to_string(),
         tolerance: f32_eps,
         tolerance_type: "absolute",
-        worst_actual: worst_pn,
-        margin_factor: if worst_pn == 0.0 { f64::INFINITY } else { f32_eps / worst_pn },
+        worst_actual: worst_pn_isolated,
+        margin_factor: if worst_pn_isolated == 0.0 { f64::INFINITY } else { f32_eps / worst_pn_isolated },
+    });
+
+    // comp_f pre_noise scaling (chained: Rust eigenvectors → Rust scaler)
+    // Includes eigenvector differences between Rust and Python solvers.
+    let worst_pn_chained = all_metrics.iter()
+        .map(|m| m.pre_noise_max_err)
+        .fold(0.0f64, f64::max);
+    margins.push(ToleranceMarginEntry {
+        component: "comp_f pre_noise scaling (chained: Rust eigvecs)".to_string(),
+        tolerance: 5e-3,
+        tolerance_type: "absolute",
+        worst_actual: worst_pn_chained,
+        margin_factor: if worst_pn_chained == 0.0 { f64::INFINITY } else { 5e-3 / worst_pn_chained },
     });
 
     // Per-component residuals — Dense EVD tier (component size < 2000)
@@ -597,6 +619,7 @@ fn to_json(report: &AccuracyReport) -> String {
             "max_residual": m.max_residual,
             "subspace_gram_det": m.subspace_gram_det,
             "pre_noise_max_err": m.pre_noise_max_err,
+            "pre_noise_isolated_err": m.pre_noise_isolated_err,
             "e2e_max_residual": m.e2e_max_residual,
             "component_count_matches": m.component_count_matches,
             "disconnected_path": m.disconnected_path.as_ref().map(|dp| json!({
@@ -654,10 +677,10 @@ fn to_markdown(report: &AccuracyReport) -> String {
             let sub = m.subspace_gram_det
                 .map(|v| format!("{:.6}", v))
                 .unwrap_or_else(|| "—".to_string());
-            let pn = if m.pre_noise_max_err == 0.0 {
+            let pn = if m.pre_noise_isolated_err == 0.0 {
                 "(exact)".to_string()
             } else {
-                format!("{:.2e}", m.pre_noise_max_err)
+                format!("{:.2e}", m.pre_noise_isolated_err)
             };
             let mr = format!("{:.2e}", m.max_residual);
             (l2, l3, sub, pn, mr)
