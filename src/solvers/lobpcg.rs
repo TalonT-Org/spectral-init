@@ -123,15 +123,10 @@ fn chebyshev_precond(
 
 /// Final exact Rayleigh-Ritz refinement applied after LOBPCG convergence.
 ///
-/// Given the LOBPCG output eigenvectors X (n × k) and the true Laplacian operator op:
-/// 1. Computes AX = L * X via sparse matvec (true Laplacian, no regularization shift).
-/// 2. Forms the dense Gram matrix G = X^T * AX of size (k × k).
-/// 3. Solves the dense symmetric eigenproblem on G via faer SelfAdjointEigen.
-/// 4. Rotates eigenvectors: X_refined = X * V (V = eigenvectors of G).
-/// 5. Returns (eigenvalues_from_gram, X_refined).
-///
-/// Eigenvalues from the Gram solve are exact Rayleigh quotients of the true Laplacian,
-/// independent of any regularization shift applied during LOBPCG iteration.
+/// Given approximate eigenvectors X (n × k), forms the dense Gram matrix G = X^T L X
+/// and diagonalises it to recover exact Rayleigh quotients and rotate X into the
+/// best eigenvector basis within the span of the LOBPCG output.
+/// Returns None if the Gram eigenproblem fails (numerically degenerate Gram matrix).
 fn rayleigh_ritz_refine<O: LinearOperator>(op: &O, eigvecs: Array2<f64>) -> Option<EigenResult> {
     let n = eigvecs.nrows();
     let k = eigvecs.ncols();
