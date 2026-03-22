@@ -806,7 +806,10 @@ mod tests {
         let v = vec![0.5_f64, 0.5, 0.5, 0.5];
         let eigenvectors = Array2::from_shape_vec((4, 1), v).unwrap();
         let residuals = per_vector_residuals(&op, &eigenvalues, &eigenvectors);
-        assert!(residuals[0] > 0.05,
+        // Exact residual: ||(diag([0,0.1,0.2,0.3])·v - 0·v)|| / ||v||
+        // = ||[0, 0.05, 0.1, 0.15]|| / ||[0.5,0.5,0.5,0.5]|| ≈ 0.187.
+        // Threshold 0.15 is tight enough to catch regressions while remaining below the exact value.
+        assert!(residuals[0] > 0.15,
             "non-eigenvector residual={:.2e} should be large", residuals[0]);
     }
 
