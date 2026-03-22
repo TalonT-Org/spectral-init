@@ -76,6 +76,11 @@ name = "test_accuracy_report"
 path = "tests/integration/test_accuracy_report.rs"
 required-features = ["testing"]
 
+[[test]]
+name = "test_comp_g_sinv"
+path = "tests/integration/test_comp_g_sinv.rs"
+required-features = ["testing"]
+
 [[bench]]
 name = "spectral_bench"
 harness = false
