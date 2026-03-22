@@ -560,7 +560,7 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
         .filter_map(|m| m.disconnected_path.as_ref())
         .flat_map(|dp| dp.per_comp_max_residual.iter()
             .zip(dp.per_comp_size.iter())
-            .filter(|(_, &sz)| sz < 2000)
+            .filter(|&(_, &sz)| sz < 2000)
             .map(|(&r, _)| r))
         .fold(0.0f64, f64::max);
     margins.push(ToleranceMarginEntry {
@@ -580,7 +580,7 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
         .filter_map(|m| m.disconnected_path.as_ref())
         .flat_map(|dp| dp.per_comp_max_residual.iter()
             .zip(dp.per_comp_size.iter())
-            .filter(|(_, &sz)| sz >= 2000)
+            .filter(|&(_, &sz)| sz >= 2000)
             .map(|(&r, _)| r))
         .fold(0.0f64, f64::max);
     margins.push(ToleranceMarginEntry {
