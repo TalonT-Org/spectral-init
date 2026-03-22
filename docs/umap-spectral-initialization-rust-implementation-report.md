@@ -1693,13 +1693,41 @@ Level 4: Forced Dense EVD                     — unconditional
 | Datasets with full fixture coverage | 9/9 |
 | Tolerance margin rows (all positive) | 12 |
 
-### 15.7 Open Evaluation Tickets
+### 15.7 Evaluation Ticket Status
 
-| Ticket | Issue | Status | Purpose |
+| Ticket | Issue | Status | Outcome |
 |--------|-------|--------|---------|
-| B3 | #107 | Open | Evaluate scirs2-sparse IRAM as LOBPCG alternative |
-| B5 | #108 | Open | Verify linfa-linalg soft-locking behavior |
+| B3 | #107 | **Closed (NO-GO)** | scirs2-sparse fails on correctness: TRL produces negative eigenvalues for PSD matrices, IRAM never converges, LOBPCG diverges on multi-cluster data. See `temp/scirs2-sparse-evaluation-decision.md` |
+| B5 | #108 | **Closed (no action)** | linfa-linalg uses soft locking (confirmed). Pre-2023 scipy gaps mitigated by existing defense-in-depth. See `temp/evaluation-linfa-linalg-soft-locking.md` |
 | D1 | — | Deferred | Investigate umap-rs fork for f64 weights (post-A1, may be unnecessary) |
+
+### 15.8 Post-Campaign Improvements
+
+| Issue | PR | Summary |
+|-------|-----|---------|
+| #111 | #114 | Final exact Rayleigh-Ritz refinement for LOBPCG — post-processing step that recomputes `X^T A X` eigenproblem and rotates eigenvectors. Improved subspace orthogonality to exactly 1.0. |
+| #112 | — | Unconvergence detection for LOBPCG activemask — in progress |
+
+### 15.9 Visual UMAP Evaluation Pipeline (Next Phase)
+
+The numerical accuracy report validates that Rust's eigenvectors match Python's within tight tolerances. The next validation layer is **visual**: feed Rust's spectral initialization into Python UMAP's SGD optimizer and compare the resulting embeddings side-by-side.
+
+**Method**: Python UMAP's `init` parameter accepts any `(n, n_components)` array, bypassing its own spectral init and going straight to SGD. Three-way comparison:
+
+1. **Python spectral init → Python SGD** (baseline)
+2. **Rust spectral init → Python SGD** (what we're testing)
+3. **Random init → Python SGD** (control — should look visibly worse)
+
+This isolates exactly one variable (the spectral initialization) while keeping graph construction and SGD optimization constant.
+
+**Success criteria**:
+- Procrustes distance (Rust vs Python): < 0.05
+- Pairwise distance correlation: > 0.99
+- Visual: Python and Rust init embeddings should be indistinguishable
+
+**Datasets**: Synthetic (blobs, circles, swiss roll, moons, high-dim blobs), real-world (MNIST, Fashion-MNIST, pendigits), with a single-cell data placeholder.
+
+Full specification: `temp/umap-visual-evaluation-prompt.md`
 
 ---
 
