@@ -132,7 +132,7 @@ fn chebyshev_precond(
 ///
 /// Eigenvalues from the Gram solve are exact Rayleigh quotients of the true Laplacian,
 /// independent of any regularization shift applied during LOBPCG iteration.
-fn rayleigh_ritz_refine<O: LinearOperator>(op: &O, eigvecs: Array2<f64>) -> EigenResult {
+fn rayleigh_ritz_refine<O: LinearOperator>(op: &O, eigvecs: Array2<f64>) -> Option<EigenResult> {
     let n = eigvecs.nrows();
     let k = eigvecs.ncols();
 
@@ -143,10 +143,10 @@ fn rayleigh_ritz_refine<O: LinearOperator>(op: &O, eigvecs: Array2<f64>) -> Eige
     // Step 2: G = X^T * AX (k×k dense Gram matrix)
     let gram = eigvecs.t().dot(&ax);
 
-    // Step 3: Dense symmetric eigenproblem on G via faer SelfAdjointEigen
+    // Step 3: Dense symmetric eigenproblem on G via faer SelfAdjointEigen.
+    // Returns None instead of panicking if the Gram matrix is numerically degenerate.
     let faer_gram = FaerMat::<f64>::from_fn(k, k, |i, j| gram[[i, j]]);
-    let eigen = SelfAdjointEigen::new(faer_gram.as_ref(), Side::Lower)
-        .expect("rayleigh_ritz_refine: SelfAdjointEigen failed on Gram matrix (k×k)");
+    let eigen = SelfAdjointEigen::new(faer_gram.as_ref(), Side::Lower).ok()?;
 
     // Step 4: Extract eigenvalues (ascending) and rotation matrix V.
     // eigen.S() iterates in ascending order; use for_each matching rsvd.rs pattern.
@@ -160,7 +160,7 @@ fn rayleigh_ritz_refine<O: LinearOperator>(op: &O, eigvecs: Array2<f64>) -> Eige
 
     // Step 5: Rotate X_refined = X * V
     let eigvecs_refined = eigvecs.dot(&v_rot);
-    (eigenvalues, eigvecs_refined)
+    Some((eigenvalues, eigvecs_refined))
 }
 
 /// LOBPCG iterative eigensolver (Levels 1 and 2).
@@ -301,7 +301,9 @@ pub fn lobpcg_solve<O: LinearOperator>(
     // of the true Laplacian (G = X^T * L * X), then rotate eigenvectors.
     // This replaces LOBPCG eigenvalues (including any regularization shift) with exact
     // values — no separate REGULARIZATION_EPS subtraction is needed.
-    result_opt.map(|(_, eigvecs)| rayleigh_ritz_refine(op, eigvecs))
+    // Note: LOBPCG eigenvalues are intentionally discarded; the returned eigenvalues are
+    // the Gram-solve Rayleigh quotients, which are exact for the true (unshifted) Laplacian.
+    result_opt.and_then(|(_, eigvecs)| rayleigh_ritz_refine(op, eigvecs))
 }
 
 // ─── Unit Tests ──────────────────────────────────────────────────────────────
