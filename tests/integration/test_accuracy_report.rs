@@ -4,7 +4,7 @@ mod common;
 use ndarray::{Array1, Array2, ArrayView1};
 use spectral_init::{
     build_normalized_laplacian, compute_degrees, find_components,
-    select_eigenvectors, solve_eigenproblem_pub, spectral_init,
+    select_eigenvectors, solve_eigenproblem_pub, spectral_init, SpectralInitConfig,
 };
 use std::path::Path;
 
@@ -162,7 +162,7 @@ fn process_dataset(dataset: &str, n: usize, is_connected: bool, expected_n_compo
     let pn_max_err = pre_noise_max_err(&rust_pre_noise, &ref_pre_noise);
 
     let e2e_max_residual = if is_connected {
-        let result = spectral_init(&graph, n_components_dim, 42, None)
+        let result = spectral_init(&graph, n_components_dim, 42, None, SpectralInitConfig::default())
             .unwrap_or_else(|e| panic!("{dataset}: spectral_init failed: {e}"));
         let e2e_max = (0..n_components_dim).map(|col| {
             let evec: Array1<f64> = result.column(col).mapv(|v| v as f64 / expansion_val);

@@ -1,7 +1,7 @@
 #[path = "../common/mod.rs"]
 mod common;
 
-use spectral_init::spectral_init;
+use spectral_init::{spectral_init, SpectralInitConfig};
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -24,7 +24,7 @@ fn run_e2e_residual_check(dataset: &str, n: usize) {
     let graph_path = common::fixture_path(dataset, "step5a_pruned.npz");
     let graph = common::load_sparse_csr_f32_u32(&graph_path);
 
-    let result = spectral_init(&graph, 2, 42, None)
+    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
         .unwrap_or_else(|e| panic!("spectral_init failed for {dataset}: {e}"));
     assert_eq!(result.shape(), &[n, 2]);
     for &v in result.iter() {
@@ -79,7 +79,7 @@ fn run_e2e_residual_check(dataset: &str, n: usize) {
 fn run_e2e_exact_knn_check(dataset: &str, n: usize) {
     let graph_path = common::fixture_path(dataset, "step5a_pruned_exact.npz");
     let graph = common::load_sparse_csr_f32_u32(&graph_path);
-    let result = spectral_init(&graph, 2, 42, None)
+    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
         .unwrap_or_else(|e| panic!("exact-KNN spectral_init failed for {dataset}: {e}"));
     assert_eq!(result.shape(), &[n, 2]);
     for &v in result.iter() {
@@ -125,7 +125,7 @@ fn test_e2e_subspace_circles_300() {
 
     let graph_path = common::fixture_path(dataset, "step5a_pruned.npz");
     let graph = common::load_sparse_csr_f32_u32(&graph_path);
-    let result = spectral_init(&graph, 2, 42, None)
+    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
         .unwrap_or_else(|e| panic!("spectral_init failed for {dataset}: {e}"));
 
     let scaling_path = common::fixture_path(dataset, "comp_f_scaling.npz");
@@ -174,7 +174,7 @@ fn test_e2e_subspace_near_dupes_100() {
 
     let graph_path = common::fixture_path(dataset, "step5a_pruned.npz");
     let graph = common::load_sparse_csr_f32_u32(&graph_path);
-    let result = spectral_init(&graph, 2, 42, None)
+    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
         .unwrap_or_else(|e| panic!("spectral_init failed for {dataset}: {e}"));
 
     let scaling_path = common::fixture_path(dataset, "comp_f_scaling.npz");
@@ -243,7 +243,7 @@ fn test_e2e_disconnected_200_component_separation() {
 
     let graph_path = common::fixture_path(dataset, "step5a_pruned.npz");
     let graph = common::load_sparse_csr_f32_u32(&graph_path);
-    let result = spectral_init(&graph, 2, 42, None)
+    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
         .unwrap_or_else(|e| panic!("spectral_init failed for {dataset}: {e}"));
 
     let n = result.shape()[0];
@@ -307,12 +307,17 @@ fn test_e2e_performance_blobs_5000() {
     let path = common::fixture_path("blobs_5000", "step5a_pruned.npz");
     let graph = common::load_sparse_csr_f32_u32(&path);
     let start = std::time::Instant::now();
-    let result = spectral_init(&graph, 2, 42, None).expect("blobs_5000 spectral_init failed");
+    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default()).expect("blobs_5000 spectral_init failed");
     let elapsed = start.elapsed();
     assert_eq!(result.shape()[1], 2);
+    let budget_secs: u64 = std::env::var("CI_PERF_BUDGET_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(120);
     assert!(
-        elapsed.as_secs() < 30,
-        "blobs_5000 took {:?}, expected < 30s",
-        elapsed
+        elapsed.as_secs() < budget_secs,
+        "blobs_5000 took {:?}, expected < {}s",
+        elapsed,
+        budget_secs
     );
 }

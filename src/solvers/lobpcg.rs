@@ -91,9 +91,12 @@ pub fn lobpcg_solve<O: LinearOperator>(
 
     let x_init = to_nd16_array2(x_init_17);
 
-    // Convergence tolerance and iteration budget
+    // Convergence tolerance and iteration budget.
+    // Cap at 300 to prevent runaway iteration on large graphs (e.g. n=5000 → n*5=25,000
+    // iterations); 300 matches Python UMAP's LOBPCG default and is sufficient for
+    // well-conditioned graphs while keeping cost predictable.
     let tol: f32 = 1e-4;
-    let maxiter = n * 5;
+    let maxiter = (n * 5).min(300);
 
     // The operator closure bridges ndarray 0.16 (lobpcg boundary) ↔ 0.17 (op.apply).
     let result = if regularize {

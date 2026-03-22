@@ -1,7 +1,7 @@
 #[path = "../common/mod.rs"]
 mod common;
 
-use spectral_init::spectral_init;
+use spectral_init::{spectral_init, SpectralInitConfig};
 use sprs::CsMatI;
 
 #[test]
@@ -20,7 +20,7 @@ fn spectral_init_output_shape_all_connected_datasets() {
         let path = common::fixture_path(dataset, "step5a_pruned.npz");
         let graph = common::load_sparse_csr_f32_u32(&path);
 
-        let result = spectral_init(&graph, 2, 42, None)
+        let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
             .unwrap_or_else(|e| panic!("spectral_init failed for {dataset}: {e}"));
 
         assert_eq!(
@@ -45,7 +45,7 @@ fn spectral_init_output_close_to_pre_noise_blobs_connected_200() {
     let graph_path = common::fixture_path(dataset, "step5a_pruned.npz");
     let graph = common::load_sparse_csr_f32_u32(&graph_path);
 
-    let result = spectral_init(&graph, 2, 42, None)
+    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
         .expect("spectral_init failed for blobs_connected_200");
 
     let fixture_path = common::fixture_path(dataset, "comp_f_scaling.npz");
@@ -113,7 +113,7 @@ fn spectral_init_synthetic_disconnected_produces_valid_embedding() {
     })
     .unwrap();
 
-    let result = spectral_init(&g, 2, 42, Some(data_arr.view()));
+    let result = spectral_init(&g, 2, 42, Some(data_arr.view()), SpectralInitConfig::default());
     let arr = result.expect("spectral_init on disconnected graph should succeed");
     assert_eq!(arr.shape(), &[6, 2]);
     for &v in arr.iter() {
@@ -147,7 +147,7 @@ fn spectral_init_synthetic_disconnected_produces_valid_embedding() {
 fn spectral_init_synthetic_disconnected_preserves_component_structure() {
     // Same 6-node two-clique graph
     let g = make_two_clique_graph();
-    let result = spectral_init(&g, 2, 42, None);
+    let result = spectral_init(&g, 2, 42, None, SpectralInitConfig::default());
     let arr = result.expect("spectral_init on disconnected graph should succeed");
     assert_eq!(arr.shape(), &[6, 2]);
 
@@ -180,7 +180,7 @@ fn spectral_init_disconnected_200_shape_and_finite() {
     let path = common::fixture_path("disconnected_200", "step5a_pruned.npz");
     let graph = common::load_sparse_csr_f32_u32(&path);
 
-    let result = spectral_init(&graph, 2, 42, None);
+    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default());
     let arr = result.expect("spectral_init on disconnected_200 should succeed");
     assert_eq!(arr.shape()[1], 2);
     for &v in arr.iter() {
@@ -195,7 +195,7 @@ fn spectral_init_blobs_50_produces_valid_embedding() {
     let path = common::fixture_path("blobs_50", "step5a_pruned.npz");
     let graph = common::load_sparse_csr_f32_u32(&path);
 
-    let result = spectral_init(&graph, 2, 42, None);
+    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default());
     let arr = result.expect("spectral_init on blobs_50 should succeed");
     assert_eq!(arr.shape()[1], 2);
     for &v in arr.iter() {
@@ -212,7 +212,7 @@ fn spectral_init_single_point() {
     let indices: Vec<u32> = vec![];
     let data: Vec<f32> = vec![];
     let g = CsMatI::<f32, u32, usize>::new((1, 1), indptr, indices, data);
-    let result = spectral_init(&g, 2, 42, None);
+    let result = spectral_init(&g, 2, 42, None, SpectralInitConfig::default());
     assert!(
         matches!(result, Err(spectral_init::SpectralError::TooFewNodes { n: 1, dims: 2 })),
         "single-point graph should return TooFewNodes, got: {:?}",
@@ -227,7 +227,7 @@ fn spectral_init_two_points_connected() {
     let indices = vec![1u32, 0u32];
     let data = vec![1.0f32, 1.0f32];
     let g = CsMatI::<f32, u32, usize>::new((2, 2), indptr, indices, data);
-    let result = spectral_init(&g, 2, 42, None);
+    let result = spectral_init(&g, 2, 42, None, SpectralInitConfig::default());
     assert!(
         matches!(result, Err(spectral_init::SpectralError::TooFewNodes { n: 2, dims: 2 })),
         "two-point graph with n_components=2 should return TooFewNodes, got: {:?}",
@@ -253,7 +253,7 @@ fn spectral_init_fully_connected_uniform() {
         indptr.push(indices.len());
     }
     let g = CsMatI::<f32, u32, usize>::new((n, n), indptr, indices, data);
-    let result = spectral_init(&g, 2, 42, None);
+    let result = spectral_init(&g, 2, 42, None, SpectralInitConfig::default());
     let arr = result.expect("spectral_init on fully-connected graph should succeed");
     assert_eq!(arr.shape(), &[n, 2]);
     for &v in arr.iter() {
@@ -301,7 +301,7 @@ fn spectral_init_ten_component_graph() {
         }
     }
     let data_arr = ndarray::Array2::from_shape_vec((n, 2), flat).unwrap();
-    let result = spectral_init(&g, 2, 42, Some(data_arr.view()));
+    let result = spectral_init(&g, 2, 42, Some(data_arr.view()), SpectralInitConfig::default());
     let arr = result.expect("spectral_init on 10-component graph should succeed");
     assert_eq!(arr.shape(), &[n, 2]);
     for &v in arr.iter() {
