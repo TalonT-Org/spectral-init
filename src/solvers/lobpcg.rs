@@ -278,6 +278,12 @@ pub fn lobpcg_solve<O: LinearOperator>(
     let tol: f32 = 1e-5;
     let maxiter = (n * 5).min(300);
 
+    // Defined outside the loop: captures nothing from the environment, so no need to
+    // re-create it on every iteration.
+    let extract = |r: linfa_linalg::lobpcg::Lobpcg<f64>| -> EigenResult {
+        (from_nd16_array1(r.eigvals), from_nd16_array2(r.eigvecs))
+    };
+
     for restart in 0..=MAX_WARM_RESTARTS {
         // Extract x_init for this iteration (moved into lobpcg; repopulated on warm restart).
         debug_assert!(x_init_opt.is_some(), "x_init_opt must be set at every loop entry");
@@ -318,9 +324,6 @@ pub fn lobpcg_solve<O: LinearOperator>(
         };
 
         // ── Extract eigenpairs if rnorms are acceptable ──────────────────────
-        let extract = |r: linfa_linalg::lobpcg::Lobpcg<f64>| -> EigenResult {
-            (from_nd16_array1(r.eigvals), from_nd16_array2(r.eigvecs))
-        };
         let raw_opt = match lobpcg_result {
             Ok(r) => Some(extract(r)),
             Err((_, Some(r))) => {
