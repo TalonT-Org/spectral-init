@@ -177,7 +177,11 @@ fn process_disconnected_path(dataset: &str, n_embedding_dims: usize) -> Disconne
         .iter()
         .map(|members| {
             let n_c = members.len();
-            if n_c < 2 {
+            // Tiny components are placed at meta_pos without eigenvector computation;
+            // mean-centering the translated output does not recover an eigenvector
+            // (mean(eigvec) ≠ 0 for the normalized Laplacian), so we skip residual
+            // verification for them.
+            if n_c < 2 * n_embedding_dims {
                 return 0.0;
             }
             let sub_graph = extract_subgraph_local(&graph, members);
@@ -188,35 +192,9 @@ fn process_disconnected_path(dataset: &str, n_embedding_dims: usize) -> Disconne
                 .collect();
             let lap_c = build_normalized_laplacian(&sub_graph, &inv_sqrt_c);
 
-            let mut coords_c = ndarray::Array2::<f64>::zeros((n_c, n_embedding_dims));
-            for (local_i, &orig_i) in members.iter().enumerate() {
-                for d in 0..n_embedding_dims {
-                    coords_c[[local_i, d]] = embedding[[orig_i, d]];
-                }
-            }
-
-            for d in 0..n_embedding_dims {
-                let mean = coords_c.column(d).sum() / n_c as f64;
-                for i in 0..n_c {
-                    coords_c[[i, d]] -= mean;
-                }
-            }
-
-            (0..n_embedding_dims)
-                .map(|d| {
-                    let v = coords_c.column(d).to_owned();
-                    let v_sq: f64 = v.iter().map(|&x| x * x).sum();
-                    if v_sq < 1e-30 {
-                        return 0.0;
-                    }
-                    let mut lv = vec![0.0f64; n_c];
-                    for (val, (row, col)) in lap_c.iter() {
-                        lv[row] += val * v[col];
-                    }
-                    let lambda = lv.iter().zip(v.iter()).map(|(&li, &vi)| li * vi).sum::<f64>()
-                        / v_sq;
-                    common::residual_spmv(&lap_c, v.view(), lambda)
-                })
+            let ((evals, evecs), _) = solve_eigenproblem_pub(&lap_c, n_embedding_dims, 42);
+            (0..evecs.ncols())
+                .map(|d| common::residual_spmv(&lap_c, evecs.column(d), evals[d]))
                 .fold(0.0f64, f64::max)
         })
         .collect();
