@@ -219,28 +219,57 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
         margin_factor: if worst_deg_rel == 0.0 { f64::INFINITY } else { 3e-7 / worst_deg_rel },
     });
 
-    // comp_b: max absolute Laplacian entry error
-    let mut worst_lap_abs = 0.0f64;
+    // comp_b isolated: Python sqrt_deg (from comp_a_degrees.npz) → Rust Laplacian
+    // This mirrors test_comp_b_laplacian.rs; tolerance 1e-14 is valid here.
+    let mut worst_lap_iso = 0.0f64;
     for metric in all_metrics {
         let base = common::fixture_path(&metric.dataset, "");
         let graph = common::load_sparse_csr_f32_u32(&base.join("step5a_pruned.npz"));
-        let (_, sqrt_deg) = compute_degrees(&graph);
-        let inv_sqrt_deg: Vec<f64> = sqrt_deg.iter()
+        let sqrt_deg: Array1<f64> =
+            common::load_dense(&base.join("comp_a_degrees.npz"), "sqrt_deg");
+        let inv_sqrt_deg: Vec<f64> = sqrt_deg
+            .iter()
             .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
             .collect();
         let rust_lap = build_normalized_laplacian(&graph, &inv_sqrt_deg);
         let ref_lap = common::load_sparse_csr(&base.join("comp_b_laplacian.npz"));
         for (val, (row, col)) in ref_lap.iter() {
             let rust_val = rust_lap.get(row, col).copied().unwrap_or(0.0);
-            worst_lap_abs = worst_lap_abs.max((rust_val - val).abs());
+            worst_lap_iso = worst_lap_iso.max((rust_val - val).abs());
         }
     }
     margins.push(ToleranceMarginEntry {
-        component: "comp_b Laplacian entries (absolute)".to_string(),
+        component: "comp_b Laplacian (isolated: Python degrees)".to_string(),
         tolerance: 1e-14,
         tolerance_type: "absolute",
-        worst_actual: worst_lap_abs,
-        margin_factor: if worst_lap_abs == 0.0 { f64::INFINITY } else { 1e-14 / worst_lap_abs },
+        worst_actual: worst_lap_iso,
+        margin_factor: if worst_lap_iso == 0.0 { f64::INFINITY } else { 1e-14 / worst_lap_iso },
+    });
+
+    // comp_b chained: Rust compute_degrees() → Rust Laplacian
+    // Inherits f32 graph weight precision; tolerance 1e-7 is appropriate.
+    let mut worst_lap_chain = 0.0f64;
+    for metric in all_metrics {
+        let base = common::fixture_path(&metric.dataset, "");
+        let graph = common::load_sparse_csr_f32_u32(&base.join("step5a_pruned.npz"));
+        let (_, sqrt_deg) = compute_degrees(&graph);
+        let inv_sqrt_deg: Vec<f64> = sqrt_deg
+            .iter()
+            .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
+            .collect();
+        let rust_lap = build_normalized_laplacian(&graph, &inv_sqrt_deg);
+        let ref_lap = common::load_sparse_csr(&base.join("comp_b_laplacian.npz"));
+        for (val, (row, col)) in ref_lap.iter() {
+            let rust_val = rust_lap.get(row, col).copied().unwrap_or(0.0);
+            worst_lap_chain = worst_lap_chain.max((rust_val - val).abs());
+        }
+    }
+    margins.push(ToleranceMarginEntry {
+        component: "comp_b Laplacian (chained: Rust degrees)".to_string(),
+        tolerance: 1e-7,
+        tolerance_type: "absolute",
+        worst_actual: worst_lap_chain,
+        margin_factor: if worst_lap_chain == 0.0 { f64::INFINITY } else { 1e-7 / worst_lap_chain },
     });
 
     // comp_d: eigenvalue errors — split by n (dense EVD: n<2000, LOBPCG: n>=2000)
@@ -462,6 +491,43 @@ fn generate_accuracy_report() {
     assert!(json_path.exists());
 
     let json: serde_json::Value = serde_json::from_str(&json_text).expect("invalid JSON");
+
+    // REQ-SPLIT-001: two separate comp_b rows must exist
+    let margins_arr = json["tolerance_margins"].as_array().unwrap();
+
+    let isolated_row = margins_arr.iter().find(|e| {
+        e["component"].as_str().unwrap_or("").contains("isolated: Python degrees")
+    });
+    assert!(isolated_row.is_some(),
+        "Expected a comp_b isolated (Python degrees) row in tolerance_margins");
+
+    let chained_row = margins_arr.iter().find(|e| {
+        e["component"].as_str().unwrap_or("").contains("chained: Rust degrees")
+    });
+    assert!(chained_row.is_some(),
+        "Expected a comp_b chained (Rust degrees) row in tolerance_margins");
+
+    // REQ-SPLIT-002: isolated row tolerance must be 1e-14
+    let iso_tol = isolated_row.unwrap()["tolerance"].as_f64().unwrap();
+    assert!(
+        (iso_tol - 1e-14).abs() < 1e-20,
+        "Isolated comp_b tolerance must be 1e-14, got {iso_tol}"
+    );
+
+    // REQ-SPLIT-003: chained row tolerance must be 1e-7
+    let chain_tol = chained_row.unwrap()["tolerance"].as_f64().unwrap();
+    assert!(
+        (chain_tol - 1e-7).abs() < 1e-13,
+        "Chained comp_b tolerance must be 1e-7, got {chain_tol}"
+    );
+
+    // REQ-SPLIT-004: the old conflated row must no longer exist
+    let old_row = margins_arr.iter().find(|e| {
+        e["component"].as_str().unwrap_or("") == "comp_b Laplacian entries (absolute)"
+    });
+    assert!(old_row.is_none(),
+        "Old conflated comp_b row must be removed from tolerance_margins");
+
     assert_eq!(json["datasets"].as_array().unwrap().len(), 9,
         "Report must cover all 9 datasets");
     for entry in json["datasets"].as_array().unwrap() {
