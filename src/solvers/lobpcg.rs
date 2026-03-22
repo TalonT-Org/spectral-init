@@ -70,6 +70,14 @@ const CHEB_UPPER_BOUND: f64 = 2.0;
 /// Degree 8 provides ~8x iteration reduction for lambda_2 ≈ 0.01 (blobs_connected_2000).
 const CHEB_DEGREE: usize = 8;
 
+/// Minimum matrix size for applying the Chebyshev preconditioner.
+///
+/// T_d((L - cI)/e) takes negative values for eigenvalues in (a, b), making the preconditioner
+/// non-positive-definite. For small synthetic matrices (n < CHEB_MIN_N) this causes LOBPCG to
+/// converge incorrectly. In practice, LOBPCG is only invoked for large graphs (n >= 2000)
+/// where the filter is both numerically stable and beneficial for convergence.
+const CHEB_MIN_N: usize = 1000;
+
 // ─── LOBPCG solver ────────────────────────────────────────────────────────────
 
 /// Chebyshev polynomial preconditioner of degree `degree`.
@@ -138,15 +146,6 @@ pub fn lobpcg_solve<O: LinearOperator>(
         x_init_17.column_mut(0).assign(&sqrt_deg.mapv(|x| x / sqrt_deg_norm));
     }
 
-    let x_init = to_nd16_array2(x_init_17);
-
-    // Convergence tolerance and iteration budget.
-    // Cap at 300 to prevent runaway iteration on large graphs (e.g. n=5000 → n*5=25,000
-    // iterations); 300 matches Python UMAP's LOBPCG default and is sufficient for
-    // well-conditioned graphs while keeping cost predictable.
-    let tol: f32 = 1e-4;
-    let maxiter = (n * 5).min(300);
-
     // l_op_nd17 wraps op.apply() in ndarray 0.17 types for use by chebyshev_precond.
     let l_op_nd17 = |x: ndarray::ArrayView2<f64>| -> Array2<f64> {
         let mut y = Array2::zeros((n, x.ncols()));
@@ -154,7 +153,54 @@ pub fn lobpcg_solve<O: LinearOperator>(
         y
     };
 
+    // Chebyshev-Filtered Subspace Iteration (ChFSI): for large graphs, apply a single
+    // shifted Chebyshev filter (I + T_d(A)) / 2 to x_init before LOBPCG. This amplifies
+    // components with eigenvalues in [0, CHEB_LOWER_BOUND) and suppresses those in
+    // [CHEB_LOWER_BOUND, CHEB_UPPER_BOUND], giving LOBPCG a better starting subspace
+    // without the per-iteration scale-distortion caused by an amplifying preconditioner.
+    //
+    // Using it as a one-time filter (not a per-iteration preconditioner) keeps LOBPCG's
+    // internal eigvec norms ≈ 1, so linfa-linalg's rnorm accurately tracks actual_residual.
+    // For small n, the filter's spectrum oscillates and may hurt rather than help, so it is
+    // skipped; small matrices converge quickly from a random start anyway.
+    if n >= CHEB_MIN_N {
+        let t_d = chebyshev_precond(
+            &l_op_nd17,
+            x_init_17.view(),
+            CHEB_LOWER_BOUND,
+            CHEB_UPPER_BOUND,
+            CHEB_DEGREE,
+        );
+        // Shifted Chebyshev: (I + T_d(A)) / 2 · x_init. Always non-negative.
+        let filtered = (x_init_17 + t_d) / 2.0;
+        // Normalize each column to unit norm for LOBPCG's orthonormal-basis requirement.
+        x_init_17 = Array2::zeros((n, k));
+        for j in 0..filtered.ncols() {
+            let col = filtered.column(j);
+            let norm = col.dot(&col).sqrt();
+            if norm > 1e-300 {
+                x_init_17.column_mut(j).assign(&col.mapv(|v| v / norm));
+            } else {
+                x_init_17.column_mut(j).assign(&col);
+            }
+        }
+    }
+
+    let x_init = to_nd16_array2(x_init_17);
+
+    // Convergence tolerance and iteration budget.
+    // Cap at 300 to prevent runaway iteration on large graphs (e.g. n=5000 → n*5=25,000
+    // iterations); 300 matches Python UMAP's LOBPCG default and is sufficient for
+    // well-conditioned graphs while keeping cost predictable.
+    // Tol is set to 1e-5 (Issue #92): tighter tolerance, combined with the ChFSI-filtered
+    // starting subspace, allows the solver to achieve residual < 1e-5 (REQ-PERF-001).
+    let tol: f32 = 1e-5;
+    let maxiter = (n * 5).min(300);
+
     // The operator closure bridges ndarray 0.16 (lobpcg boundary) ↔ 0.17 (op.apply).
+    // No per-iteration preconditioner: the ChFSI filter above already improves the starting
+    // subspace. A per-iteration amplifying filter distorts eigvec norms, breaking LOBPCG's
+    // rnorm-to-actual-residual correspondence and causing acceptance of unconverged results.
     let result = if regularize {
         lobpcg(
             |x: nd16::ArrayView2<f64>| -> nd16::Array2<f64> {
@@ -165,17 +211,7 @@ pub fn lobpcg_solve<O: LinearOperator>(
                 to_nd16_array2(y17)
             },
             x_init,
-            |mut x: nd16::ArrayViewMut2<f64>| {
-                let x_owned = from_nd16_array2(x.to_owned());
-                let result = chebyshev_precond(
-                    &l_op_nd17,
-                    x_owned.view(),
-                    CHEB_LOWER_BOUND,
-                    CHEB_UPPER_BOUND,
-                    CHEB_DEGREE,
-                );
-                x.assign(&to_nd16_array2(result));
-            },
+            |_: nd16::ArrayViewMut2<f64>| {},
             None,
             tol,
             maxiter,
@@ -190,17 +226,7 @@ pub fn lobpcg_solve<O: LinearOperator>(
                 to_nd16_array2(y17)
             },
             x_init,
-            |mut x: nd16::ArrayViewMut2<f64>| {
-                let x_owned = from_nd16_array2(x.to_owned());
-                let result = chebyshev_precond(
-                    &l_op_nd17,
-                    x_owned.view(),
-                    CHEB_LOWER_BOUND,
-                    CHEB_UPPER_BOUND,
-                    CHEB_DEGREE,
-                );
-                x.assign(&to_nd16_array2(result));
-            },
+            |_: nd16::ArrayViewMut2<f64>| {},
             None,
             tol,
             maxiter,
