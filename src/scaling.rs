@@ -220,6 +220,6 @@ mod tests {
         assert_eq!(pre_noise.shape(), &[200, 2]);
         assert!(pre_noise.iter().all(|v| v.is_finite()));
         let max_abs = pre_noise.iter().copied().map(f32::abs).fold(0f32, f32::max);
-        assert!((max_abs - 10.0f32).abs() < 1e-5, "max_abs={max_abs}");
+        assert!((max_abs - 10.0f32).abs() < 1e-6, "max_abs={max_abs}"); // f32 ULP at 10.0 ≈ 9.5e-7
     }
 }

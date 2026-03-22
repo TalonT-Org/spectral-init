@@ -1525,7 +1525,7 @@ All Phase 2 implementation tasks have been completed as GitHub issues #27-#41. T
 | D: Dense EVD | `src/solvers/dense.rs` | Implemented | faer self_adjoint_eigen, Level 0/4 |
 | D: LOBPCG | `src/solvers/lobpcg.rs` | Implemented | linfa-linalg, Level 1/2, regularization |
 | D: Randomized SVD | `src/solvers/rsvd.rs` | Implemented | 2I-L trick, pure Rust, Halko-Tropp |
-| D: Escalation chain | `src/solvers/mod.rs` | Implemented | 5-level chain with residual gating on Level 3 |
+| D: Escalation chain | `src/solvers/mod.rs` | Implemented | 5-level chain with residual gating on all levels |
 | E: Eigenvector selection | `src/selection.rs` | Implemented | Sort + skip trivial |
 | F: Coordinate scaling | `src/scaling.rs` | Implemented | max_abs=10, f64→f32 cast, noise |
 | G: Multi-component | `src/multi_component.rs` | Implemented | Full 492-line implementation, not a stub |
@@ -1549,105 +1549,78 @@ No test chains Rust step N-1 output into step N. Error accumulation between step
 
 ---
 
-## 14. Phase 2 Implementation Audit (2026-03-21)
+## 14. Phase 2 Implementation Audit & Remediation Record
 
-Full audit of the Rust implementation by 10 parallel agents examining every source file, test file, tolerance, and architectural decision.
+### 14.1 Initial Audit (2026-03-21)
 
-### 14.1 Critical Issues
+A 10-agent audit examined every source file, test file, tolerance, and architectural decision. Eight issues were identified (A–H). All have been resolved via GitHub issues #57–#71.
 
-**Issue A: Missing fixture files for `blobs_connected_200` and `blobs_connected_2000`.**
+### 14.2 Audit Issue Resolution
 
-These two datasets have `meta.json` stubs but NO `.npz` fixture files on disk. The Python fixture generator was run before these datasets were added to the DATASETS registry (Issue #16 added them to `fixture_utils.py`, but `generate_fixtures.py` was never re-run).
+| Issue | Finding | Resolution | PR |
+|-------|---------|------------|-----|
+| A | Missing fixtures for `blobs_connected_200` / `blobs_connected_2000` | Fixtures regenerated; all 9 datasets have complete `.npz` files including exact-distance paths | #57 (PR #80) |
+| B | Missing exact-distance KNN fixtures | All 9 datasets now have `step5a_pruned_exact.npz` | #57 (PR #80) |
+| C | No dedicated Component C test | `test_comp_c_components.rs` created, tests all 9 datasets with partition grouping comparison | #59 (PR #82) |
+| D | Component E test broken (1 dataset, missing fixtures) | Expanded to 6 datasets; all pass | #64 (PR #83) |
+| E | LOBPCG missing trivial eigenvector injection | `lobpcg_solve()` now accepts `sqrt_deg` and injects `d^{1/2}/||d^{1/2}||` as column 0 | #60 (PR #79) |
+| F | Level 2 eigenvalues shifted by `REGULARIZATION_EPS` | `lobpcg_solve()` now subtracts `REGULARIZATION_EPS` from eigenvalues when `regularize=true` | #62 (PR #75) |
+| G | No residual quality gate on Levels 0, 1, 2 | All levels now gated: Dense EVD 1e-6, LOBPCG 1e-3, rSVD 1e-2; threshold ordering invariant tested | #61 (PR #74) |
+| H | `spmv_csr` unused dead code | Wired into `CsrOperator::apply` for k=1 (single-vector fast path); k>1 still uses `csr_mulacc_dense_rowmaj` | #63 (PR #73) |
 
-Impact: 2 tests in `test_pipeline.rs` FAIL because they reference these datasets without `#[ignore]` guards. All other tests referencing them are `#[ignore]`-gated, hiding the gap. This also means the LOBPCG integration tests (`test_comp_f_lobpcg.rs`) targeting `blobs_connected_2000` have never actually run.
+### 14.3 Tolerance Tightening (RESOLVED — #66, PR #72)
 
-**Fix required:** Re-run `python tests/generate_fixtures.py` to generate `.npz` files for both datasets. Then add `#[ignore]` to the two failing pipeline tests, or fix the fixture dependency.
+| Location | Old | New | Rationale |
+|----------|-----|-----|-----------|
+| `test_comp_a_degrees.rs` | `1e-5` | `3e-7` (relative) | Observed max relative error ≈ 2.2e-7 (~1.84 f32_epsilon); 37% headroom |
+| `test_e2e_validation.rs` | `0.05` | `0.005` | 10x tighter; still 50x above expected noise floor |
+| `scaling.rs` (2 approx assertions) | `1e-5` | `1e-6` | f32 ULP at 10.0 ≈ 9.5e-7; 1e-6 is just above single-ULP bound |
+| `solvers/mod.rs` non-negativity | Mixed | `-1e-10` (dense EVD), `-1e-6` (LOBPCG) | Two-level design: tight for exact, loose for iterative |
 
-**Issue B: Missing exact-distance KNN fixtures.**
+### 14.4 Test Coverage After Remediation
 
-`step5a_pruned_exact.npz` files don't exist on disk for any dataset. The `generate_step1_knn_exact` function was added to `generate_fixtures.py` (Issue #17) but the fixtures were never regenerated.
+| Component | Datasets Tested | Method |
+|-----------|----------------|--------|
+| A (degrees) | **9/9** | All datasets via parametrized tests |
+| B (Laplacian) | **9/9** | All datasets via parametrized tests |
+| C (components) | **9/9** | All datasets with partition grouping |
+| D (dense EVD) | **5/5** connected | All connected datasets |
+| D (LOBPCG) | **5/5** connected | All connected datasets |
+| D (rSVD) | **6** | 5 connected + blobs_500 |
+| E (selection) | **6** | 5 connected + disconnected_200 |
+| F (scaling) | **9/9** | All datasets (pre-noise exact, noise statistical) |
 
-**Fix required:** Re-run the fixture generator with the exact-distance path enabled.
+### 14.5 Additional Test Infrastructure (Remediation Issues #67–#70)
 
-**Issue C: No dedicated Component C test.**
+**Adversarial synthetic graph test suite** (#67, PR #77): 10 graph topologies (barbell, path, star, epsilon-bridge, complete bipartite, ring, weighted exponential, single edge, complete, lollipop) with 16 tests covering no-panic/no-NaN validation, community separation verification, coordinate stability checks, and solver escalation level verification. Requires `--features testing`.
 
-There is no `test_comp_c_components.rs`. The BFS connected components implementation is only tested indirectly through the pipeline. There is no test that directly compares Rust's `find_components()` output against Python's `comp_c_components.npz` for all 9 datasets.
+**cargo-nextest with CI profile** (#68, PR #81): `.config/nextest.toml` with JUnit XML output at `target/nextest/ci/junit.xml`. GitHub Actions workflow at `.github/workflows/test.yml` runs on push/PR with test result annotation via `mikepenz/action-junit-report@v6`.
 
-**Fix required:** Create `tests/integration/test_comp_c_components.rs` that loads `step5a_pruned.npz`, calls `find_components()`, and compares by partition grouping against `comp_c_components.npz`.
+**Numerical accuracy report generator** (#69, PR #86): `test_accuracy_report.rs` generates `target/accuracy-report.md` and `target/accuracy-report.json` covering all 9 datasets with per-eigenpair residuals, eigenvalue error, subspace alignment, pre-noise scaling accuracy, and a tolerance margin analysis table.
 
-**Issue D: Component E integration test references non-existent fixture.**
+**Criterion benchmark baselines** (#70, PR #78): 9 benchmarks in `benches/spectral_bench.rs` covering SpMV (n=200/2000), dense EVD, LOBPCG, rSVD, Laplacian build, BFS components, and full pipeline (n=200/2000). Baseline results documented in `benches/README.md`.
 
-`test_comp_e_selection.rs` references `blobs_connected_200` which has no fixtures on disk. The test is `#[ignore]`-gated so the breakage is invisible.
+### 14.6 Current Test Suite Summary
 
-**Fix required:** After generating `blobs_connected_200` fixtures, this test will work. Also add tests for additional datasets.
+| Metric | Count |
+|--------|-------|
+| Total tests (with `--features testing`) | ~130 |
+| Passing | 130+ |
+| Failing | 0 |
+| Ignored (fixture-gated, pass when un-ignored) | 29 |
+| Compiler warnings | 0 |
+| Adversarial graph types | 10 |
+| Datasets with full fixture coverage | 9/9 |
 
-### 14.2 Correctness Concerns
+### 14.7 Remaining Minor Items
 
-**Issue E: LOBPCG does not inject known trivial eigenvector.**
+1. `scaling.rs:223` — one `#[ignore]`-gated test still uses `1e-5` tolerance (should be `1e-6` for consistency)
+2. `manifest.json` — 7 of 9 datasets don't list `step_files_exact` in metadata (files exist on disk; metadata gap only)
+3. `test_accuracy_report.rs` chains Rust D→E→F outputs (by design — it's an accuracy report measuring end-to-end quality, not a component isolation test)
 
-Python UMAP explicitly sets column 0 of the LOBPCG initial block to `d^{1/2} / ||d^{1/2}||` — the analytically known first eigenvector of the symmetric normalized Laplacian. This accelerates convergence by giving LOBPCG one "free" converged vector. Our implementation uses purely random initialization for all columns.
+### 14.8 Stale References in Earlier Sections
 
-Impact: Slower convergence, potential failure on graphs where the eigengap near zero is small. The escalation chain mitigates this (if LOBPCG fails, rSVD takes over), but it's an unnecessary fragility.
-
-**Fix required:** In `lobpcg.rs`, set `x_init.column_mut(0).assign(&(sqrt_deg / sqrt_deg_norm))` before calling `lobpcg()`.
-
-**Issue F: Level 2 eigenvalue shift not removed.**
-
-When LOBPCG Level 2 adds `REGULARIZATION_EPS = 1e-5` to the Laplacian diagonal, the returned eigenvalues are shifted by `1e-5`. This shift is not subtracted before returning. The sort-and-skip logic in `select_eigenvectors` still works correctly (relative ordering preserved), but the actual eigenvalue magnitudes in the output are wrong by `1e-5`.
-
-Impact: Low — eigenvalues are not used downstream except for the sort order. But the residual quality checks in `mod.rs` would compute slightly wrong residuals when checking against the shifted operator.
-
-**Fix required:** Subtract `REGULARIZATION_EPS` from eigenvalues before returning from Level 2.
-
-**Issue G: No residual quality gate on Levels 0, 1, 2.**
-
-Only Level 3 (rSVD) has a post-hoc residual quality gate (`RSVD_QUALITY_THRESHOLD = 1e-2`). Dense EVD and LOBPCG results are accepted without checking residual quality. If faer or linfa-linalg had a regression, bad eigenvectors would pass silently.
-
-**Fix required:** Add residual check after Level 0/1/2 results. Gate at `1e-6` for dense EVD, `1e-3` for LOBPCG.
-
-**Issue H: `spmv_csr` function is unused.**
-
-The standalone SIMD-forward SpMV function exists with an explicit comment marking it as the "Phase 3 SIMD replacement point," but `CsrOperator::apply` actually calls `sprs::prod::csr_mulacc_dense_rowmaj` instead. The compiler warns: "function `spmv_csr` is never used."
-
-**Fix required:** Either wire `CsrOperator::apply` to use `spmv_csr` (preserving the SIMD boundary), or acknowledge this as intentional (sprs's block-vector multiply is faster for multi-column operations) and add `#[allow(dead_code)]` with a comment explaining the Phase 3 intent.
-
-### 14.3 Tolerance Tightening Opportunities
-
-| Location | Current | Should Be | Rationale |
-|----------|---------|-----------|-----------|
-| `test_e2e_validation.rs:61` | `0.05` | `0.005` | Dense EVD residual pre-noise is ~1e-8; noise+f32 adds ~1e-4; 0.05 is 500x too loose |
-| `test_comp_a_degrees.rs:27` | `1e-5` | `1e-7` | f64 accumulation of f32 weights; summation order difference is ~1e-7 |
-| `scaling.rs:117` | `1e-5` | `1e-6` | max_abs should be exactly 10.0 after deterministic f64→f32 cast |
-| `solvers/mod.rs:229` | `-1e-6` | `-1e-10` | Inconsistent with other non-negativity guards using `-1e-10` |
-
-### 14.4 Test Coverage Gaps
-
-| Component | Datasets Tested | Datasets Available | Gap |
-|-----------|----------------|-------------------|-----|
-| A (degrees) | 3 (connected_200, connected_2000, disconnected_200) | 9 | 6 untested |
-| B (Laplacian) | 3 (same) | 9 | 6 untested |
-| C (components) | 0 (no dedicated test) | 9 | 9 untested |
-| D (dense EVD) | 4 (connected_200, moons_200, near_dupes_100, circles_300) | 5 connected | 1 untested |
-| D (LOBPCG) | 1 (connected_2000) | 5 connected | 4 untested |
-| D (rSVD) | 3 (connected_200, connected_2000, blobs_500) | 5 connected | 2 untested |
-| E (selection) | 1 (connected_200, broken) | 5 connected | 4+ untested |
-| F (scaling) | 3 (blobs_50, moons_200, circles_300) | 9 | 6 untested |
-
-### 14.5 Remediation Priority
-
-**Must fix before Phase 3:**
-1. Generate missing fixtures (re-run `python tests/generate_fixtures.py`) — unblocks all `#[ignore]` tests
-2. Fix the 2 failing pipeline tests (missing `#[ignore]` or generate fixtures)
-3. Add Component C dedicated test
-4. Inject trivial eigenvector in LOBPCG initialization
-5. Add residual quality gates to Levels 0, 1, 2
-
-**Should fix:**
-6. Subtract regularization shift from Level 2 eigenvalues
-7. Tighten tolerances per Section 14.3
-8. Expand test coverage to all 9 datasets per component
-9. Wire `spmv_csr` into `CsrOperator` or document the dead code
-10. Fix Component E test dataset reference
+Sections 7.2 and 8.4 reference `ndarray-linalg` as the LOBPCG provider. The actual implementation uses `linfa-linalg` (pure Rust, no LAPACK dependency). Section 8.2 mentions `annembed` for rSVD; the actual implementation is a custom Halko-Tropp implementation using `faer` for dense QR and eigendecomposition. These sections remain as historical design documentation; the actual implementation details are in Section 13.2 and the source code.
 
 ---
 
@@ -1679,4 +1652,4 @@ The standalone SIMD-forward SpMV function exists with an explicit comment markin
 
 ---
 
-*Report generated 2026-03-10 via multi-agent research investigation. Updated 2026-03-21 with Phase 1 completion status, Phase 2 implementation status, and 10-agent audit findings.*
+*Report generated 2026-03-10 via multi-agent research investigation. Updated 2026-03-21 with Phase 1 completion, Phase 2 implementation status, 10-agent audit findings, and full remediation record.*
