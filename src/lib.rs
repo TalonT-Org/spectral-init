@@ -232,14 +232,12 @@ mod tests {
 mod config_tests {
     use super::*;
 
-    // REQ-API-002, REQ-API-004
     #[test]
     fn default_config_is_python_compat() {
         let cfg = SpectralInitConfig::default();
         assert_eq!(cfg.compute_mode, ComputeMode::PythonCompat);
     }
 
-    // REQ-TRAIT-001: all required derives
     #[test]
     fn compute_mode_copy_clone_eq() {
         let a = ComputeMode::PythonCompat;
@@ -250,23 +248,28 @@ mod config_tests {
         let _ = format!("{a:?}"); // Debug
     }
 
-    // REQ-TRAIT-001: RustNative variant
     #[test]
     fn compute_mode_rust_native_neq_python_compat() {
         assert_ne!(ComputeMode::RustNative, ComputeMode::PythonCompat);
     }
 
-    // REQ-API-001: both variants exist and are distinguishable
     #[test]
     fn compute_mode_variants_exhaustive() {
-        fn accept_mode(_: ComputeMode) {}
-        accept_mode(ComputeMode::PythonCompat);
-        accept_mode(ComputeMode::RustNative);
+        // Exhaustive match — compiler enforces this if a new variant is added.
+        let modes = [ComputeMode::PythonCompat, ComputeMode::RustNative];
+        for mode in &modes {
+            let label = match mode {
+                ComputeMode::PythonCompat => "python_compat",
+                ComputeMode::RustNative => "rust_native",
+            };
+            assert!(!label.is_empty(), "variant label must be non-empty");
+        }
     }
 
-    // REQ-PLUMB-002: no behavioral change — both modes produce identical output
     #[test]
-    fn python_compat_and_rust_native_same_output() {
+    fn python_compat_and_rust_native_same_subspace() {
+        // Sign-agnostic subspace equivalence check: each embedding column may be
+        // sign-flipped independently, so compare |cos θ| ≈ 1 per column pair.
         let g = CsMatI::<f32, u32, usize>::new(
             (4, 4),
             vec![0usize, 1, 3, 5, 6],
@@ -283,11 +286,22 @@ mod config_tests {
             SpectralInitConfig { compute_mode: ComputeMode::RustNative },
         )
         .expect("RustNative should succeed");
-        // Identical outputs because no branching exists yet
-        assert_eq!(r1, r2);
+        assert_eq!(r1.shape(), r2.shape());
+        let n_cols = r1.shape()[1];
+        for col in 0..n_cols {
+            let c1 = r1.column(col);
+            let c2 = r2.column(col);
+            let dot: f32 = c1.iter().zip(c2.iter()).map(|(a, b)| a * b).sum();
+            let norm1: f32 = c1.iter().map(|x| x * x).sum::<f32>().sqrt();
+            let norm2: f32 = c2.iter().map(|x| x * x).sum::<f32>().sqrt();
+            let cos_sim = dot.abs() / (norm1 * norm2).max(f32::EPSILON);
+            assert!(
+                cos_sim > 0.999,
+                "column {col}: |cos θ| = {cos_sim:.6}, expected ≈ 1.0 (same subspace up to sign)"
+            );
+        }
     }
 
-    // REQ-API-003: config compiles with zero boilerplate using Default
     #[test]
     fn spectral_init_with_default_config_compiles_and_runs() {
         let g = CsMatI::<f32, u32, usize>::new(
