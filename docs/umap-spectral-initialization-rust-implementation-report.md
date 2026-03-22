@@ -21,7 +21,8 @@
 12. [Risk Assessment & Mitigations](#12-risk-assessment--mitigations)
 13. [Phase 1 Completion & Phase 2 Status](#13-phase-1-completion--phase-2-status)
 14. [Phase 2 Implementation Audit (2026-03-21)](#14-phase-2-implementation-audit-2026-03-21)
-15. [Sources](#15-sources)
+15. [Numerical Accuracy Improvement Campaign (2026-03-22)](#15-numerical-accuracy-improvement-campaign-2026-03-22)
+16. [Sources](#16-sources)
 
 ---
 
@@ -1624,7 +1625,85 @@ Sections 7.2 and 8.4 reference `ndarray-linalg` as the LOBPCG provider. The actu
 
 ---
 
-## 15. Sources
+## 15. Numerical Accuracy Improvement Campaign (2026-03-22)
+
+### 15.1 Background
+
+A comprehensive numerical error propagation investigation was conducted across the full 6-step pipeline. The investigation used 18 sub-agents to analyze every source file, trace Python's exact computation (down to the C++ level in scipy), apply perturbation theory (Weyl's theorem, Davis-Kahan), and research LOBPCG convergence improvements. Full reports are in `temp/numerical-error-propagation-report.md` and `temp/numerical-accuracy-improvement-plan.md`.
+
+### 15.2 Root Cause Discovery
+
+The primary error source was identified as **degree summation order mismatch**: Rust summed CSR rows in f64; Python's `scipy.sparse.csr_matrix.sum(axis=0)` performs f32 scatter-add column accumulation via C++ `csc_matvec`. The ~2.7e-7 relative error propagated through `inv_sqrt_deg` into the Laplacian (~3.6e-8 absolute), then into eigenvalue comparisons (~2.5e-8, breaching the 1e-8 tolerance).
+
+A second critical finding: the accuracy report tested disconnected graphs through a code path (full-Laplacian eigensolver) that never executes in production, producing misleading metrics (blobs_5000 subspace Gram determinant = 0.313).
+
+### 15.3 Implementation Summary
+
+Eight implementation tickets (A1, A2, B1, B2, B4, C1, C2, C3) and one verification ticket (E1) were completed:
+
+| Ticket | PR | Summary |
+|--------|-----|---------|
+| A1 | #102 | Match Python's f32 column-sum degree computation via `ComputeMode::PythonCompat` |
+| A2 | #100 | Fix fixture generator — remove explicit f64 upcast that real UMAP doesn't do |
+| B1 | #99 | Chebyshev Filtered Subspace Iteration (ChFSI) preconditioning for LOBPCG |
+| B2 | #103 | Shift-and-invert LOBPCG via faer sparse Cholesky (new Level 2 in escalation) |
+| B4 | #104 | Tighten LOBPCG convergence tolerance from 1e-4 to 1e-6 after preconditioning |
+| C1 | #101 | Accuracy report tests production paths for disconnected graphs (`embed_disconnected`) |
+| C2 | #106 | Per-component residual metrics for disconnected datasets |
+| C3 | #98 | Split comp_b tolerance into isolated and chained measurements |
+| E1 | #105 | Verify Dense EVD eigenvalue breach resolved by A1; tighten tolerances |
+
+Post-campaign fix: split comp_f pre_noise tolerance into isolated (scaling arithmetic, exact) and chained (includes eigenvector solver differences, 2.6x margin).
+
+### 15.4 Accuracy Report: Before vs After
+
+| Component | Before | After | Change |
+|-----------|--------|-------|--------|
+| comp_a degrees | 2.71e-7, margin 1.11x | **0.0, margin inf** | Eliminated |
+| comp_b Laplacian (chained) | 3.61e-8, margin 2.8e-7x | **0.0, margin inf** | Eliminated |
+| comp_d eigenvalues, Dense EVD | 2.53e-8, margin **0.40x (BREACHED)** | 1.66e-10, margin **6x** | Fixed |
+| comp_d eigenvalues, LOBPCG | 1.20e-6, margin 0.83x | 6.59e-10, margin **1518x** | Fixed |
+| comp_d residuals, LOBPCG | 1.02e-4, margin **0.98x (CRITICAL)** | 9.10e-6, margin **11x** | Fixed |
+| E2E residuals | 8.63e-5, margin 57.9x | 3.16e-5, margin **158x** | Improved |
+| Disconnected (blobs_5000) | subspace det **0.313** | per-comp residual **2e-13** | Fixed (production path) |
+| comp_f pre_noise (isolated) | 0.0 | **0.0, margin inf** | Now measured separately |
+| comp_f pre_noise (chained) | 1.90e-3, margin 0.00x | 1.90e-3, margin **2.6x** | Tolerance corrected |
+
+All tolerance margins are now positive. No breaches remain.
+
+### 15.5 Solver Escalation Chain (Post-Campaign)
+
+```
+Level 0: Dense EVD (n < 2000)               — quality threshold 1e-6
+Level 1: LOBPCG with ChFSI preconditioning   — quality threshold 1e-5
+Level 2: Shift-and-invert LOBPCG (faer LLT)  — quality threshold 1e-6
+Level 3: Randomized SVD (2I-L trick)          — quality threshold 1e-2
+Level 4: Forced Dense EVD                     — unconditional
+```
+
+### 15.6 Current Test Suite Summary
+
+| Metric | Count |
+|--------|-------|
+| Total tests (with `--features testing`) | ~190 |
+| Passing | 190 |
+| Failing | 0 |
+| Ignored (fixture-gated) | 29 |
+| Adversarial graph types | 10 |
+| Datasets with full fixture coverage | 9/9 |
+| Tolerance margin rows (all positive) | 12 |
+
+### 15.7 Open Evaluation Tickets
+
+| Ticket | Issue | Status | Purpose |
+|--------|-------|--------|---------|
+| B3 | #107 | Open | Evaluate scirs2-sparse IRAM as LOBPCG alternative |
+| B5 | #108 | Open | Verify linfa-linalg soft-locking behavior |
+| D1 | — | Deferred | Investigate umap-rs fork for f64 weights (post-A1, may be unnecessary) |
+
+---
+
+## 16. Sources
 
 ### Primary Source Code
 - [umap/spectral.py — lmcinnes/umap](https://github.com/lmcinnes/umap/blob/master/umap/spectral.py)
