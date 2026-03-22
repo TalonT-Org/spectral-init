@@ -74,7 +74,7 @@ pub fn solve_eigenproblem_pub(
 ) -> ((ndarray::Array1<f64>, ndarray::Array2<f64>), u8) {
     let n = laplacian.rows();
     let sqrt_deg = ndarray::Array1::ones(n);
-    crate::solvers::solve_eigenproblem(laplacian, n_components, seed, &sqrt_deg, ComputeMode::PythonCompat)
+    crate::solvers::solve_eigenproblem(laplacian, n_components, seed, &sqrt_deg)
 }
 
 #[cfg(feature = "testing")]
@@ -159,7 +159,7 @@ pub fn spectral_init(
     let lap = laplacian::build_normalized_laplacian(graph, &inv_sqrt_deg);
 
     // ── Component D: eigensolver escalation chain ─────────────────────────
-    let ((eigenvalues, eigenvectors), _) = solvers::solve_eigenproblem(&lap, n_components, seed, &sqrt_deg, config.compute_mode);
+    let ((eigenvalues, eigenvectors), _) = solvers::solve_eigenproblem(&lap, n_components, seed, &sqrt_deg);
 
     // ── Component E: eigenvector selection ────────────────────────────────
     let selected = selection::select_eigenvectors(
