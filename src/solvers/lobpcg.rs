@@ -517,7 +517,8 @@ mod tests {
 
         // Identity matrix: exact eigenvectors of a diagonal matrix are standard basis vectors.
         let eigvecs = ndarray::Array2::eye(4);
-        let (eigenvalues, eigvecs_out) = rayleigh_ritz_refine(&op, eigvecs);
+        let (eigenvalues, eigvecs_out) = rayleigh_ritz_refine(&op, eigvecs)
+            .expect("T-RR-1: rayleigh_ritz_refine returned None");
 
         for (i, &expected) in diag.iter().enumerate() {
             assert!(
@@ -532,6 +533,41 @@ mod tests {
         }
     }
 
+    // T-RR-1b: rayleigh_ritz_refine with perturbed (near-) eigenvectors exercises the rotation step.
+    #[test]
+    fn rayleigh_ritz_refine_perturbed_eigenvectors() {
+        // diag = [0.1, 0.5] — well-separated so RR can distinguish them from a mixed subspace.
+        let diag = [0.1_f64, 0.5];
+        let mat = diagonal_csr(&diag);
+        let op = CsrOperator(&mat);
+
+        // Perturbed orthonormal basis: columns are not aligned with eigenvectors.
+        // Uses a 30-degree rotation so the Gram matrix is non-diagonal and the rotation step
+        // V != I, actually exercising the core RR step (X_refined = X * V).
+        let c = (30.0_f64.to_radians()).cos();
+        let s = (30.0_f64.to_radians()).sin();
+        let eigvecs = ndarray::array![[c, s], [s, -c]]; // orthonormal but off-axis
+
+        let (eigenvalues, eigvecs_out) = rayleigh_ritz_refine(&op, eigvecs)
+            .expect("T-RR-1b: rayleigh_ritz_refine returned None");
+
+        // Rayleigh-Ritz must recover the true eigenvalues from the mixed subspace.
+        assert!(
+            (eigenvalues[0] - 0.1).abs() < 1e-12,
+            "T-RR-1b: eigenvalue[0] expected 0.1, got {}",
+            eigenvalues[0]
+        );
+        assert!(
+            (eigenvalues[1] - 0.5).abs() < 1e-12,
+            "T-RR-1b: eigenvalue[1] expected 0.5, got {}",
+            eigenvalues[1]
+        );
+        for i in 0..2 {
+            let r = residual(&op, eigvecs_out.column(i), eigenvalues[i]);
+            assert!(r < 1e-12, "T-RR-1b: residual for eigenpair {i}: {r} >= 1e-12");
+        }
+    }
+
     // T-RR-2: rayleigh_ritz_refine recovers eigenvalues from a rotated basis.
     #[test]
     fn rayleigh_ritz_refine_rotated_basis_recovers_eigenvalues() {
@@ -542,7 +578,8 @@ mod tests {
         // 45-degree rotated orthonormal basis
         let s = 1.0_f64 / 2.0_f64.sqrt();
         let eigvecs = ndarray::array![[s, s], [s, -s]];
-        let (eigenvalues, eigvecs_out) = rayleigh_ritz_refine(&op, eigvecs);
+        let (eigenvalues, eigvecs_out) = rayleigh_ritz_refine(&op, eigvecs)
+            .expect("T-RR-2: rayleigh_ritz_refine returned None");
 
         assert!(
             (eigenvalues[0] - 1.0).abs() < 1e-12,
@@ -560,7 +597,8 @@ mod tests {
         }
     }
 
-    // T-RR-3: end-to-end lobpcg_solve (with RR) achieves tight residuals on a diagonal matrix.
+    // T-RR-3: end-to-end lobpcg_solve (with RR) achieves tight residuals on a diagonal matrix
+    // and returns eigenvalues matching the smallest true Laplacian eigenvalues.
     #[test]
     fn lobpcg_solve_rr_achieves_tight_residuals() {
         // diag = [0.25, 0.5, ..., 2.0] (8 entries, starting at 0.25, step 0.25)
@@ -571,6 +609,16 @@ mod tests {
         let result = lobpcg_solve(&op, 3, 42, false, &Array1::ones(8));
         assert!(result.is_some(), "T-RR-3: lobpcg_solve returned None");
         let (eigvals, eigvecs) = result.unwrap();
+
+        // Eigenvalues must be the 4 smallest true Laplacian eigenvalues (k = n_components+1 = 4).
+        let expected = [0.25_f64, 0.5, 0.75, 1.0];
+        for (i, &exp) in expected.iter().enumerate() {
+            assert!(
+                (eigvals[i] - exp).abs() < 1e-6,
+                "T-RR-3: eigvals[{i}] expected {exp}, got {} (RR eigenvalue accuracy)",
+                eigvals[i]
+            );
+        }
 
         for i in 0..eigvals.len() {
             let r = residual(&op, eigvecs.column(i), eigvals[i]);
