@@ -4,6 +4,8 @@
 extern crate ndarray16;
 use ndarray16 as nd16;
 
+use faer::{Mat as FaerMat, Side};
+use faer::linalg::solvers::SelfAdjointEigen;
 use linfa_linalg::lobpcg::{lobpcg, Order};
 use ndarray::{Array1, Array2};
 use rand::rngs::StdRng;
@@ -117,6 +119,48 @@ fn chebyshev_precond(
         y = y_new;
     }
     y
+}
+
+/// Final exact Rayleigh-Ritz refinement applied after LOBPCG convergence.
+///
+/// Given the LOBPCG output eigenvectors X (n × k) and the true Laplacian operator op:
+/// 1. Computes AX = L * X via sparse matvec (true Laplacian, no regularization shift).
+/// 2. Forms the dense Gram matrix G = X^T * AX of size (k × k).
+/// 3. Solves the dense symmetric eigenproblem on G via faer SelfAdjointEigen.
+/// 4. Rotates eigenvectors: X_refined = X * V (V = eigenvectors of G).
+/// 5. Returns (eigenvalues_from_gram, X_refined).
+///
+/// Eigenvalues from the Gram solve are exact Rayleigh quotients of the true Laplacian,
+/// independent of any regularization shift applied during LOBPCG iteration.
+fn rayleigh_ritz_refine<O: LinearOperator>(op: &O, eigvecs: Array2<f64>) -> EigenResult {
+    let n = eigvecs.nrows();
+    let k = eigvecs.ncols();
+
+    // Step 1: AX = L * X (sparse matvec with true Laplacian)
+    let mut ax = Array2::zeros((n, k));
+    op.apply(eigvecs.view(), &mut ax);
+
+    // Step 2: G = X^T * AX (k×k dense Gram matrix)
+    let gram = eigvecs.t().dot(&ax);
+
+    // Step 3: Dense symmetric eigenproblem on G via faer SelfAdjointEigen
+    let faer_gram = FaerMat::<f64>::from_fn(k, k, |i, j| gram[[i, j]]);
+    let eigen = SelfAdjointEigen::new(faer_gram.as_ref(), Side::Lower)
+        .expect("rayleigh_ritz_refine: SelfAdjointEigen failed on Gram matrix (k×k)");
+
+    // Step 4: Extract eigenvalues (ascending) and rotation matrix V.
+    // eigen.S() iterates in ascending order; use for_each matching rsvd.rs pattern.
+    let mut ev_vec: Vec<f64> = Vec::with_capacity(k);
+    eigen.S().for_each(|x| ev_vec.push(*x));
+    let eigenvalues = Array1::from_vec(ev_vec);
+    let v_rot = {
+        let u = eigen.U().to_owned();
+        Array2::from_shape_fn((k, k), |(i, j)| u.col_as_slice(j)[i])
+    };
+
+    // Step 5: Rotate X_refined = X * V
+    let eigvecs_refined = eigvecs.dot(&v_rot);
+    (eigenvalues, eigvecs_refined)
 }
 
 /// LOBPCG iterative eigensolver (Levels 1 and 2).
@@ -253,16 +297,11 @@ pub fn lobpcg_solve<O: LinearOperator>(
         Err((_, None)) => None,
     };
 
-    // Level 2 solves the shifted problem (L + ε·I)·v = λ_shifted·v.
-    // Subtract the shift to recover true Laplacian eigenvalues: λ_true = λ_shifted - ε.
-    if regularize {
-        result_opt.map(|(mut eigvals, eigvecs)| {
-            eigvals.mapv_inplace(|v| v - REGULARIZATION_EPS);
-            (eigvals, eigvecs)
-        })
-    } else {
-        result_opt
-    }
+    // Apply Rayleigh-Ritz refinement: recompute eigenvalues as exact Rayleigh quotients
+    // of the true Laplacian (G = X^T * L * X), then rotate eigenvectors.
+    // This replaces LOBPCG eigenvalues (including any regularization shift) with exact
+    // values — no separate REGULARIZATION_EPS subtraction is needed.
+    result_opt.map(|(_, eigvecs)| rayleigh_ritz_refine(op, eigvecs))
 }
 
 // ─── Unit Tests ──────────────────────────────────────────────────────────────
@@ -469,6 +508,76 @@ mod tests {
                 expected[i],
                 result[[i, 0]]
             );
+        }
+    }
+
+    // T-RR-1: rayleigh_ritz_refine with exact eigenvectors of a diagonal matrix.
+    #[test]
+    fn rayleigh_ritz_refine_exact_eigenvectors_diagonal() {
+        let diag = [0.0_f64, 0.1, 0.3, 0.7];
+        let mat = diagonal_csr(&diag);
+        let op = CsrOperator(&mat);
+
+        // Identity matrix: exact eigenvectors of a diagonal matrix are standard basis vectors.
+        let eigvecs = ndarray::Array2::eye(4);
+        let (eigenvalues, eigvecs_out) = rayleigh_ritz_refine(&op, eigvecs);
+
+        for (i, &expected) in diag.iter().enumerate() {
+            assert!(
+                (eigenvalues[i] - expected).abs() < 1e-12,
+                "T-RR-1: eigenvalue[{i}] expected {expected}, got {}",
+                eigenvalues[i]
+            );
+        }
+        for i in 0..4 {
+            let r = residual(&op, eigvecs_out.column(i), eigenvalues[i]);
+            assert!(r < 1e-12, "T-RR-1: residual for eigenpair {i}: {r} >= 1e-12");
+        }
+    }
+
+    // T-RR-2: rayleigh_ritz_refine recovers eigenvalues from a rotated basis.
+    #[test]
+    fn rayleigh_ritz_refine_rotated_basis_recovers_eigenvalues() {
+        let diag = [1.0_f64, 4.0];
+        let mat = diagonal_csr(&diag);
+        let op = CsrOperator(&mat);
+
+        // 45-degree rotated orthonormal basis
+        let s = 1.0_f64 / 2.0_f64.sqrt();
+        let eigvecs = ndarray::array![[s, s], [s, -s]];
+        let (eigenvalues, eigvecs_out) = rayleigh_ritz_refine(&op, eigvecs);
+
+        assert!(
+            (eigenvalues[0] - 1.0).abs() < 1e-12,
+            "T-RR-2: eigenvalue[0] expected 1.0, got {}",
+            eigenvalues[0]
+        );
+        assert!(
+            (eigenvalues[1] - 4.0).abs() < 1e-12,
+            "T-RR-2: eigenvalue[1] expected 4.0, got {}",
+            eigenvalues[1]
+        );
+        for i in 0..2 {
+            let r = residual(&op, eigvecs_out.column(i), eigenvalues[i]);
+            assert!(r < 1e-12, "T-RR-2: residual for eigenpair {i}: {r} >= 1e-12");
+        }
+    }
+
+    // T-RR-3: end-to-end lobpcg_solve (with RR) achieves tight residuals on a diagonal matrix.
+    #[test]
+    fn lobpcg_solve_rr_achieves_tight_residuals() {
+        // diag = [0.25, 0.5, ..., 2.0] (8 entries, starting at 0.25, step 0.25)
+        let diag: Vec<f64> = (1..=8).map(|i| i as f64 * 0.25).collect();
+        let mat = diagonal_csr(&diag);
+        let op = CsrOperator(&mat);
+
+        let result = lobpcg_solve(&op, 3, 42, false, &Array1::ones(8));
+        assert!(result.is_some(), "T-RR-3: lobpcg_solve returned None");
+        let (eigvals, eigvecs) = result.unwrap();
+
+        for i in 0..eigvals.len() {
+            let r = residual(&op, eigvecs.column(i), eigvals[i]);
+            assert!(r < 1e-8, "T-RR-3: residual for eigenpair {i}: {r} >= 1e-8");
         }
     }
 
