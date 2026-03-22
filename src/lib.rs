@@ -81,6 +81,28 @@ pub fn solve_eigenproblem_pub(
 #[doc(hidden)]
 pub use crate::solvers::lobpcg::lobpcg_solve;
 
+#[cfg(feature = "testing")]
+#[doc(hidden)]
+pub fn embed_disconnected(
+    graph: &sprs::CsMatI<f32, u32, usize>,
+    component_labels: &[usize],
+    n_conn_components: usize,
+    n_embedding_dims: usize,
+    seed: u64,
+    data: Option<ndarray::ArrayView2<'_, f32>>,
+    compute_mode: ComputeMode,
+) -> Result<ndarray::Array2<f64>, SpectralError> {
+    crate::multi_component::embed_disconnected(
+        graph,
+        component_labels,
+        n_conn_components,
+        n_embedding_dims,
+        seed,
+        data,
+        compute_mode,
+    )
+}
+
 use ndarray::{Array2, ArrayView2};
 use sprs::CsMatI;
 
