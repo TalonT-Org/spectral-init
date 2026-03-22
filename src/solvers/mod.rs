@@ -12,6 +12,7 @@ pub use dense::dense_evd;
 
 use ndarray::{Array1, Array2};
 use sprs::CsMatI;
+use crate::config::ComputeMode;
 use crate::operator::CsrOperator;
 
 /// Eigendecomposition result: (eigenvalues shape [k], eigenvectors shape [n, k]).
@@ -70,6 +71,7 @@ pub(crate) fn solve_eigenproblem(
     n_components: usize,
     seed: u64,
     sqrt_deg: &ndarray::Array1<f64>,
+    _compute_mode: ComputeMode,  // unused until A1
 ) -> (EigenResult, u8) {
     let n = laplacian.rows();
     let op = CsrOperator(laplacian);
@@ -202,7 +204,7 @@ mod tests {
     #[test]
     fn solve_eigenproblem_eigenvalues_nonneg_and_sorted() {
         let laplacian = path_graph_laplacian_6();
-        let ((eigvals, _), _) = solve_eigenproblem(&laplacian, 2, 42, &ndarray::Array1::ones(6));
+        let ((eigvals, _), _) = solve_eigenproblem(&laplacian, 2, 42, &ndarray::Array1::ones(6), ComputeMode::PythonCompat);
 
         // All eigenvalues must be non-negative
         for &v in eigvals.iter() {
@@ -222,7 +224,7 @@ mod tests {
     #[test]
     fn solve_eigenproblem_returns_k_plus_one_pairs() {
         // 6-node path graph (n=6 < 2000 → Level 0 dense EVD)
-        let ((eigs, vecs), _) = solve_eigenproblem(&path_graph_laplacian_6(), 2, 42, &ndarray::Array1::ones(6));
+        let ((eigs, vecs), _) = solve_eigenproblem(&path_graph_laplacian_6(), 2, 42, &ndarray::Array1::ones(6), ComputeMode::PythonCompat);
         assert_eq!(eigs.len(), 3, "expected n_components+1=3 eigenvalues");
         assert_eq!(vecs.shape(), &[6, 3], "expected [n, n_components+1] = [6, 3] eigenvectors");
     }
@@ -267,7 +269,7 @@ mod tests {
         let n_components = 2;
         let laplacian = diagonal_laplacian(n);
 
-        let ((eigvals, eigvecs), _) = solve_eigenproblem(&laplacian, n_components, 42, &ndarray::Array1::ones(n));
+        let ((eigvals, eigvecs), _) = solve_eigenproblem(&laplacian, n_components, 42, &ndarray::Array1::ones(n), ComputeMode::PythonCompat);
 
         assert_eq!(eigvals.len(), n_components + 1, "expected n_components+1 eigenvalues");
         assert_eq!(eigvecs.shape(), &[n, n_components + 1], "expected [n, n_components+1] shape");
@@ -371,7 +373,7 @@ mod tests {
     fn level0_result_passes_dense_evd_quality_gate() {
         // 6-node path graph, n=6 < 2000 → Level 0 dense EVD.
         let laplacian = path_graph_laplacian_6();
-        let ((eigs, vecs), _) = solve_eigenproblem(&laplacian, 2, 42, &ndarray::Array1::ones(6));
+        let ((eigs, vecs), _) = solve_eigenproblem(&laplacian, 2, 42, &ndarray::Array1::ones(6), ComputeMode::PythonCompat);
         let residual = max_eigenpair_residual(&laplacian, &eigs, &vecs);
         assert!(
             residual < DENSE_EVD_QUALITY_THRESHOLD,

@@ -5,7 +5,7 @@
 
 use ndarray::{Array1, Array2, Axis, s};
 use sprs::CsMatI;
-use spectral_init::{spectral_init, SpectralError};
+use spectral_init::{spectral_init, SpectralError, SpectralInitConfig};
 
 // ─── Graph builder helpers ─────────────────────────────────────────────────────
 
@@ -321,7 +321,7 @@ fn max_intra_1d_spread(emb: &Array2<f32>, range: std::ops::Range<usize>, dim: us
 #[test]
 fn test_barbell_valid_embedding() {
     let graph = make_barbell(20); // n = 40
-    let result = spectral_init(&graph, 2, 42, None).expect("barbell should not fail");
+    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default()).expect("barbell should not fail");
     assert_eq!(result.shape(), &[40, 2]);
     assert!(
         result.iter().all(|v| v.is_finite()),
@@ -332,7 +332,7 @@ fn test_barbell_valid_embedding() {
 #[test]
 fn test_path_valid_embedding() {
     let graph = make_path(100); // n = 100
-    let result = spectral_init(&graph, 2, 42, None).expect("path should not fail");
+    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default()).expect("path should not fail");
     assert_eq!(result.shape(), &[100, 2]);
     assert!(
         result.iter().all(|v| v.is_finite()),
@@ -343,7 +343,7 @@ fn test_path_valid_embedding() {
 #[test]
 fn test_star_valid_embedding() {
     let graph = make_star(50); // n = 50
-    let result = spectral_init(&graph, 2, 42, None).expect("star should not fail");
+    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default()).expect("star should not fail");
     assert_eq!(result.shape(), &[50, 2]);
     assert!(
         result.iter().all(|v| v.is_finite()),
@@ -355,7 +355,7 @@ fn test_star_valid_embedding() {
 fn test_epsilon_bridge_valid_embedding() {
     let graph = make_epsilon_bridge(20, 1e-6f32); // n = 40
     let result =
-        spectral_init(&graph, 2, 42, None).expect("epsilon-bridge should not fail");
+        spectral_init(&graph, 2, 42, None, SpectralInitConfig::default()).expect("epsilon-bridge should not fail");
     assert_eq!(result.shape(), &[40, 2]);
     assert!(
         result.iter().all(|v| v.is_finite()),
@@ -367,7 +367,7 @@ fn test_epsilon_bridge_valid_embedding() {
 fn test_complete_bipartite_valid_embedding() {
     let graph = make_complete_bipartite(10, 10); // n = 20
     let result =
-        spectral_init(&graph, 2, 42, None).expect("complete bipartite should not fail");
+        spectral_init(&graph, 2, 42, None, SpectralInitConfig::default()).expect("complete bipartite should not fail");
     assert_eq!(result.shape(), &[20, 2]);
     assert!(
         result.iter().all(|v| v.is_finite()),
@@ -378,7 +378,7 @@ fn test_complete_bipartite_valid_embedding() {
 #[test]
 fn test_ring_valid_embedding() {
     let graph = make_ring(100); // n = 100
-    let result = spectral_init(&graph, 2, 42, None).expect("ring should not fail");
+    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default()).expect("ring should not fail");
     assert_eq!(result.shape(), &[100, 2]);
     assert!(
         result.iter().all(|v| v.is_finite()),
@@ -389,7 +389,7 @@ fn test_ring_valid_embedding() {
 #[test]
 fn test_weighted_exponential_valid_embedding() {
     let graph = make_weighted_exponential_path(100); // n = 100
-    let result = spectral_init(&graph, 2, 42, None)
+    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
         .expect("weighted exponential path should not fail");
     assert_eq!(result.shape(), &[100, 2]);
     assert!(
@@ -401,7 +401,7 @@ fn test_weighted_exponential_valid_embedding() {
 #[test]
 fn test_single_edge_returns_too_few_nodes() {
     let graph = make_single_edge(); // n = 2, n_components = 2: 2 <= 2 → TooFewNodes
-    let result = spectral_init(&graph, 2, 42, None);
+    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default());
     assert!(
         matches!(result, Err(SpectralError::TooFewNodes { n: 2, dims: 2 })),
         "expected TooFewNodes error, got: {:?}",
@@ -412,7 +412,7 @@ fn test_single_edge_returns_too_few_nodes() {
 #[test]
 fn test_complete_k20_valid_embedding() {
     let graph = make_complete(20); // n = 20
-    let result = spectral_init(&graph, 2, 42, None).expect("K_20 should not fail");
+    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default()).expect("K_20 should not fail");
     assert_eq!(result.shape(), &[20, 2]);
     assert!(
         result.iter().all(|v| v.is_finite()),
@@ -423,7 +423,7 @@ fn test_complete_k20_valid_embedding() {
 #[test]
 fn test_lollipop_valid_embedding() {
     let graph = make_lollipop(10, 20); // n = 30
-    let result = spectral_init(&graph, 2, 42, None).expect("lollipop should not fail");
+    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default()).expect("lollipop should not fail");
     assert_eq!(result.shape(), &[30, 2]);
     assert!(
         result.iter().all(|v| v.is_finite()),
@@ -436,7 +436,7 @@ fn test_lollipop_valid_embedding() {
 #[test]
 fn test_barbell_separates_communities() {
     let graph = make_barbell(20); // n=40; clique_0=nodes[0..20], clique_1=nodes[20..40]
-    let emb = spectral_init(&graph, 2, 42, None).unwrap();
+    let emb = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default()).unwrap();
 
     // The Fiedler vector (dim 0) encodes community membership: all nodes in each K_20
     // clique have nearly identical Fiedler values, so separation is measured along dim 0.
@@ -459,7 +459,7 @@ fn test_barbell_separates_communities() {
 #[test]
 fn test_epsilon_bridge_separates_communities() {
     let graph = make_epsilon_bridge(20, 1e-6f32); // n=40; same clique layout
-    let emb = spectral_init(&graph, 2, 42, None).unwrap();
+    let emb = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default()).unwrap();
 
     // Same rationale as test_barbell_separates_communities: compare along the Fiedler
     // direction (dim 0) where the near-zero bridge weight still produces opposite-sign
@@ -483,7 +483,7 @@ fn test_epsilon_bridge_separates_communities() {
 #[test]
 fn test_star_coordinate_stability() {
     let graph = make_star(50);
-    let emb = spectral_init(&graph, 2, 42, None).unwrap();
+    let emb = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default()).unwrap();
     let max_abs = emb.iter().map(|v| v.abs()).fold(0.0f32, f32::max);
     assert!(
         max_abs < 20.0,
@@ -494,7 +494,7 @@ fn test_star_coordinate_stability() {
 #[test]
 fn test_complete_bipartite_coordinate_stability() {
     let graph = make_complete_bipartite(10, 10);
-    let emb = spectral_init(&graph, 2, 42, None).unwrap();
+    let emb = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default()).unwrap();
     let max_abs = emb.iter().map(|v| v.abs()).fold(0.0f32, f32::max);
     assert!(
         max_abs < 20.0,

@@ -41,12 +41,11 @@ pub fn build_normalized_laplacian(
     // Off-diagonal entries: L[i,j] = -inv_sqrt_deg[i] * W[i,j] * inv_sqrt_deg[j]
     for (row_idx, row_vec) in graph.outer_iterator().enumerate() {
         for (col_idx, &val) in row_vec.iter() {
-            let col = col_idx as usize;
-            if row_idx != col {
+            if row_idx != col_idx {
                 tri.add_triplet(
                     row_idx,
-                    col,
-                    -inv_sqrt_deg[row_idx] * (val as f64) * inv_sqrt_deg[col],
+                    col_idx,
+                    -inv_sqrt_deg[row_idx] * (val as f64) * inv_sqrt_deg[col_idx],
                 );
             }
         }
