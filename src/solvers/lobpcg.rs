@@ -324,23 +324,72 @@ pub fn lobpcg_solve<O: LinearOperator>(
         };
 
         // ── Extract eigenpairs if rnorms are acceptable ──────────────────────
-        let raw_opt = match lobpcg_result {
-            Ok(r) => Some(extract(r)),
-            Err((_, Some(r))) => {
-                if r.rnorm.iter().all(|&norm| norm < LOBPCG_ACCEPT_TOL) {
-                    Some(extract(r))
-                } else {
-                    None
+        // When rnorms fail the gate but partial eigvecs exist, preserve them as a
+        // warm-restart seed (comment 2971872705): a partially-converged subspace is
+        // better than a cold random start.
+        let (raw_opt, partial_seed): (Option<EigenResult>, Option<Array2<f64>>) =
+            match lobpcg_result {
+                Ok(r) => (Some(extract(r)), None),
+                Err((_, Some(r))) => {
+                    if r.rnorm.iter().all(|&norm| norm < LOBPCG_ACCEPT_TOL) {
+                        (Some(extract(r)), None)
+                    } else {
+                        let seed_vecs = from_nd16_array2(r.eigvecs);
+                        (None, Some(seed_vecs))
+                    }
+                }
+                Err((_, None)) => (None, None),
+            };
+
+        // If no primary result is available, attempt a warm restart with partial eigvecs
+        // before giving up (addresses the silent-discard bug in comment 2971872705).
+        if raw_opt.is_none() {
+            if restart < MAX_WARM_RESTARTS {
+                if let Some(seed) = partial_seed {
+                    log::debug!(
+                        "[lobpcg] rnorm gate failed at restart {restart}/{MAX_WARM_RESTARTS}; \
+                         seeding next restart with partial eigvecs"
+                    );
+                    x_init_opt = Some(to_nd16_array2(seed));
+                    continue;
                 }
             }
-            Err((_, None)) => None,
-        };
+            // No eigvecs to seed the next restart, or restarts exhausted:
+            // returning last_result is a partial fallback if any prior restart succeeded,
+            // or None (true escalation) if this is the first iteration.
+            log::debug!(
+                "[lobpcg] no usable result at restart {restart}/{MAX_WARM_RESTARTS}; \
+                 last_result is {}; breaking",
+                if last_result.is_some() { "Some (partial fallback)" } else { "None (escalating)" }
+            );
+            break;
+        }
 
         // ── Rayleigh-Ritz refinement ─────────────────────────────────────────
-        let refined_opt = raw_opt.and_then(|(_, eigvecs)| rayleigh_ritz_refine(op, eigvecs));
+        let (_, raw_eigvecs) = raw_opt.unwrap();
+        let refined_opt = rayleigh_ritz_refine(op, raw_eigvecs.clone());
 
         match refined_opt {
-            None => break, // LOBPCG produced no usable result; escalate
+            None => {
+                // RR failed (degenerate Gram matrix). Try raw eigvecs as warm-restart seed
+                // before giving up (comment 2971872707): asymmetric with the unconverged path
+                // which does reuse eigvecs for the next restart.
+                if restart < MAX_WARM_RESTARTS {
+                    log::debug!(
+                        "[lobpcg] Rayleigh-Ritz failed at restart {restart}/{MAX_WARM_RESTARTS}; \
+                         seeding next restart with raw eigvecs"
+                    );
+                    x_init_opt = Some(to_nd16_array2(raw_eigvecs));
+                    continue;
+                }
+                // Restarts exhausted: same dual-outcome break as the rnorm-fail path above.
+                log::debug!(
+                    "[lobpcg] Rayleigh-Ritz failed at restart {restart}/{MAX_WARM_RESTARTS} \
+                     (final); last_result is {}; breaking",
+                    if last_result.is_some() { "Some (partial fallback)" } else { "None (escalating)" }
+                );
+                break;
+            }
             Some(result) => {
                 // ── Unconvergence detection (REQ-UCD-001) ──────────────────
                 let residuals = per_vector_residuals(op, &result.0, &result.1);
