@@ -102,3 +102,29 @@ make_lobpcg_tests!(
     "near_dupes_100",
     100
 );
+
+#[test]
+fn lobpcg_blobs_2000_residual_below_1e5_with_chebyshev() {
+    let dataset = "blobs_connected_2000";
+    let fixture_dir = common::fixture_path(dataset, "");
+    let lap_path = fixture_dir.join("comp_b_laplacian.npz");
+
+    let laplacian = common::load_sparse_csr(&lap_path);
+    let op = CsrOperator(&laplacian);
+
+    let deg_path = fixture_dir.join("comp_a_degrees.npz");
+    let sqrt_deg: ndarray::Array1<f64> = common::load_dense(&deg_path, "sqrt_deg");
+
+    let result = lobpcg_solve(&op, 2, 42, false, &sqrt_deg);
+    assert!(result.is_some(), "lobpcg_solve returned None on {dataset}");
+    let (eigvals, eigvecs) = result.unwrap();
+
+    // All k=3 eigenpairs must have residual < 1e-5 (REQ-PERF-001).
+    for i in 0..eigvals.len() {
+        let residual = common::eigenpair_residual(&op, eigvecs.column(i), eigvals[i]);
+        assert!(
+            residual < 1e-5,
+            "dataset={dataset}, residual for eigenpair {i}: {residual} >= 1e-5 (Chebyshev preconditioning should achieve < 1e-5)"
+        );
+    }
+}
