@@ -45,6 +45,7 @@ struct DatasetMetrics {
 struct DisconnectedPathMetrics {
     n_components: usize,
     per_comp_max_residual: Vec<f64>,
+    per_comp_size: Vec<usize>,
     separation_ratio: f64,
     e2e_output_is_finite: bool,
 }
@@ -275,6 +276,7 @@ fn process_disconnected_path(dataset: &str, n_embedding_dims: usize) -> Disconne
     DisconnectedPathMetrics {
         n_components: n_conn_components,
         per_comp_max_residual,
+        per_comp_size: component_members.iter().map(|m| m.len()).collect(),
         separation_ratio,
         e2e_output_is_finite,
     }
@@ -553,6 +555,46 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
         margin_factor: if worst_pn == 0.0 { f64::INFINITY } else { f32_eps / worst_pn },
     });
 
+    // Per-component residuals — Dense EVD tier (component size < 2000)
+    let worst_per_comp_dense = all_metrics.iter()
+        .filter_map(|m| m.disconnected_path.as_ref())
+        .flat_map(|dp| dp.per_comp_max_residual.iter()
+            .zip(dp.per_comp_size.iter())
+            .filter(|(_, &sz)| sz < 2000)
+            .map(|(&r, _)| r))
+        .fold(0.0f64, f64::max);
+    margins.push(ToleranceMarginEntry {
+        component: "per-comp residuals, Dense EVD (comp size < 2000)".to_string(),
+        tolerance: 1e-8,
+        tolerance_type: "absolute",
+        worst_actual: worst_per_comp_dense,
+        margin_factor: if worst_per_comp_dense == 0.0 {
+            f64::INFINITY
+        } else {
+            1e-8 / worst_per_comp_dense
+        },
+    });
+
+    // Per-component residuals — LOBPCG tier (component size >= 2000)
+    let worst_per_comp_lobpcg = all_metrics.iter()
+        .filter_map(|m| m.disconnected_path.as_ref())
+        .flat_map(|dp| dp.per_comp_max_residual.iter()
+            .zip(dp.per_comp_size.iter())
+            .filter(|(_, &sz)| sz >= 2000)
+            .map(|(&r, _)| r))
+        .fold(0.0f64, f64::max);
+    margins.push(ToleranceMarginEntry {
+        component: "per-comp residuals, LOBPCG (comp size >= 2000)".to_string(),
+        tolerance: 1e-4,
+        tolerance_type: "absolute",
+        worst_actual: worst_per_comp_lobpcg,
+        margin_factor: if worst_per_comp_lobpcg == 0.0 {
+            f64::INFINITY
+        } else {
+            1e-4 / worst_per_comp_lobpcg
+        },
+    });
+
     margins
 }
 
@@ -582,6 +624,7 @@ fn to_json(report: &AccuracyReport) -> String {
             "disconnected_path": m.disconnected_path.as_ref().map(|dp| json!({
                 "n_components": dp.n_components,
                 "per_comp_max_residual": dp.per_comp_max_residual,
+                "per_comp_size": dp.per_comp_size,
                 "separation_ratio": dp.separation_ratio,
                 "e2e_output_is_finite": dp.e2e_output_is_finite,
             })),
@@ -790,16 +833,50 @@ fn generate_accuracy_report() {
                 "separation_ratio must be > 1.0 for {}, got {sep_ratio}",
                 entry["dataset"]
             );
-            for residual in dp["per_comp_max_residual"].as_array().unwrap() {
-                let r = residual.as_f64().expect("per_comp_max_residual must be a number");
-                assert!(
-                    r.is_finite(),
-                    "per_comp_max_residual must be finite for {}",
-                    entry["dataset"]
-                );
+            let sizes = dp["per_comp_size"].as_array()
+                .expect("per_comp_size must be present");
+            let residuals = dp["per_comp_max_residual"].as_array()
+                .expect("per_comp_max_residual must be present");
+            assert_eq!(sizes.len(), residuals.len(),
+                "per_comp_size and per_comp_max_residual length mismatch for {}",
+                entry["dataset"]);
+            for (size_val, residual_val) in sizes.iter().zip(residuals.iter()) {
+                let sz = size_val.as_u64().expect("per_comp_size element must be a number") as usize;
+                let r = residual_val.as_f64().expect("per_comp_max_residual element must be a number");
+                assert!(r.is_finite(),
+                    "per_comp_max_residual must be finite for {}", entry["dataset"]);
+                if sz < 2000 {
+                    // REQ-THRESH-001
+                    assert!(r < 1e-8,
+                        "per-comp residual {r:.2e} for component (size={sz}) in {} exceeds Dense EVD tolerance 1e-8",
+                        entry["dataset"]);
+                } else {
+                    // REQ-THRESH-002
+                    assert!(r < 1e-4,
+                        "per-comp residual {r:.2e} for component (size={sz}) in {} exceeds LOBPCG tolerance 1e-4",
+                        entry["dataset"]);
+                }
             }
         }
     }
+
+    // REQ-RESID-THRESH-001: Dense EVD per-comp residual row must exist with correct tolerance
+    let dense_row = margins_arr.iter().find(|e| {
+        e["component"].as_str().unwrap_or("").contains("per-comp residuals, Dense EVD")
+    });
+    assert!(dense_row.is_some(), "Expected per-comp Dense EVD residual row in tolerance_margins");
+    let dense_tol = dense_row.unwrap()["tolerance"].as_f64().unwrap();
+    assert!((dense_tol - 1e-8).abs() < 1e-14,
+        "per-comp Dense EVD tolerance must be 1e-8, got {dense_tol}");
+
+    // REQ-RESID-THRESH-002: LOBPCG per-comp residual row must exist with correct tolerance
+    let lobpcg_row = margins_arr.iter().find(|e| {
+        e["component"].as_str().unwrap_or("").contains("per-comp residuals, LOBPCG")
+    });
+    assert!(lobpcg_row.is_some(), "Expected per-comp LOBPCG residual row in tolerance_margins");
+    let lobpcg_tol = lobpcg_row.unwrap()["tolerance"].as_f64().unwrap();
+    assert!((lobpcg_tol - 1e-4).abs() < 1e-10,
+        "per-comp LOBPCG tolerance must be 1e-4, got {lobpcg_tol}");
 
     for entry in json["datasets"].as_array().unwrap() {
         if !entry["is_connected"].as_bool().unwrap_or(true) {
