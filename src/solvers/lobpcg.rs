@@ -82,6 +82,12 @@ const CHEB_DEGREE: usize = 8;
 /// where the filter is both numerically stable and beneficial for convergence.
 const CHEB_MIN_N: usize = 1000;
 
+/// Maximum number of warm-restart attempts after unconvergence detection.
+/// If per-vector residuals still exceed LOBPCG_ACCEPT_TOL after this many
+/// restarts, lobpcg_solve returns the best result obtained so the escalation
+/// chain in mod.rs can decide to escalate.
+const MAX_WARM_RESTARTS: usize = 3;
+
 // ─── LOBPCG solver ────────────────────────────────────────────────────────────
 
 /// Chebyshev polynomial preconditioner of degree `degree`.
@@ -158,6 +164,39 @@ fn rayleigh_ritz_refine<O: LinearOperator>(op: &O, eigvecs: Array2<f64>) -> Opti
     Some((eigenvalues, eigvecs_refined))
 }
 
+/// Compute per-vector residuals ||L·vᵢ - λᵢ·vᵢ|| / ||vᵢ|| for each eigenpair.
+///
+/// Uses a single batched `op.apply` for all k vectors, then accumulates
+/// per-column difference norms. Returns a `Vec<f64>` of length k.
+fn per_vector_residuals<O: LinearOperator>(
+    op: &O,
+    eigenvalues: &Array1<f64>,
+    eigenvectors: &Array2<f64>,
+) -> Vec<f64> {
+    let n = eigenvectors.nrows();
+    let k = eigenvectors.ncols();
+    let mut ax = Array2::zeros((n, k));
+    op.apply(eigenvectors.view(), &mut ax);
+    eigenvalues
+        .iter()
+        .enumerate()
+        .map(|(i, &lambda)| {
+            let col_norm = eigenvectors
+                .column(i)
+                .iter()
+                .map(|&x| x * x)
+                .sum::<f64>()
+                .sqrt()
+                .max(f64::EPSILON);
+            let diff_norm = (0..n)
+                .map(|r| (ax[[r, i]] - lambda * eigenvectors[[r, i]]).powi(2))
+                .sum::<f64>()
+                .sqrt();
+            diff_norm / col_norm
+        })
+        .collect()
+}
+
 /// LOBPCG iterative eigensolver (Levels 1 and 2).
 /// Level 1: no regularization. Level 2: adds epsilon*I shift.
 pub fn lobpcg_solve<O: LinearOperator>(
@@ -227,7 +266,8 @@ pub fn lobpcg_solve<O: LinearOperator>(
         }
     }
 
-    let x_init = to_nd16_array2(x_init_17);
+    let mut x_init_opt: Option<nd16::Array2<f64>> = Some(to_nd16_array2(x_init_17));
+    let mut last_result: Option<EigenResult> = None;
 
     // Convergence tolerance and iteration budget.
     // Cap at 300 to prevent runaway iteration on large graphs (e.g. n=5000 → n*5=25,000
@@ -238,67 +278,149 @@ pub fn lobpcg_solve<O: LinearOperator>(
     let tol: f32 = 1e-5;
     let maxiter = (n * 5).min(300);
 
-    // The operator closure bridges ndarray 0.16 (lobpcg boundary) ↔ 0.17 (op.apply).
-    // No per-iteration preconditioner: the ChFSI filter above already improves the starting
-    // subspace. A per-iteration amplifying filter distorts eigvec norms, breaking LOBPCG's
-    // rnorm-to-actual-residual correspondence and causing acceptance of unconverged results.
-    let result = if regularize {
-        lobpcg(
-            |x: nd16::ArrayView2<f64>| -> nd16::Array2<f64> {
-                let x17 = from_nd16_view2(x);
-                let mut y17 = Array2::zeros((n, x17.ncols()));
-                op.apply(x17.view(), &mut y17);
-                y17.zip_mut_with(&x17, |yi, &xi| *yi += REGULARIZATION_EPS * xi);
-                to_nd16_array2(y17)
-            },
-            x_init,
-            |_: nd16::ArrayViewMut2<f64>| {},
-            None,
-            tol,
-            maxiter,
-            Order::Smallest,
-        )
-    } else {
-        lobpcg(
-            |x: nd16::ArrayView2<f64>| -> nd16::Array2<f64> {
-                let x17 = from_nd16_view2(x);
-                let mut y17 = Array2::zeros((n, x17.ncols()));
-                op.apply(x17.view(), &mut y17);
-                to_nd16_array2(y17)
-            },
-            x_init,
-            |_: nd16::ArrayViewMut2<f64>| {},
-            None,
-            tol,
-            maxiter,
-            Order::Smallest,
-        )
-    };
-
-    // Extract result; treat partial convergence as success if all residuals are acceptable.
+    // Defined outside the loop: captures nothing from the environment, so no need to
+    // re-create it on every iteration.
     let extract = |r: linfa_linalg::lobpcg::Lobpcg<f64>| -> EigenResult {
         (from_nd16_array1(r.eigvals), from_nd16_array2(r.eigvecs))
     };
 
-    let result_opt = match result {
-        Ok(r) => Some(extract(r)),
-        Err((_, Some(r))) => {
-            if r.rnorm.iter().all(|&norm| norm < LOBPCG_ACCEPT_TOL) {
-                Some(extract(r))
-            } else {
-                None
+    for restart in 0..=MAX_WARM_RESTARTS {
+        // Extract x_init for this iteration (moved into lobpcg; repopulated on warm restart).
+        debug_assert!(x_init_opt.is_some(), "x_init_opt must be set at every loop entry");
+        let x_init_nd16 = x_init_opt.take().expect("x_init_opt is always set at loop entry");
+
+        // ── Run linfa-linalg LOBPCG ──────────────────────────────────────────
+        let lobpcg_result = if regularize {
+            lobpcg(
+                |x: nd16::ArrayView2<f64>| -> nd16::Array2<f64> {
+                    let x17 = from_nd16_view2(x);
+                    let mut y17 = Array2::zeros((n, x17.ncols()));
+                    op.apply(x17.view(), &mut y17);
+                    y17.zip_mut_with(&x17, |yi, &xi| *yi += REGULARIZATION_EPS * xi);
+                    to_nd16_array2(y17)
+                },
+                x_init_nd16,
+                |_: nd16::ArrayViewMut2<f64>| {},
+                None,
+                tol,
+                maxiter,
+                Order::Smallest,
+            )
+        } else {
+            lobpcg(
+                |x: nd16::ArrayView2<f64>| -> nd16::Array2<f64> {
+                    let x17 = from_nd16_view2(x);
+                    let mut y17 = Array2::zeros((n, x17.ncols()));
+                    op.apply(x17.view(), &mut y17);
+                    to_nd16_array2(y17)
+                },
+                x_init_nd16,
+                |_: nd16::ArrayViewMut2<f64>| {},
+                None,
+                tol,
+                maxiter,
+                Order::Smallest,
+            )
+        };
+
+        // ── Extract eigenpairs if rnorms are acceptable ──────────────────────
+        // When rnorms fail the gate but partial eigvecs exist, preserve them as a
+        // warm-restart seed (comment 2971872705): a partially-converged subspace is
+        // better than a cold random start.
+        let (raw_opt, partial_seed): (Option<EigenResult>, Option<Array2<f64>>) =
+            match lobpcg_result {
+                Ok(r) => (Some(extract(r)), None),
+                Err((_, Some(r))) => {
+                    if r.rnorm.iter().all(|&norm| norm < LOBPCG_ACCEPT_TOL) {
+                        (Some(extract(r)), None)
+                    } else {
+                        let seed_vecs = from_nd16_array2(r.eigvecs);
+                        (None, Some(seed_vecs))
+                    }
+                }
+                Err((_, None)) => (None, None),
+            };
+
+        // If no primary result is available, attempt a warm restart with partial eigvecs
+        // before giving up (addresses the silent-discard bug in comment 2971872705).
+        if raw_opt.is_none() {
+            if restart < MAX_WARM_RESTARTS {
+                if let Some(seed) = partial_seed {
+                    log::debug!(
+                        "[lobpcg] rnorm gate failed at restart {restart}/{MAX_WARM_RESTARTS}; \
+                         seeding next restart with partial eigvecs"
+                    );
+                    x_init_opt = Some(to_nd16_array2(seed));
+                    continue;
+                }
+            }
+            // No eigvecs to seed the next restart, or restarts exhausted:
+            // returning last_result is a partial fallback if any prior restart succeeded,
+            // or None (true escalation) if this is the first iteration.
+            log::debug!(
+                "[lobpcg] no usable result at restart {restart}/{MAX_WARM_RESTARTS}; \
+                 last_result is {}; breaking",
+                if last_result.is_some() { "Some (partial fallback)" } else { "None (escalating)" }
+            );
+            break;
+        }
+
+        // ── Rayleigh-Ritz refinement ─────────────────────────────────────────
+        let (_, raw_eigvecs) = raw_opt.unwrap();
+        let refined_opt = rayleigh_ritz_refine(op, raw_eigvecs.clone());
+
+        match refined_opt {
+            None => {
+                // RR failed (degenerate Gram matrix). Try raw eigvecs as warm-restart seed
+                // before giving up (comment 2971872707): asymmetric with the unconverged path
+                // which does reuse eigvecs for the next restart.
+                if restart < MAX_WARM_RESTARTS {
+                    log::debug!(
+                        "[lobpcg] Rayleigh-Ritz failed at restart {restart}/{MAX_WARM_RESTARTS}; \
+                         seeding next restart with raw eigvecs"
+                    );
+                    x_init_opt = Some(to_nd16_array2(raw_eigvecs));
+                    continue;
+                }
+                // Restarts exhausted: same dual-outcome break as the rnorm-fail path above.
+                log::debug!(
+                    "[lobpcg] Rayleigh-Ritz failed at restart {restart}/{MAX_WARM_RESTARTS} \
+                     (final); last_result is {}; breaking",
+                    if last_result.is_some() { "Some (partial fallback)" } else { "None (escalating)" }
+                );
+                break;
+            }
+            Some(result) => {
+                // ── Unconvergence detection (REQ-UCD-001) ──────────────────
+                let residuals = per_vector_residuals(op, &result.0, &result.1);
+                if residuals.iter().all(|&r| r < LOBPCG_ACCEPT_TOL) {
+                    if restart > 0 {
+                        log::debug!(
+                            "[lobpcg] warm restart recovered convergence in {restart} round(s)"
+                        );
+                    }
+                    return Some(result);
+                }
+                let max_res = residuals
+                    .iter()
+                    .cloned()
+                    .fold(0.0_f64, f64::max);
+                log::debug!(
+                    "[lobpcg] unconvergence detected after Rayleigh-Ritz \
+                     (max_residual={max_res:.2e}); warm restart {}/{MAX_WARM_RESTARTS}",
+                    restart + 1
+                );
+                // ── Warm restart: use refined eigvecs as next x_init (REQ-UCD-004) ──
+                if restart < MAX_WARM_RESTARTS {
+                    x_init_opt = Some(to_nd16_array2(result.1.clone()));
+                }
+                last_result = Some(result);
             }
         }
-        Err((_, None)) => None,
-    };
+    }
 
-    // Apply Rayleigh-Ritz refinement: recompute eigenvalues as exact Rayleigh quotients
-    // of the true Laplacian (G = X^T * L * X), then rotate eigenvectors.
-    // This replaces LOBPCG eigenvalues (including any regularization shift) with exact
-    // values — no separate REGULARIZATION_EPS subtraction is needed.
-    // Note: LOBPCG eigenvalues are intentionally discarded; the returned eigenvalues are
-    // the Gram-solve Rayleigh quotients, which are exact for the true (unshifted) Laplacian.
-    result_opt.and_then(|(_, eigvecs)| rayleigh_ritz_refine(op, eigvecs))
+    // Restarts exhausted: return best result so mod.rs quality gate decides escalation.
+    last_result
 }
 
 // ─── Unit Tests ──────────────────────────────────────────────────────────────
@@ -656,6 +778,61 @@ mod tests {
                     "Gram matrix [{i},{j}] expected {expected}, got {got}"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn per_vector_residuals_exact_near_zero() {
+        // 4-node diagonal operator: eigenvalues [0.0, 0.1, 0.2, 0.3].
+        // Columns of the 4×4 identity are exact eigenvectors.
+        let diag = vec![0.0_f64, 0.1, 0.2, 0.3];
+        let mat = diagonal_csr(&diag);
+        let op = CsrOperator(&mat);
+        let eigenvalues = Array1::from_vec(diag.clone());
+        let eigenvectors = Array2::eye(4);
+        let residuals = per_vector_residuals(&op, &eigenvalues, &eigenvectors);
+        for &r in &residuals {
+            assert!(r < 1e-12, "exact eigenvector residual={r:.2e} should be < 1e-12");
+        }
+    }
+
+    #[test]
+    fn per_vector_residuals_non_eigenvector_large() {
+        // Same diagonal; [1, 1, 1, 1]/2 is not an eigenvector of eigenvalue 0.
+        let diag = vec![0.0_f64, 0.1, 0.2, 0.3];
+        let mat = diagonal_csr(&diag);
+        let op = CsrOperator(&mat);
+        let eigenvalues = Array1::from_vec(vec![0.0_f64]);
+        let v = vec![0.5_f64, 0.5, 0.5, 0.5];
+        let eigenvectors = Array2::from_shape_vec((4, 1), v).unwrap();
+        let residuals = per_vector_residuals(&op, &eigenvalues, &eigenvectors);
+        // Exact residual: ||(diag([0,0.1,0.2,0.3])·v - 0·v)|| / ||v||
+        // = ||[0, 0.05, 0.1, 0.15]|| / ||[0.5,0.5,0.5,0.5]|| ≈ 0.187.
+        // Threshold 0.15 is tight enough to catch regressions while remaining below the exact value.
+        assert!(residuals[0] > 0.15,
+            "non-eigenvector residual={:.2e} should be large", residuals[0]);
+    }
+
+    #[test]
+    fn lobpcg_solve_near_degenerate_residuals_within_tol() {
+        // n=2000 diagonal Laplacian with two near-zero eigenvalues (λ₁=1e-4, λ₂=2e-4)
+        // followed by well-separated spectrum [0.1, 0.2, ..., 1.99].
+        // This forces LOBPCG into the near-degenerate eigengap regime.
+        let n = 2000;
+        let mut diag = vec![1e-4_f64, 2e-4];
+        for i in 2..n {
+            diag.push(0.1 + (i as f64 - 2.0) * 0.1 / (n as f64 - 2.0));
+        }
+        let mat = diagonal_csr(&diag);
+        let op = CsrOperator(&mat);
+        let sqrt_deg = Array1::ones(n);
+        let result = lobpcg_solve(&op, 2, 42, false, &sqrt_deg);
+        assert!(result.is_some(), "lobpcg_solve returned None on near-degenerate input");
+        let (eigs, vecs) = result.unwrap();
+        let residuals = per_vector_residuals(&op, &eigs, &vecs);
+        for (i, &r) in residuals.iter().enumerate() {
+            assert!(r < LOBPCG_ACCEPT_TOL,
+                "eigenpair {i} residual={r:.2e} exceeds LOBPCG_ACCEPT_TOL={LOBPCG_ACCEPT_TOL:.2e}");
         }
     }
 }
