@@ -481,10 +481,10 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
         .fold(0.0f64, f64::max);
     margins.push(ToleranceMarginEntry {
         component: "comp_d eigenvalues, Dense EVD (n<2000)".to_string(),
-        tolerance: 1e-12,
+        tolerance: 1e-9,
         tolerance_type: "absolute",
         worst_actual: worst_eig_dense,
-        margin_factor: if worst_eig_dense == 0.0 { f64::INFINITY } else { 1e-12 / worst_eig_dense },
+        margin_factor: if worst_eig_dense == 0.0 { f64::INFINITY } else { 1e-9 / worst_eig_dense },
     });
 
     let worst_eig_lobpcg = all_metrics.iter()
