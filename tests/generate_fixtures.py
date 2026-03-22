@@ -193,11 +193,13 @@ def generate_comp_a_degrees(
     """
     Compute degree vector and its square root from the pruned graph.
 
-    degrees = graph.sum(axis=0), squeezed to 1D, cast to f64.
+    degrees_f32 = graph.sum(axis=0), stays f32 (matching actual Python UMAP).
+    degrees = degrees_f32 widened to f64 for storage (values are f32-precise).
     sqrt_deg = sqrt(degrees).
     Zero-degree nodes (isolated after pruning) are handled naturally: sqrt(0) = 0.
     """
-    degrees = np.asarray(pruned_graph.sum(axis=0), dtype=np.float64).squeeze()
+    degrees_f32 = np.asarray(pruned_graph.sum(axis=0)).squeeze()  # stays f32 (scipy preserves dtype)
+    degrees = degrees_f32.astype(np.float64)  # widen for storage; values remain f32-precise
     sqrt_deg = np.sqrt(degrees)
     np.savez(
         outdir / "comp_a_degrees",
