@@ -53,7 +53,9 @@ fn from_nd16_array2(a: nd16::Array2<f64>) -> Array2<f64> {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 /// Residual threshold used to accept partially-converged LOBPCG results.
-const LOBPCG_ACCEPT_TOL: f64 = 1e-4;
+/// Set to 1e-5 (Issue #92 REQ-TOL-003): matches the solver's `tol` and is achievable
+/// with ChFSI-filtered starting subspace for well-conditioned graphs.
+const LOBPCG_ACCEPT_TOL: f64 = 1e-5;
 
 /// Epsilon shift applied to the operator in Level 2 (regularized) LOBPCG.
 pub const REGULARIZATION_EPS: f64 = 1e-5;
@@ -325,7 +327,7 @@ mod tests {
         // All residuals must be below tolerance — verifies eigenvector quality.
         for i in 0..eigvals.len() {
             let r = residual(&op, eigvecs.column(i), eigvals[i]);
-            assert!(r < 1e-4, "residual for eigenpair {i}: {r} >= 1e-4");
+            assert!(r < 1e-5, "residual for eigenpair {i}: {r} >= 1e-5");
         }
     }
 
@@ -352,7 +354,7 @@ mod tests {
 
         for i in 0..eigvals.len() {
             let r = residual(&op, eigvecs.column(i), eigvals[i]);
-            assert!(r < 1e-4, "residual for eigenpair {i}: {r} >= 1e-4");
+            assert!(r < 1e-5, "residual for eigenpair {i}: {r} >= 1e-5");
         }
     }
 
@@ -386,7 +388,7 @@ mod tests {
         // Residual check against original Laplacian — no manual shift needed by the caller
         for i in 0..eigvals.len() {
             let r = residual(&op, eigvecs.column(i), eigvals[i]);
-            assert!(r < 1e-4, "level2 residual for eigenpair {i}: {r} >= 1e-4");
+            assert!(r < 1e-5, "level2 residual for eigenpair {i}: {r} >= 1e-5");
         }
     }
 
@@ -468,6 +470,13 @@ mod tests {
                 result[[i, 0]]
             );
         }
+    }
+
+    #[test]
+    fn lobpcg_accept_tol_is_1e5() {
+        // REQ-TOL-003: partial-convergence acceptance tolerance must be 1e-5.
+        assert_eq!(LOBPCG_ACCEPT_TOL, 1e-5_f64,
+            "LOBPCG_ACCEPT_TOL must be 1e-5 per Issue #92 REQ-TOL-003");
     }
 
     #[test]

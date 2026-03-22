@@ -2,7 +2,7 @@
 mod common;
 
 use spectral_init::operator::CsrOperator;
-use spectral_init::solvers::lobpcg::{lobpcg_solve, REGULARIZATION_EPS};
+use spectral_init::solvers::lobpcg::lobpcg_solve;
 
 fn run_lobpcg_test(dataset: &str, _expected_n: usize, regularized: bool) {
     let fixture_dir = common::fixture_path(dataset, "");
@@ -43,22 +43,21 @@ fn run_lobpcg_test(dataset: &str, _expected_n: usize, regularized: bool) {
         for i in 0..eigvals.len() {
             let residual = common::eigenpair_residual(&op, eigvecs.column(i), eigvals[i]);
             assert!(
-                residual < 1e-4,
-                "dataset={dataset}, residual for eigenpair {i}: {residual} >= 1e-4"
+                residual < 1e-5,
+                "dataset={dataset}, residual for eigenpair {i}: {residual} >= 1e-5"
             );
         }
     } else {
-        // Level 2: residuals against the unshifted Laplacian must be < 1e-4.
-        // REGULARIZATION_EPS shift is subtracted before computing residual.
+        // Level 2: residuals against the unshifted Laplacian must be < 1e-5.
         for i in 0..eigvals.len() {
             let residual = common::eigenpair_residual(
                 &op,
                 eigvecs.column(i),
-                eigvals[i] - REGULARIZATION_EPS,
+                eigvals[i],
             );
             assert!(
-                residual < 1e-4,
-                "dataset={dataset}, level2 residual for eigenpair {i}: {residual} >= 1e-4"
+                residual < 1e-5,
+                "dataset={dataset}, level2 residual for eigenpair {i}: {residual} >= 1e-5"
             );
         }
     }
