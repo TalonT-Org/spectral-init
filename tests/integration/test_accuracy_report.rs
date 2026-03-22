@@ -180,7 +180,7 @@ fn process_disconnected_path(dataset: &str, n_embedding_dims: usize) -> Disconne
                 return 0.0;
             }
             let sub_graph = extract_subgraph_local(&graph, members);
-            let (_, sqrt_deg_c) = compute_degrees(&sub_graph);
+            let (_, sqrt_deg_c) = compute_degrees(&sub_graph, ComputeMode::PythonCompat);
             let inv_sqrt_c: Vec<f64> = sqrt_deg_c
                 .iter()
                 .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
@@ -404,7 +404,7 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
     for metric in all_metrics {
         let base = common::fixture_path(&metric.dataset, "");
         let graph = common::load_sparse_csr_f32_u32(&base.join("step5a_pruned.npz"));
-        let (degrees, _) = compute_degrees(&graph);
+        let (degrees, _) = compute_degrees(&graph, ComputeMode::PythonCompat);
         let ref_deg: Array1<f64> = common::load_dense(&base.join("comp_a_degrees.npz"), "degrees");
         for (&got, &want) in degrees.iter().zip(ref_deg.iter()) {
             let rel_err = (got - want).abs() / want.abs().max(1.0);
@@ -452,7 +452,7 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
     for metric in all_metrics {
         let base = common::fixture_path(&metric.dataset, "");
         let graph = common::load_sparse_csr_f32_u32(&base.join("step5a_pruned.npz"));
-        let (_, sqrt_deg) = compute_degrees(&graph);
+        let (_, sqrt_deg) = compute_degrees(&graph, ComputeMode::PythonCompat);
         let inv_sqrt_deg: Vec<f64> = sqrt_deg
             .iter()
             .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
