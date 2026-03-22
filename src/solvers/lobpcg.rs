@@ -280,6 +280,7 @@ pub fn lobpcg_solve<O: LinearOperator>(
 
     for restart in 0..=MAX_WARM_RESTARTS {
         // Extract x_init for this iteration (moved into lobpcg; repopulated on warm restart).
+        debug_assert!(x_init_opt.is_some(), "x_init_opt must be set at every loop entry");
         let x_init_nd16 = x_init_opt.take().expect("x_init_opt is always set at loop entry");
 
         // ── Run linfa-linalg LOBPCG ──────────────────────────────────────────
