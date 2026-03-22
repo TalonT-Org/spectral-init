@@ -1,6 +1,7 @@
 // spectral-init: Spectral initialization for UMAP embeddings
 
 mod components;
+mod config;
 mod laplacian;
 mod multi_component;
 #[doc(hidden)]
@@ -9,6 +10,8 @@ mod scaling;
 mod selection;
 #[doc(hidden)]
 pub mod solvers;
+
+pub use config::{ComputeMode, SpectralInitConfig};
 
 // Re-exported for component-level integration tests. These are internal pipeline
 // functions, not part of the stable public API.
@@ -107,6 +110,8 @@ pub enum SpectralError {
 /// - `data`: Optional raw input data `(n_samples, n_features)` in f32. Required only when the
 ///   graph is disconnected and the number of connected components exceeds `2 * n_components`
 ///   (needed for the spectral meta-embedding of component centroids).
+/// - `config`: Pipeline configuration. Use `SpectralInitConfig::default()` for Python-compatible
+///   behavior.
 ///
 /// # Returns
 /// An `(n_samples, n_components)` array of f32 initial coordinates.
@@ -115,6 +120,7 @@ pub fn spectral_init(
     n_components: usize,
     seed: u64,
     data: Option<ArrayView2<'_, f32>>,
+    config: SpectralInitConfig,
 ) -> Result<Array2<f32>, SpectralError> {
     // ── Input validation ──────────────────────────────────────────────────
     let n = graph.rows();
@@ -137,6 +143,7 @@ pub fn spectral_init(
             n_components,
             seed,
             data,
+            config.compute_mode,
         )?;
         return scaling::scale_and_add_noise(coords, seed);
     }
@@ -184,14 +191,14 @@ mod tests {
             vec![1u32, 0u32, 2u32, 1u32],
             vec![1.0f32; 4],
         );
-        let result = spectral_init(&g, 0, 42, None);
+        let result = spectral_init(&g, 0, 42, None, SpectralInitConfig::default());
         assert!(matches!(result, Err(SpectralError::InvalidGraph(_))));
     }
 
     #[test]
     fn spectral_init_empty_graph_returns_error() {
         let g = CsMatI::<f32, u32, usize>::new((0, 0), vec![0usize], vec![], vec![]);
-        let result = spectral_init(&g, 2, 42, None);
+        let result = spectral_init(&g, 2, 42, None, SpectralInitConfig::default());
         assert!(matches!(result, Err(SpectralError::InvalidGraph(_))));
     }
 
@@ -199,7 +206,7 @@ mod tests {
     fn spectral_init_too_few_nodes_returns_error() {
         // 2-node connected graph, asking for 3 dimensions
         let g = CsMatI::<f32, u32, usize>::new((2, 2), vec![0, 1, 2], vec![1u32, 0u32], vec![1.0f32; 2]);
-        let result = spectral_init(&g, 3, 42, None);
+        let result = spectral_init(&g, 3, 42, None, SpectralInitConfig::default());
         assert!(matches!(result, Err(SpectralError::TooFewNodes { n: 2, dims: 3 })));
     }
 
@@ -212,11 +219,98 @@ mod tests {
             vec![1u32, 0u32, 2u32, 1u32, 3u32, 2u32],
             vec![1.0f32; 6],
         );
-        let result = spectral_init(&g, 2, 42, None);
+        let result = spectral_init(&g, 2, 42, None, SpectralInitConfig::default());
         let arr = result.expect("spectral_init on connected graph should succeed");
         assert_eq!(arr.shape(), &[4, 2]);
         for &v in arr.iter() {
             assert!(v.is_finite(), "output contains non-finite value: {v}");
         }
+    }
+}
+
+#[cfg(test)]
+mod config_tests {
+    use super::*;
+
+    #[test]
+    fn default_config_is_python_compat() {
+        let cfg = SpectralInitConfig::default();
+        assert_eq!(cfg.compute_mode, ComputeMode::PythonCompat);
+    }
+
+    #[test]
+    fn compute_mode_copy_clone_eq() {
+        let a = ComputeMode::PythonCompat;
+        let b = a; // Copy
+        let c = a.clone(); // Clone
+        assert_eq!(a, b); // PartialEq, Eq
+        assert_eq!(a, c);
+        let _ = format!("{a:?}"); // Debug
+    }
+
+    #[test]
+    fn compute_mode_rust_native_neq_python_compat() {
+        assert_ne!(ComputeMode::RustNative, ComputeMode::PythonCompat);
+    }
+
+    #[test]
+    fn compute_mode_variants_exhaustive() {
+        // Exhaustive match — compiler enforces this if a new variant is added.
+        let modes = [ComputeMode::PythonCompat, ComputeMode::RustNative];
+        for mode in &modes {
+            let label = match mode {
+                ComputeMode::PythonCompat => "python_compat",
+                ComputeMode::RustNative => "rust_native",
+            };
+            assert!(!label.is_empty(), "variant label must be non-empty");
+        }
+    }
+
+    #[test]
+    fn python_compat_and_rust_native_same_subspace() {
+        // Sign-agnostic subspace equivalence check: each embedding column may be
+        // sign-flipped independently, so compare |cos θ| ≈ 1 per column pair.
+        let g = CsMatI::<f32, u32, usize>::new(
+            (4, 4),
+            vec![0usize, 1, 3, 5, 6],
+            vec![1u32, 0u32, 2u32, 1u32, 3u32, 2u32],
+            vec![1.0f32; 6],
+        );
+        let r1 = spectral_init(&g, 2, 42, None, SpectralInitConfig::default())
+            .expect("PythonCompat should succeed");
+        let r2 = spectral_init(
+            &g,
+            2,
+            42,
+            None,
+            SpectralInitConfig { compute_mode: ComputeMode::RustNative },
+        )
+        .expect("RustNative should succeed");
+        assert_eq!(r1.shape(), r2.shape());
+        let n_cols = r1.shape()[1];
+        for col in 0..n_cols {
+            let c1 = r1.column(col);
+            let c2 = r2.column(col);
+            let dot: f32 = c1.iter().zip(c2.iter()).map(|(a, b)| a * b).sum();
+            let norm1: f32 = c1.iter().map(|x| x * x).sum::<f32>().sqrt();
+            let norm2: f32 = c2.iter().map(|x| x * x).sum::<f32>().sqrt();
+            let cos_sim = dot.abs() / (norm1 * norm2).max(f32::EPSILON);
+            assert!(
+                cos_sim > 0.999,
+                "column {col}: |cos θ| = {cos_sim:.6}, expected ≈ 1.0 (same subspace up to sign)"
+            );
+        }
+    }
+
+    #[test]
+    fn spectral_init_with_default_config_compiles_and_runs() {
+        let g = CsMatI::<f32, u32, usize>::new(
+            (4, 4),
+            vec![0usize, 1, 3, 5, 6],
+            vec![1u32, 0u32, 2u32, 1u32, 3u32, 2u32],
+            vec![1.0f32; 6],
+        );
+        let result = spectral_init(&g, 2, 42, None, SpectralInitConfig::default());
+        assert!(result.is_ok());
     }
 }

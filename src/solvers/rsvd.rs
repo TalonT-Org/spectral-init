@@ -98,8 +98,11 @@ pub(crate) fn rsvd_solve(
     );
     // rank = n_components + 1: request one extra so we can discard the trivial vector
     let rank = n_components + 1;
-    // k = total random vectors (rank + oversampling for accuracy)
-    let oversampling = (rank.max(5)).min(n.saturating_sub(rank));
+    // k = total random vectors (rank + oversampling for accuracy).
+    // Scale oversampling with n/10 so large graphs (e.g. n=5000 → oversampling=500)
+    // get a subspace large enough to produce residuals below RSVD_QUALITY_THRESHOLD,
+    // avoiding fallthrough to the O(n³) Level 4 dense EVD.
+    let oversampling = (n / 10).max(rank.max(5)).min(n.saturating_sub(rank));
     let k = (rank + oversampling).min(n);
     let nbiter = 2;  // QR-stabilized subspace iterations (Halko-Tropp Algorithm 4.4)
 

@@ -2,6 +2,7 @@ use ndarray::{Array2, ArrayView1, ArrayView2};
 use sprs::{CsMatI, TriMat};
 
 use crate::{
+    ComputeMode,
     SpectralError,
     laplacian::{build_normalized_laplacian, compute_degrees},
     selection::select_eigenvectors,
@@ -18,6 +19,7 @@ pub(crate) fn embed_disconnected(
     n_embedding_dims: usize,
     seed: u64,
     data: Option<ArrayView2<'_, f32>>,
+    compute_mode: ComputeMode,
 ) -> Result<Array2<f64>, SpectralError> {
     let n = graph.rows();
 
@@ -33,6 +35,7 @@ pub(crate) fn embed_disconnected(
                 n_conn_components,
                 n_embedding_dims,
                 seed,
+                compute_mode,
             )?,
             None => {
                 return Err(SpectralError::InvalidGraph(
@@ -59,6 +62,7 @@ pub(crate) fn embed_disconnected(
             data_ranges[comp_idx],
             &meta_pos,
             seed,
+            compute_mode,
         )?;
         for (local_i, &orig_i) in members.iter().enumerate() {
             result.row_mut(orig_i).assign(&comp_coords.row(local_i));
@@ -102,8 +106,7 @@ fn extract_subgraph(
     for (local_row, &orig_row) in node_indices.iter().enumerate() {
         debug_assert!(orig_row < n_global, "node index {orig_row} out of bounds (graph has {n_global} rows)");
         if let Some(row_vec) = graph.outer_view(orig_row) {
-            for (orig_col_u32, &weight) in row_vec.iter() {
-                let orig_col = orig_col_u32 as usize;
+            for (orig_col, &weight) in row_vec.iter() {
                 if lookup[orig_col] != usize::MAX {
                     let local_col = u32::try_from(lookup[orig_col])
                         .expect("local index overflows u32; component size exceeds u32::MAX");
@@ -142,6 +145,7 @@ fn spectral_meta_embedding(
     n_comp: usize,
     n_embedding_dims: usize,
     seed: u64,
+    _compute_mode: ComputeMode,
 ) -> Result<Array2<f64>, SpectralError> {
     let n_features = data.ncols();
 
@@ -260,6 +264,7 @@ fn embed_single_component(
     data_range: f64,
     meta_pos: &ArrayView1<f64>,
     seed: u64,
+    _compute_mode: ComputeMode,
 ) -> Result<Array2<f64>, SpectralError> {
     let size = members.len();
 
@@ -419,7 +424,7 @@ mod tests {
     fn test_embed_disconnected_two_pairs_shape_and_finite() {
         let g = make_two_pair_graph();
         let labels = vec![0usize, 0, 1, 1];
-        let result = embed_disconnected(&g, &labels, 2, 2, 42, None);
+        let result = embed_disconnected(&g, &labels, 2, 2, 42, None, ComputeMode::PythonCompat);
         let arr = result.expect("embed_disconnected should succeed");
         assert_eq!(arr.shape(), &[4, 2]);
         for &v in arr.iter() {
@@ -434,7 +439,7 @@ mod tests {
         // Both size=1 < 2*dim=4 → placed at meta centroid
         let g = make_empty_pair_graph();
         let labels = vec![0usize, 1];
-        let result = embed_disconnected(&g, &labels, 2, 2, 42, None);
+        let result = embed_disconnected(&g, &labels, 2, 2, 42, None, ComputeMode::PythonCompat);
         let arr = result.expect("embed_disconnected should succeed for tiny components");
         assert_eq!(arr.shape(), &[2, 2]);
         let eps = 1e-10;
@@ -453,7 +458,7 @@ mod tests {
         // strictly greater than the max intra-component spread (≤ data_range = sqrt(2)/2).
         let g = make_3_clique_graph();
         let labels: Vec<usize> = (0..12).map(|i| i / 4).collect();
-        let result = embed_disconnected(&g, &labels, 3, 2, 42, None);
+        let result = embed_disconnected(&g, &labels, 3, 2, 42, None, ComputeMode::PythonCompat);
         let arr = result.expect("embed_disconnected on 3-clique graph should succeed");
         assert_eq!(arr.shape(), &[12, 2]);
 
