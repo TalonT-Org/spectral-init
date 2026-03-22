@@ -35,9 +35,9 @@ const RSVD_QUALITY_THRESHOLD: f64 = 1e-2;
 const DENSE_EVD_QUALITY_THRESHOLD: f64 = 1e-6;
 
 /// Maximum acceptable max-residual from LOBPCG before escalating.
-/// LOBPCG is iterative; 1e-3 matches its practical convergence tolerance
-/// while being tighter than rSVD (1e-2).
-const LOBPCG_QUALITY_THRESHOLD: f64 = 1e-3;
+/// Set to 1e-5 (Issue #92 REQ-TOL-002): matches the solver's `tol = 1e-5` and is
+/// consistently achievable with ChFSI preconditioning, while being tighter than rSVD (1e-2).
+const LOBPCG_QUALITY_THRESHOLD: f64 = 1e-5;
 
 /// Maximum acceptable max-residual from shift-and-invert LOBPCG.
 /// Sinv achieves near-exact results (like dense EVD); 1e-6 accepts all
@@ -234,6 +234,13 @@ mod tests {
     }
 
     #[test]
+    fn lobpcg_quality_threshold_is_1e5() {
+        // REQ-TOL-002: LOBPCG quality gate in escalation chain must be 1e-5.
+        assert_eq!(LOBPCG_QUALITY_THRESHOLD, 1e-5_f64,
+            "LOBPCG_QUALITY_THRESHOLD must be 1e-5 per Issue #92 REQ-TOL-002");
+    }
+
+    #[test]
     fn solve_eigenproblem_eigenvalues_nonneg_and_sorted() {
         let laplacian = path_graph_laplacian_6();
         let ((eigvals, _), _) = solve_eigenproblem(&laplacian, 2, 42, &ndarray::Array1::ones(6));
@@ -400,15 +407,15 @@ mod tests {
         // 3-node path graph Laplacian (same structure as above).
         // Construct a near-eigenvector v = v0 + δ·v1 where v0=[1,1,1]/√3 (λ=0) and
         // v1=[1,0,-1]/√2 (λ=1). The residual against eigenvalue 0 is ≈ δ.
-        // With δ=1e-4 the residual sits between DENSE_EVD_QUALITY_THRESHOLD (1e-6) and
-        // LOBPCG_QUALITY_THRESHOLD (1e-3), giving independent coverage of the LOBPCG gate.
+        // With δ=5e-6 the residual sits between DENSE_EVD_QUALITY_THRESHOLD (1e-6) and
+        // LOBPCG_QUALITY_THRESHOLD (1e-5), giving independent coverage of the LOBPCG gate.
         let laplacian = CsMatI::new(
             (3, 3),
             vec![0usize, 2, 5, 7],
             vec![0usize, 1, 0, 1, 2, 1, 2],
             vec![1.0_f64, -1.0, -1.0, 2.0, -1.0, -1.0, 1.0],
         );
-        let delta = 1e-4_f64;
+        let delta = 5e-6_f64;
         let inv_sqrt3 = 1.0_f64 / 3.0_f64.sqrt();
         let inv_sqrt2 = 1.0_f64 / 2.0_f64.sqrt();
         // v = v0 + δ·v1: perturbs the exact λ=0 eigenvector toward the λ=1 eigenvector.
