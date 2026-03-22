@@ -148,8 +148,11 @@ fn process_disconnected_path(dataset: &str, n_embedding_dims: usize) -> Disconne
     let base = common::fixture_path(dataset, "");
 
     let graph = common::load_sparse_csr_f32_u32(&base.join("step5a_pruned.npz"));
-    let raw_data: ndarray::Array2<f32> =
-        common::load_dense(&base.join("step0_raw_data.npz"), "data");
+    let raw_data: ndarray::Array2<f32> = {
+        let f64_data: ndarray::Array2<f64> =
+            common::load_dense(&base.join("step0_raw_data.npz"), "X");
+        f64_data.mapv(|x| x as f32)
+    };
 
     let (labels, n_conn_components) = find_components(&graph);
 
