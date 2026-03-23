@@ -149,6 +149,8 @@ steps:
       skill_command: "/write-report ${{ context.worktree_path }} ${{ context.experiment_results }}"
       cwd: "${{ context.worktree_path }}"
       step_name: write_report
+    capture:
+      report_path: "${{ result.report_path }}"
     on_success: test
     on_failure: escalate_stop
     note: "Writes a conclusive research report to research/ in the worktree."
@@ -159,6 +161,8 @@ steps:
       skill_command: "/write-report ${{ context.worktree_path }} ${{ context.experiment_results }} --inconclusive"
       cwd: "${{ context.worktree_path }}"
       step_name: write_report
+    capture:
+      report_path: "${{ result.report_path }}"
     on_success: test
     on_failure: escalate_stop
     note: >
@@ -203,7 +207,7 @@ steps:
         cd '${{ context.worktree_path }}' &&
         gh pr create
         --title 'Research: ${{ inputs.task }}'
-        --body "Research report for issue #${{ inputs.issue_number }}. See the research/ folder for the full report."
+        --body-file '${{ context.report_path }}'
         --base '${{ inputs.base_branch }}'
       cwd: "${{ context.worktree_path }}"
     on_success: research_complete
