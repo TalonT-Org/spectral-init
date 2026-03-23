@@ -1,0 +1,218 @@
+name: research
+autoskillit_version: "0.5.2"
+description: >
+  Two-phase technical research recipe. Phase 1 scopes a research question
+  and opens an experiment design issue for human review. Phase 2 (resumed
+  with issue_number) implements the experiment, runs it, writes a report
+  to research/, and opens a PR. No auto-merge.
+summary: scope > plan > issue > (resume) > implement > experiment > report > open-pr
+
+ingredients:
+  task:
+    description: Research question or topic to investigate
+    required: true
+  issue_number:
+    description: >
+      Approved experiment design issue number. Providing this skips
+      phase 1 (design) and starts phase 2 (execution) directly.
+    required: false
+  source_dir:
+    description: Path to the project root
+    required: true
+  base_branch:
+    description: Branch to target for the research PR
+    default: "main"
+
+kitchen_rules:
+  - >
+    NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
+    Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit) from the
+    orchestrator. All work is delegated through run_skill.
+  - >
+    Do NOT auto-merge. The research PR is for human review only.
+    Do NOT use toggle_auto_merge or wait_for_merge_queue.
+  - "The research/ folder is the target for all report output."
+  - >
+    Experiment code in the worktree is disposable — only the report
+    and any reproducible scripts matter for the PR.
+  - >
+    Inconclusive results are valid findings, not failures.
+    Always produce a report regardless of experiment outcome.
+  - "Route to on_failure when a step fails — do not investigate directly."
+
+steps:
+  # --- PHASE ROUTER ---
+  check_phase:
+    tool: run_cmd
+    with:
+      cmd: "[ -n '${{ inputs.issue_number }}' ]"
+      cwd: "${{ inputs.source_dir }}"
+    on_success: save_experiment_plan
+    on_failure: scope
+    note: >
+      Routes to phase 2 if issue_number is provided, phase 1 otherwise.
+
+  # --- PHASE 1: DESIGN ---
+  scope:
+    tool: run_skill
+    with:
+      skill_command: "/scope ${{ inputs.task }}"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: scope
+    capture:
+      scope_report: "${{ result.scope_report }}"
+    on_success: plan_experiment
+    on_failure: escalate_stop
+
+  plan_experiment:
+    tool: run_skill
+    with:
+      skill_command: "/plan-experiment ${{ context.scope_report }}"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: plan_experiment
+    capture:
+      experiment_plan: "${{ result.experiment_plan }}"
+    on_success: open_plan_issue
+    on_failure: escalate_stop
+
+  open_plan_issue:
+    tool: run_cmd
+    with:
+      cmd: >
+        gh issue create
+        --title 'Research: ${{ inputs.task }}'
+        --body-file '${{ context.experiment_plan }}'
+        --label research
+      cwd: "${{ inputs.source_dir }}"
+    on_success: phase1_done
+    on_failure: escalate_stop
+
+  phase1_done:
+    action: stop
+    message: >
+      Phase 1 complete. Experiment plan posted as a GitHub issue.
+      Review and approve the plan, then resume this recipe with
+      issue_number set to the approved issue number.
+
+  # --- PHASE 2: EXECUTE ---
+  save_experiment_plan:
+    tool: run_cmd
+    with:
+      cmd: >
+        mkdir -p .autoskillit/temp &&
+        gh issue view ${{ inputs.issue_number }}
+        --json body -q .body > .autoskillit/temp/experiment-plan.md
+      cwd: "${{ inputs.source_dir }}"
+    on_success: implement_experiment
+    on_failure: escalate_stop
+
+  implement_experiment:
+    tool: run_skill
+    with:
+      skill_command: "/implement-experiment ${{ inputs.source_dir }}/.autoskillit/temp/experiment-plan.md"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: implement
+    capture:
+      worktree_path: "${{ result.worktree_path }}"
+    retries: 0
+    on_context_limit: run_experiment
+    on_success: run_experiment
+    on_failure: escalate_stop
+
+  run_experiment:
+    tool: run_skill
+    with:
+      skill_command: "/run-experiment ${{ context.worktree_path }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: run_experiment
+    capture:
+      experiment_results: "${{ result.results_path }}"
+    retries: 2
+    on_success: write_report
+    on_failure: adjust_experiment
+    on_exhausted: write_report_inconclusive
+
+  adjust_experiment:
+    tool: run_skill
+    with:
+      skill_command: "/run-experiment ${{ context.worktree_path }} --adjust"
+      cwd: "${{ context.worktree_path }}"
+      step_name: adjust
+    capture:
+      experiment_results: "${{ result.results_path }}"
+    on_success: run_experiment
+    on_failure: write_report_inconclusive
+
+  write_report:
+    tool: run_skill
+    with:
+      skill_command: "/write-report ${{ context.worktree_path }} ${{ context.experiment_results }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: write_report
+    on_success: test
+    on_failure: escalate_stop
+    note: "Writes a conclusive research report to research/ in the worktree."
+
+  write_report_inconclusive:
+    tool: run_skill
+    with:
+      skill_command: "/write-report ${{ context.worktree_path }} ${{ context.experiment_results }} --inconclusive"
+      cwd: "${{ context.worktree_path }}"
+      step_name: write_report
+    on_success: test
+    on_failure: escalate_stop
+    note: >
+      Writes an inconclusive research report. Experiments could not
+      prove or disprove the hypothesis. This is a valid outcome.
+
+  test:
+    tool: test_check
+    with:
+      worktree_path: "${{ context.worktree_path }}"
+    on_success: push_branch
+    on_failure: fix_tests
+
+  fix_tests:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:resolve-failures ${{ context.worktree_path }} ${{ inputs.source_dir }}/.autoskillit/temp/experiment-plan.md ${{ inputs.base_branch }}"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: fix
+    on_success: retest
+    on_failure: escalate_stop
+
+  retest:
+    tool: test_check
+    with:
+      worktree_path: "${{ context.worktree_path }}"
+    on_success: push_branch
+    on_failure: escalate_stop
+
+  push_branch:
+    tool: run_cmd
+    with:
+      cmd: "cd '${{ context.worktree_path }}' && git push -u origin HEAD"
+      cwd: "${{ context.worktree_path }}"
+    on_success: open_research_pr
+    on_failure: escalate_stop
+
+  open_research_pr:
+    tool: run_cmd
+    with:
+      cmd: >
+        cd '${{ context.worktree_path }}' &&
+        gh pr create
+        --title 'Research: ${{ inputs.task }}'
+        --body "Research report for issue #${{ inputs.issue_number }}. See the research/ folder for the full report."
+        --base '${{ inputs.base_branch }}'
+      cwd: "${{ context.worktree_path }}"
+    on_success: research_complete
+    on_failure: escalate_stop
+
+  research_complete:
+    action: stop
+    message: "Research complete. Report added to research/ folder and PR opened for review."
+
+  escalate_stop:
+    action: stop
+    message: "Research pipeline failed — human intervention needed. Check the latest step output for details."
