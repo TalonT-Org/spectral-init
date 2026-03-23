@@ -275,6 +275,114 @@ fn large_path_laplacian(n: usize) -> CsMatI<f64, usize> {
     CsMatI::new((n, n), indptr, indices, data)
 }
 
+/// Normalized Laplacian of C_n (ring graph) in f64.
+/// Every node has degree 2. L = D^{-1/2}(D - A)D^{-1/2}:
+///   diagonal = 1.0, off-diagonals = -0.5 (= -1/(sqrt(2)*sqrt(2))).
+/// sqrt_deg[i] = sqrt(2) for all i.
+fn large_ring_laplacian(n: usize) -> CsMatI<f64, usize> {
+    let mut indptr = vec![0usize; n + 1];
+    let mut indices: Vec<usize> = Vec::new();
+    let mut data: Vec<f64> = Vec::new();
+    for i in 0..n {
+        let left = if i == 0 { n - 1 } else { i - 1 };
+        let right = if i + 1 == n { 0 } else { i + 1 };
+        // Collect all three entries and sort by column for CSR validity.
+        let mut entries = [(left, -0.5_f64), (i, 1.0_f64), (right, -0.5_f64)];
+        entries.sort_unstable_by_key(|&(col, _)| col);
+        for (col, val) in entries {
+            indices.push(col);
+            data.push(val);
+        }
+        indptr[i + 1] = indices.len();
+    }
+    CsMatI::new((n, n), indptr, indices, data)
+}
+
+/// sqrt_deg vector for C_n (ring graph): all entries are sqrt(2).
+fn ring_sqrt_deg(n: usize) -> Array1<f64> {
+    Array1::from_elem(n, 2.0_f64.sqrt())
+}
+
+/// Normalized Laplacian of the epsilon-bridge graph in f64.
+/// Two complete subgraphs of size `cluster_size` connected by a single edge
+/// of weight `bridge_weight`. Total n = 2 * cluster_size.
+///
+/// Degrees:
+///   - Nodes 0..cluster_size-2: degree = cluster_size - 1
+///   - Node cluster_size-1 (first bridge node): degree = (cluster_size - 1) + bridge_weight
+///   - Node cluster_size (second bridge node):  degree = bridge_weight + (cluster_size - 1)
+///   - Nodes cluster_size+1..2*cluster_size: degree = cluster_size - 1
+fn large_epsilon_bridge_laplacian(cluster_size: usize, bridge_weight: f64) -> CsMatI<f64, usize> {
+    let cs = cluster_size;
+    let n = 2 * cs;
+    let deg_regular = (cs - 1) as f64;
+    let deg_bridge = deg_regular + bridge_weight;
+
+    // inv_sqrt_deg[i] = 1 / sqrt(degree[i])
+    let mut inv_sqrt_deg = vec![1.0 / deg_regular.sqrt(); n];
+    inv_sqrt_deg[cs - 1] = 1.0 / deg_bridge.sqrt();
+    inv_sqrt_deg[cs] = 1.0 / deg_bridge.sqrt();
+
+    let mut indptr = vec![0usize; n + 1];
+    let mut indices: Vec<usize> = Vec::new();
+    let mut data: Vec<f64> = Vec::new();
+
+    for i in 0..n {
+        // Collect all (col, weight) pairs for this row, then sort by column.
+        let mut row_entries: Vec<(usize, f64)> = Vec::new();
+        // Diagonal
+        row_entries.push((i, 1.0));
+        // Off-diagonal clique/bridge edges
+        if i < cs {
+            // First clique: connect to all other first-clique nodes
+            for j in 0..cs {
+                if j != i {
+                    let w_off = -1.0 * inv_sqrt_deg[i] * inv_sqrt_deg[j];
+                    row_entries.push((j, w_off));
+                }
+            }
+            // Bridge edge: node cs-1 connects to node cs
+            if i == cs - 1 {
+                let w_bridge = -bridge_weight * inv_sqrt_deg[i] * inv_sqrt_deg[cs];
+                row_entries.push((cs, w_bridge));
+            }
+        } else {
+            // Second clique: connect to all other second-clique nodes
+            for j in cs..n {
+                if j != i {
+                    let w_off = -1.0 * inv_sqrt_deg[i] * inv_sqrt_deg[j];
+                    row_entries.push((j, w_off));
+                }
+            }
+            // Bridge edge: node cs connects to node cs-1
+            if i == cs {
+                let w_bridge = -bridge_weight * inv_sqrt_deg[i] * inv_sqrt_deg[cs - 1];
+                row_entries.push((cs - 1, w_bridge));
+            }
+        }
+        row_entries.sort_unstable_by_key(|&(col, _)| col);
+        for (col, val) in row_entries {
+            indices.push(col);
+            data.push(val);
+        }
+        indptr[i + 1] = indices.len();
+    }
+    CsMatI::new((n, n), indptr, indices, data)
+}
+
+/// sqrt_deg vector for the epsilon-bridge graph.
+/// Bridge nodes have degree (cluster_size - 1 + bridge_weight); others have degree cluster_size - 1.
+fn epsilon_bridge_sqrt_deg(cluster_size: usize, bridge_weight: f64) -> Array1<f64> {
+    let cs = cluster_size;
+    let n = 2 * cs;
+    let deg_regular = ((cs - 1) as f64).sqrt();
+    let deg_bridge = ((cs - 1) as f64 + bridge_weight).sqrt();
+    let mut v = vec![deg_regular; n];
+    v[cs - 1] = deg_bridge;
+    v[cs] = deg_bridge;
+    Array1::from_vec(v)
+}
+
 /// 6-node unnormalized path-graph Laplacian, mirroring `path_graph_laplacian_6` in
 /// `src/solvers/mod.rs` unit tests.
 ///
@@ -573,4 +681,62 @@ fn test_level_3_rsvd_valid_on_large_path() {
         "first rSVD eigenvalue should be near-zero, got {}",
         eigs[0]
     );
+}
+
+// ─── Phase 2: Adversarial Laplacian builder sanity tests ──────────────────────
+
+#[test]
+fn large_ring_laplacian_shape_and_nnz() {
+    let n = 100;
+    let lap = large_ring_laplacian(n);
+    assert_eq!(lap.rows(), n, "ring Laplacian must be n×n");
+    assert_eq!(lap.cols(), n, "ring Laplacian must be n×n");
+    // Each row: 1 diagonal + 2 off-diagonal = 3 non-zeros
+    assert_eq!(lap.nnz(), 3 * n, "ring Laplacian must have 3n non-zeros");
+}
+
+#[test]
+fn large_ring_laplacian_diagonal_is_one() {
+    let n = 50;
+    let lap = large_ring_laplacian(n);
+    for i in 0..n {
+        let row = lap.outer_view(i).expect("row exists");
+        // sprs row iterator yields (col: usize, val: &T)
+        let diag_val = row
+            .iter()
+            .find(|(col, _)| *col == i)
+            .map(|(_, val)| *val)
+            .expect("diagonal entry exists");
+        assert!(
+            (diag_val - 1.0).abs() < 1e-15,
+            "ring Laplacian diagonal[{i}] = {diag_val}, expected 1.0"
+        );
+    }
+}
+
+#[test]
+fn large_epsilon_bridge_laplacian_shape_and_symmetry() {
+    let cs = 50;
+    let bw = 1e-4_f64;
+    let lap = large_epsilon_bridge_laplacian(cs, bw);
+    let n = 2 * cs;
+    assert_eq!(lap.rows(), n, "epsilon-bridge Laplacian must be n×n");
+    assert_eq!(lap.cols(), n, "epsilon-bridge Laplacian must be n×n");
+    // Check symmetry: L[i,j] == L[j,i] for a sample of pairs
+    let pairs: [(usize, usize); 3] = [(0, 1), (cs - 1, cs), (cs, cs + 1)];
+    for (i, j) in pairs {
+        let lij: Option<f64> = lap.outer_view(i).and_then(|row| {
+            row.iter().find(|(col, _)| *col == j).map(|(_, val)| *val)
+        });
+        let lji: Option<f64> = lap.outer_view(j).and_then(|row| {
+            row.iter().find(|(col, _)| *col == i).map(|(_, val)| *val)
+        });
+        match (lij, lji) {
+            (Some(a), Some(b)) => assert!(
+                (a - b).abs() < 1e-14,
+                "Laplacian not symmetric: L[{i},{j}]={a} != L[{j},{i}]={b}"
+            ),
+            _ => {} // non-edge: both None is fine
+        }
+    }
 }
