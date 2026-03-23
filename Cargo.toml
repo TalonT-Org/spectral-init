@@ -81,6 +81,11 @@ name = "test_comp_g_sinv"
 path = "tests/integration/test_comp_g_sinv.rs"
 required-features = ["testing"]
 
+[[test]]
+name = "test_warm_restart_benefit"
+path = "tests/integration/test_warm_restart_benefit.rs"
+required-features = ["testing"]
+
 [[bench]]
 name = "spectral_bench"
 harness = false

@@ -24,7 +24,7 @@ fn run_lobpcg_test(dataset: &str, _expected_n: usize, regularized: bool) {
         result.is_some(),
         "lobpcg_solve (regularized={regularized}) returned None on {dataset}"
     );
-    let (eigvals, eigvecs) = result.unwrap();
+    let ((eigvals, eigvecs), _) = result.unwrap();
 
     if !regularized {
         let ref_path = fixture_dir.join("comp_d_eigensolver.npz");
@@ -116,7 +116,7 @@ fn lobpcg_blobs_2000_residual_below_1e5_with_chebyshev() {
 
     let result = lobpcg_solve(&op, 2, 42, false, &sqrt_deg);
     assert!(result.is_some(), "lobpcg_solve returned None on {dataset}");
-    let (eigvals, eigvecs) = result.unwrap();
+    let ((eigvals, eigvecs), _) = result.unwrap();
 
     // All k=3 eigenpairs must have residual < 1e-5 (REQ-PERF-001).
     for i in 0..eigvals.len() {

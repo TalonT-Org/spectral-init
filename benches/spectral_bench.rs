@@ -99,6 +99,8 @@ fn bench_dense_evd(c: &mut Criterion) {
 
 /// LOBPCG: iterative eigensolver for large n. Production Level 1.
 fn bench_lobpcg(c: &mut Criterion) {
+    let graph = make_ring_graph(2000, 2);
+    let (_, sqrt_deg) = compute_degrees(&graph, ComputeMode::PythonCompat);
     let lap = make_laplacian(2000, 2);
     let op = CsrOperator(&lap);
     c.bench_function("lobpcg_2000", |b| {
@@ -108,6 +110,7 @@ fn bench_lobpcg(c: &mut Criterion) {
                 black_box(3),
                 black_box(42_u64),
                 black_box(false),
+                black_box(&sqrt_deg),
             ))
         })
     });

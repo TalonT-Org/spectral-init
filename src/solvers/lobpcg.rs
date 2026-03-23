@@ -205,7 +205,7 @@ pub fn lobpcg_solve<O: LinearOperator>(
     seed: u64,
     regularize: bool,
     sqrt_deg: &Array1<f64>,
-) -> Option<EigenResult> {
+) -> Option<(EigenResult, usize)> {
     let n = op.size();
     let k = n_components + 1; // +1 to include trivial eigenvector slot
 
@@ -268,6 +268,7 @@ pub fn lobpcg_solve<O: LinearOperator>(
 
     let mut x_init_opt: Option<nd16::Array2<f64>> = Some(to_nd16_array2(x_init_17));
     let mut last_result: Option<EigenResult> = None;
+    let mut restart_count: usize = 0;
 
     // Convergence tolerance and iteration budget.
     // Cap at 300 to prevent runaway iteration on large graphs (e.g. n=5000 → n*5=25,000
@@ -399,12 +400,13 @@ pub fn lobpcg_solve<O: LinearOperator>(
                             "[lobpcg] warm restart recovered convergence in {restart} round(s)"
                         );
                     }
-                    return Some(result);
+                    return Some((result, restart_count));
                 }
                 let max_res = residuals
                     .iter()
                     .cloned()
                     .fold(0.0_f64, f64::max);
+                restart_count += 1;
                 log::debug!(
                     "[lobpcg] unconvergence detected after Rayleigh-Ritz \
                      (max_residual={max_res:.2e}); warm restart {}/{MAX_WARM_RESTARTS}",
@@ -420,7 +422,7 @@ pub fn lobpcg_solve<O: LinearOperator>(
     }
 
     // Restarts exhausted: return best result so mod.rs quality gate decides escalation.
-    last_result
+    last_result.map(|r| (r, restart_count))
 }
 
 // ─── Unit Tests ──────────────────────────────────────────────────────────────
@@ -473,7 +475,7 @@ mod tests {
 
         let result = lobpcg_solve(&op, 2, 42, false, &sqrt_deg);
         assert!(result.is_some(), "lobpcg_solve returned None with trivial eigenvector injection");
-        let (eigvals, eigvecs) = result.unwrap();
+        let ((eigvals, eigvecs), _) = result.unwrap();
 
         // First eigenvalue must be near zero (the near-trivial eigenvalue is 1e-10).
         assert!(
@@ -497,7 +499,7 @@ mod tests {
 
         let result = lobpcg_solve(&op, 2, 42, false, &Array1::from_vec(vec![1.0_f64; 6]));
         assert!(result.is_some(), "Level 1 lobpcg_solve returned None on diagonal matrix");
-        let (eigvals, eigvecs) = result.unwrap();
+        let ((eigvals, eigvecs), _) = result.unwrap();
 
         assert!(
             eigvals[0].abs() < 1e-6,
@@ -524,7 +526,7 @@ mod tests {
 
         let result = lobpcg_solve(&op, 2, 42, true, &Array1::from_vec(vec![1.0_f64; 6]));
         assert!(result.is_some(), "Level 2 lobpcg_solve returned None on diagonal matrix");
-        let (eigvals, eigvecs) = result.unwrap();
+        let ((eigvals, eigvecs), _) = result.unwrap();
 
         // Acceptance criterion: eigenvalues within 1e-6 of true Laplacian eigenvalues.
         // 1e-6 is tight enough to catch a missing REGULARIZATION_EPS subtraction (eps = 1e-5),
@@ -563,7 +565,7 @@ mod tests {
         let n_components = 3;
         let result = lobpcg_solve(&op, n_components, 42, false, &Array1::ones(30));
         assert!(result.is_some(), "lobpcg_solve returned None for n=30 diagonal");
-        let (eigvals, eigvecs) = result.unwrap();
+        let ((eigvals, eigvecs), _) = result.unwrap();
 
         let k = n_components + 1;
         assert_eq!(eigvecs.nrows(), n, "eigvecs rows expected {n}, got {}", eigvecs.nrows());
@@ -730,7 +732,7 @@ mod tests {
 
         let result = lobpcg_solve(&op, 3, 42, false, &Array1::ones(8));
         assert!(result.is_some(), "T-RR-3: lobpcg_solve returned None");
-        let (eigvals, eigvecs) = result.unwrap();
+        let ((eigvals, eigvecs), _) = result.unwrap();
 
         // Eigenvalues must be the 4 smallest true Laplacian eigenvalues (k = n_components+1 = 4).
         let expected = [0.25_f64, 0.5, 0.75, 1.0];
@@ -764,7 +766,7 @@ mod tests {
 
         let result = lobpcg_solve(&op, 3, 42, false, &Array1::ones(8));
         assert!(result.is_some(), "lobpcg_solve returned None");
-        let (_eigvals, eigvecs) = result.unwrap();
+        let ((_eigvals, eigvecs), _) = result.unwrap();
 
         // Check V^T V ≈ I
         let k = eigvecs.ncols();
@@ -828,7 +830,7 @@ mod tests {
         let sqrt_deg = Array1::ones(n);
         let result = lobpcg_solve(&op, 2, 42, false, &sqrt_deg);
         assert!(result.is_some(), "lobpcg_solve returned None on near-degenerate input");
-        let (eigs, vecs) = result.unwrap();
+        let ((eigs, vecs), _) = result.unwrap();
         let residuals = per_vector_residuals(&op, &eigs, &vecs);
         for (i, &r) in residuals.iter().enumerate() {
             assert!(r < LOBPCG_ACCEPT_TOL,

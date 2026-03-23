@@ -1,0 +1,55 @@
+=== Running warm restart benefit experiment ===
+Date: 2026-03-23T04:20:51Z
+
+    Finished `release` profile [optimized] target(s) in 0.07s
+     Running tests/integration/test_warm_restart_benefit.rs (target/release/deps/test_warm_restart_benefit-5a02604943f5b184)
+
+running 5 tests
+METRIC graph=ring_2000 seed=42 restart_count=3 max_residual_with_restart=9.740026e-6 max_residual_no_restart=3.253026e-4 converged=true improvement_ratio=33.40
+METRIC graph=path_2000 seed=42 restart_count=4 max_residual_with_restart=4.668908e-5 max_residual_no_restart=6.203286e-4 converged=false improvement_ratio=13.29
+METRIC graph=ring_3000 seed=42 restart_count=4 max_residual_with_restart=9.101675e-5 max_residual_no_restart=2.343149e-4 converged=false improvement_ratio=2.57
+METRIC graph=ring_2000 seed=43 restart_count=4 max_residual_with_restart=5.883502e-5 max_residual_no_restart=1.738513e-4 converged=false improvement_ratio=2.95
+METRIC graph=path_3000 seed=42 restart_count=4 max_residual_with_restart=9.692220e-5 max_residual_no_restart=9.987114e-4 converged=false improvement_ratio=10.30
+METRIC graph=ring_2000 seed=44 restart_count=4 max_residual_with_restart=1.932791e-5 max_residual_no_restart=2.394066e-4 converged=false improvement_ratio=12.39
+test test_ring_2000_warm_restart ... ok
+METRIC graph=path_2000 seed=43 restart_count=4 max_residual_with_restart=6.531887e-5 max_residual_no_restart=8.691598e-4 converged=false improvement_ratio=13.31
+METRIC graph=ring_3000 seed=43 restart_count=4 max_residual_with_restart=8.089117e-5 max_residual_no_restart=1.828341e-4 converged=false improvement_ratio=2.26
+METRIC graph=path_5000 seed=42 restart_count=4 max_residual_with_restart=9.487197e-5 max_residual_no_restart=9.709947e-4 converged=false improvement_ratio=10.23
+METRIC graph=path_3000 seed=43 restart_count=4 max_residual_with_restart=8.683144e-5 max_residual_no_restart=1.017703e-3 converged=false improvement_ratio=11.72
+METRIC graph=path_2000 seed=44 restart_count=4 max_residual_with_restart=7.295877e-5 max_residual_no_restart=7.213635e-4 converged=false improvement_ratio=9.89
+test test_path_2000_warm_restart ... ok
+METRIC graph=ring_3000 seed=44 restart_count=4 max_residual_with_restart=3.067809e-5 max_residual_no_restart=2.321798e-4 converged=false improvement_ratio=7.57
+test test_ring_3000_warm_restart ... ok
+METRIC graph=path_3000 seed=44 restart_count=4 max_residual_with_restart=6.622099e-5 max_residual_no_restart=6.659727e-4 converged=false improvement_ratio=10.06
+test test_path_3000_warm_restart ... ok
+METRIC graph=path_5000 seed=43 restart_count=4 max_residual_with_restart=1.247901e-4 max_residual_no_restart=4.954400e-4 converged=false improvement_ratio=3.97
+METRIC graph=path_5000 seed=44 restart_count=4 max_residual_with_restart=9.774336e-5 max_residual_no_restart=3.553419e-4 converged=false improvement_ratio=3.64
+test test_path_5000_warm_restart ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 6.75s
+
+
+=== Done. Results in research/2026-03-22-lobpcg-warm-restart-benefit/results/raw.txt ===
+    Finished `release` profile [optimized] target(s) in 0.05s
+     Running tests/integration/test_warm_restart_benefit.rs (target/release/deps/test_warm_restart_benefit-5a02604943f5b184)
+
+running 1 test
+METRIC graph=epsilon_bridge_1000_bw1e0 seed=42 restart_count=0 max_residual_with_restart=3.094470e-14 max_residual_no_restart=6.727651e-9 converged=true improvement_ratio=217408.81
+METRIC graph=epsilon_bridge_1000_bw1e0 seed=43 restart_count=0 max_residual_with_restart=5.668718e-7 max_residual_no_restart=5.668718e-7 converged=true improvement_ratio=1.00
+METRIC graph=epsilon_bridge_1000_bw1e0 seed=44 restart_count=4 max_residual_with_restart=3.592365e-5 max_residual_no_restart=3.597924e-5 converged=false improvement_ratio=1.00
+METRIC graph=epsilon_bridge_1000_bw1e-2 seed=42 restart_count=0 max_residual_with_restart=6.155391e-7 max_residual_no_restart=6.155391e-7 converged=true improvement_ratio=1.00
+METRIC graph=epsilon_bridge_1000_bw1e-2 seed=43 restart_count=0 max_residual_with_restart=5.879350e-7 max_residual_no_restart=5.882757e-7 converged=true improvement_ratio=1.00
+METRIC graph=epsilon_bridge_1000_bw1e-2 seed=44 restart_count=0 max_residual_with_restart=5.387908e-7 max_residual_no_restart=5.391626e-7 converged=true improvement_ratio=1.00
+METRIC graph=epsilon_bridge_1000_bw1e-4 seed=42 restart_count=0 max_residual_with_restart=6.155616e-9 max_residual_no_restart=6.155616e-9 converged=true improvement_ratio=1.00
+METRIC graph=epsilon_bridge_1000_bw1e-4 seed=43 restart_count=0 max_residual_with_restart=5.879243e-9 max_residual_no_restart=5.879243e-9 converged=true improvement_ratio=1.00
+METRIC graph=epsilon_bridge_1000_bw1e-4 seed=44 restart_count=0 max_residual_with_restart=5.387887e-9 max_residual_no_restart=5.387887e-9 converged=true improvement_ratio=1.00
+METRIC graph=epsilon_bridge_1000_bw1e-6 seed=42 restart_count=0 max_residual_with_restart=6.155606e-11 max_residual_no_restart=6.155629e-11 converged=true improvement_ratio=1.00
+METRIC graph=epsilon_bridge_1000_bw1e-6 seed=43 restart_count=0 max_residual_with_restart=5.879244e-11 max_residual_no_restart=5.882637e-11 converged=true improvement_ratio=1.00
+METRIC graph=epsilon_bridge_1000_bw1e-6 seed=44 restart_count=0 max_residual_with_restart=5.387880e-11 max_residual_no_restart=5.387884e-11 converged=true improvement_ratio=1.00
+METRIC graph=epsilon_bridge_1000_bw1e-8 seed=42 restart_count=0 max_residual_with_restart=5.942224e-13 max_residual_no_restart=6.155671e-13 converged=true improvement_ratio=1.04
+METRIC graph=epsilon_bridge_1000_bw1e-8 seed=43 restart_count=0 max_residual_with_restart=5.878373e-13 max_residual_no_restart=5.874828e-13 converged=true improvement_ratio=1.00
+METRIC graph=epsilon_bridge_1000_bw1e-8 seed=44 restart_count=0 max_residual_with_restart=4.831505e-13 max_residual_no_restart=5.390297e-13 converged=true improvement_ratio=1.12
+test test_epsilon_bridge_sweep ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 1.92s
+
