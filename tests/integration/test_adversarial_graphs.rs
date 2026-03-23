@@ -538,7 +538,7 @@ fn test_level_2_regularized_lobpcg_produces_valid_result() {
         r2.is_some(),
         "Level 2 (regularized) must converge on diagonal n=2001"
     );
-    let (eigs, _) = r2.unwrap();
+    let ((eigs, _), _) = r2.unwrap();
     assert!(
         eigs.iter().all(|v| v.is_finite()),
         "Level 2 eigenvalues must be finite"

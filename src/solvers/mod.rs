@@ -113,7 +113,7 @@ pub(crate) fn solve_eigenproblem(
     }
 
     // Level 1: LOBPCG without regularization.
-    if let Some((eigs, vecs)) = lobpcg::lobpcg_solve(&op, n_components, seed, false, sqrt_deg) {
+    if let Some(((eigs, vecs), _restarts)) = lobpcg::lobpcg_solve(&op, n_components, seed, false, sqrt_deg) {
         let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
         if quality < LOBPCG_QUALITY_THRESHOLD {
             log::debug!(
@@ -149,7 +149,7 @@ pub(crate) fn solve_eigenproblem(
     // lobpcg_solve(regularize=true) applies Rayleigh-Ritz refinement internally
     // (G = X^T L X against the true Laplacian), so eigs are exact Rayleigh quotients
     // and can be passed directly to the residual check.
-    if let Some((eigs, vecs)) = lobpcg::lobpcg_solve(&op, n_components, seed, true, sqrt_deg) {
+    if let Some(((eigs, vecs), _restarts)) = lobpcg::lobpcg_solve(&op, n_components, seed, true, sqrt_deg) {
         let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
         if quality < LOBPCG_QUALITY_THRESHOLD {
             log::debug!(
