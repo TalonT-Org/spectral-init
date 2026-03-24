@@ -86,6 +86,11 @@ name = "test_warm_restart_benefit"
 path = "tests/integration/test_warm_restart_benefit.rs"
 required-features = ["testing"]
 
+[[test]]
+name = "export_rust_init"
+path = "tests/visual_eval/export_rust_init.rs"
+required-features = ["testing"]
+
 [[bench]]
 name = "spectral_bench"
 harness = false
