@@ -6,9 +6,6 @@ from pathlib import Path
 import tempfile
 import sys
 
-# Adjust import path
-sys.path.insert(0, str(Path(__file__).parent))
-
 
 class TestComputeMetrics:
     """Tests for _compute_metrics() correctness and structure."""
