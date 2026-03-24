@@ -369,6 +369,33 @@ fn test_ring_2000_warm_restart() {
 }
 
 #[test]
+fn ring_2000_warm_restart_converges() {
+    // ring_2000 seed=42: single reproducible case from the research experiment
+    // where warm restart achieves full convergence (residual < 1e-5).
+    // Research evidence: restart_count=3, improvement_ratio=33.4x
+    // (residual drops from 3.25e-4 to 9.74e-6).
+    // Run with --release to match research conditions.
+    let lap = ring_laplacian(2000);
+    let sqrt_deg = ring_sqrt_deg(2000);
+    let op = CsrOperator(&lap);
+
+    let result = lobpcg_solve(&op, 2, 42, false, &sqrt_deg);
+    assert!(result.is_some(), "lobpcg_solve returned None for ring_2000 seed=42");
+
+    let ((eigs, vecs), restart_count) = result.unwrap();
+    assert!(
+        restart_count >= 1,
+        "warm restart should fire on ring_2000 seed=42; got restart_count={restart_count}"
+    );
+
+    let max_res = max_residual(&op, &eigs, &vecs);
+    assert!(
+        max_res < 1e-5,
+        "ring_2000 seed=42 should converge to max_residual < 1e-5; got {max_res:.2e}"
+    );
+}
+
+#[test]
 fn test_ring_3000_warm_restart() {
     let lap = ring_laplacian(3000);
     let sqrt_deg = ring_sqrt_deg(3000);
