@@ -65,6 +65,8 @@ class TestComputeMetrics:
         pf = result["pass_fail"]
         assert pf["procrustes"] == "PASS"
         assert pf["pairwise_corr"] == "PASS"
+        assert pf["trustworthiness"] == "PASS"
+        assert pf["silhouette"] == "PASS"
         assert pf["overall"] == "PASS"
 
     def test_large_dataset_subsamples_pairwise(self):
