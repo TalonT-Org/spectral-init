@@ -59,7 +59,7 @@ def load_mnist(
     Subsamples deterministically using RandomState(42).
     Caches in ~/scikit_learn_data (or data_home if provided).
     """
-    print("  Downloading MNIST (first time only)...", flush=True)
+    print("  Loading MNIST (may download on first run)...", flush=True)
     bundle = _fetch_openml("mnist_784", version=1, data_home=data_home)
     rng = np.random.RandomState(42)
     idx = rng.choice(len(bundle.data), n_samples, replace=False)
@@ -76,7 +76,7 @@ def load_fashion_mnist(
     Subsamples deterministically using RandomState(42).
     Caches in ~/scikit_learn_data (or data_home if provided).
     """
-    print("  Downloading Fashion-MNIST (first time only)...", flush=True)
+    print("  Loading Fashion-MNIST (may download on first run)...", flush=True)
     bundle = _fetch_openml("Fashion-MNIST", version=1, data_home=data_home)
     rng = np.random.RandomState(42)
     idx = rng.choice(len(bundle.data), n_samples, replace=False)
