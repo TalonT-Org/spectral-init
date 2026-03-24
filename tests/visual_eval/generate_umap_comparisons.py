@@ -166,7 +166,12 @@ def export_graph(graph: scipy.sparse.csr_matrix, path: Path) -> None:
     )
 
 
-def run_baseline(name: str, output_dir: Path, data_home: str | None = None) -> None:
+def run_baseline(
+    name: str,
+    output_dir: Path,
+    data_home: str | None = None,
+    singlecell_path: str | None = None,
+) -> None:
     """Run Phase 1 baseline generation for a single dataset."""
     import umap as umap_lib
     from umap.spectral import spectral_layout
@@ -176,7 +181,7 @@ def run_baseline(name: str, output_dir: Path, data_home: str | None = None) -> N
     from scipy.sparse.linalg import eigsh
     from scipy.sparse.csgraph import connected_components
 
-    X, labels, _ = load_dataset(name, data_home=data_home)
+    X, labels, _ = load_dataset(name, data_home=data_home, singlecell_path=singlecell_path)
 
     # Fit UMAP
     mapper = umap_lib.UMAP(
@@ -638,7 +643,7 @@ def main() -> None:
         t0 = time.time()
         print(f"[{name}] phase={args.phase} ...")
         if args.phase == "baseline":
-            run_baseline(name, output_dir, data_home=args.data_dir)
+            run_baseline(name, output_dir, data_home=args.data_dir, singlecell_path=args.singlecell_path)
         else:
             run_compare(name, output_dir)
         print(f"[{name}] done in {time.time() - t0:.1f}s")
