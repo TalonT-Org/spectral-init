@@ -34,6 +34,7 @@ TIER2_DATASETS = [
 ]
 
 ALL_DATASETS = TIER1_DATASETS + TIER2_DATASETS
+VALID_DATASET_NAMES = ALL_DATASETS + ["singlecell"]
 
 
 def load_pendigits() -> tuple[np.ndarray, np.ndarray, str]:
@@ -149,7 +150,7 @@ def load_dataset(
 
     raise ValueError(
         f"Unknown dataset: {name!r}. "
-        f"Valid names: {ALL_DATASETS + ['singlecell']}"
+        f"Valid names: {VALID_DATASET_NAMES}"
     )
 
 
@@ -628,12 +629,10 @@ def main() -> None:
     else:
         tier_datasets = ALL_DATASETS
 
-    valid_names = ALL_DATASETS + ["singlecell"]
-
     if args.dataset:
-        if args.dataset not in valid_names:
+        if args.dataset not in VALID_DATASET_NAMES:
             parser.error(
-                f"unknown dataset {args.dataset!r}. Valid names: {valid_names}"
+                f"unknown dataset {args.dataset!r}. Valid names: {VALID_DATASET_NAMES}"
             )
         datasets = [args.dataset]
     else:
