@@ -88,6 +88,17 @@ const CHEB_MIN_N: usize = 1000;
 /// chain in mod.rs can decide to escalate.
 const MAX_WARM_RESTARTS: usize = 3;
 
+/// Iteration budget cap for the initial (cold-start) LOBPCG pass.
+/// Matches Python UMAP's default; sufficient for well-conditioned graphs.
+/// Preserved unchanged by Issue #123.
+const LOBPCG_INITIAL_MAXITER_CAP: usize = 300;
+
+/// Iteration budget cap for warm-restart passes (restart > 0).
+/// Raised from 300 to 1000 by Issue #123: each restart starts from a
+/// partially-converged subspace, so more iterations are productive for
+/// adversarial graphs with small eigengap (path P_n, ring C_n).
+const LOBPCG_RESTART_MAXITER_CAP: usize = 1000;
+
 // ─── LOBPCG solver ────────────────────────────────────────────────────────────
 
 /// Chebyshev polynomial preconditioner of degree `degree`.
@@ -275,14 +286,12 @@ pub fn lobpcg_solve<O: LinearOperator>(
     //                           without achieving residuals < LOBPCG_ACCEPT_TOL
     let mut restart_count: usize = 0;
 
-    // Convergence tolerance and iteration budget.
-    // Cap at 300 to prevent runaway iteration on large graphs (e.g. n=5000 → n*5=25,000
-    // iterations); 300 matches Python UMAP's LOBPCG default and is sufficient for
-    // well-conditioned graphs while keeping cost predictable.
-    // Tol is set to 1e-5 (Issue #92): tighter tolerance, combined with the ChFSI-filtered
-    // starting subspace, allows the solver to achieve residual < 1e-5 (REQ-PERF-001).
+    // Convergence tolerance. Tol is set to 1e-5 (Issue #92): tighter tolerance,
+    // combined with the ChFSI-filtered starting subspace, achieves residual < 1e-5
+    // (REQ-PERF-001). The iteration budget (maxiter) is now per-pass: initial pass
+    // uses LOBPCG_INITIAL_MAXITER_CAP (300), warm-restart passes use
+    // LOBPCG_RESTART_MAXITER_CAP (1000). See Issue #123.
     let tol: f32 = 1e-5;
-    let maxiter = (n * 5).min(300);
 
     // Defined outside the loop: captures nothing from the environment, so no need to
     // re-create it on every iteration.
@@ -291,6 +300,12 @@ pub fn lobpcg_solve<O: LinearOperator>(
     };
 
     for restart in 0..=MAX_WARM_RESTARTS {
+        let maxiter = if restart == 0 {
+            (n * 5).min(LOBPCG_INITIAL_MAXITER_CAP)
+        } else {
+            (n * 5).min(LOBPCG_RESTART_MAXITER_CAP)
+        };
+
         // Extract x_init for this iteration (moved into lobpcg; repopulated on warm restart).
         debug_assert!(x_init_opt.is_some(), "x_init_opt must be set at every loop entry");
         let x_init_nd16 = x_init_opt.take().expect("x_init_opt is always set at loop entry");

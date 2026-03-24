@@ -317,6 +317,32 @@ fn test_path_2000_warm_restart() {
 }
 
 #[test]
+fn test_path_2000_warm_restart_majority_converged() {
+    // Issue #123: with LOBPCG_RESTART_MAXITER_CAP = 1000, path_2000 should converge
+    // on a majority of seeds. Currently fails because 300-iter cap is insufficient.
+    let lap = path_laplacian(2000);
+    let sqrt_deg = path_sqrt_deg(2000);
+    let op = CsrOperator(&lap);
+    let n_components = 2;
+
+    let mut n_converged = 0usize;
+    for seed in [42u64, 43, 44] {
+        if let Some(((eigs, vecs), _)) = lobpcg_solve(&op, n_components, seed, false, &sqrt_deg) {
+            let residuals = (0..eigs.len())
+                .map(|i| common::eigenpair_residual(&op, vecs.column(i), eigs[i]))
+                .collect::<Vec<_>>();
+            if residuals.iter().all(|&r| r < 1e-5) {
+                n_converged += 1;
+            }
+        }
+    }
+    assert!(
+        n_converged >= 2,
+        "path_2000 should converge on >= 2/3 seeds with raised restart cap; got {n_converged}/3"
+    );
+}
+
+#[test]
 fn test_path_3000_warm_restart() {
     let lap = path_laplacian(3000);
     let sqrt_deg = path_sqrt_deg(3000);
