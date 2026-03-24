@@ -260,6 +260,8 @@ def _compute_metrics(
         return float(trustworthiness(X, emb, n_neighbors=15))
 
     def _sil(emb):
+        if len(np.unique(labels)) < 2:
+            return float("nan")
         return float(silhouette_score(emb, labels))
 
     def _procrustes_disp(ref, other):
