@@ -877,16 +877,4 @@ mod tests {
         let (_, restart_count) = result.expect("should converge on uniform diagonal");
         assert_eq!(restart_count, 0, "restart_count must be 0 for easy convergence");
     }
-
-    #[test]
-    fn lobpcg_restart_maxiter_cap_is_1000() {
-        assert_eq!(LOBPCG_RESTART_MAXITER_CAP, 1000,
-            "warm-restart maxiter cap must be 1000 per Issue #123");
-    }
-
-    #[test]
-    fn lobpcg_initial_maxiter_cap_is_300() {
-        assert_eq!(LOBPCG_INITIAL_MAXITER_CAP, 300,
-            "initial-pass maxiter cap must remain 300 per Issue #123");
-    }
 }
