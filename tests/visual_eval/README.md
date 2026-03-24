@@ -128,6 +128,58 @@ initialization strategies).
 | `two_moons_1000` | `make_moons` | 1000 | 2 | Two crescents |
 | `blobs_hd_2000` | `make_blobs` | 2000 | 50 | 10 clusters, high-dimensional |
 
+
+## Tier 2 Datasets (Real-World)
+
+Tier 2 datasets provide a more rigorous stress test using real image data.
+They require a one-time download; sklearn caches them in `~/scikit_learn_data/`.
+
+| Name | Source | n | Features | Classes | Notes |
+|------|--------|---|----------|---------|-------|
+| `mnist_10k` | `fetch_openml('mnist_784')` | 10,000 | 784 | 10 digits | Subsampled from 70k; reproducible (seed=42) |
+| `fashion_mnist_10k` | `fetch_openml('Fashion-MNIST')` | 10,000 | 784 | 10 categories | Harder; shirt/coat/pullover overlap |
+| `pendigits` | `load_digits()` | 1,797 | 64 | 10 digits | Built-in; no download needed |
+
+### Download and Caching
+
+MNIST and Fashion-MNIST are downloaded from OpenML on first use and cached in
+`~/scikit_learn_data/` (sklearn's default). Subsequent runs use the cache.
+
+To use a custom cache directory:
+
+```bash
+python tests/visual_eval/generate_umap_comparisons.py --phase baseline --tier 2 --data-dir /path/to/cache
+```
+
+---
+
+## Running by Tier
+
+```bash
+# Tier 1 only (fast, synthetic, no download)
+python tests/visual_eval/generate_umap_comparisons.py --phase baseline --tier 1
+
+# Tier 2 only (real-world; downloads MNIST and Fashion-MNIST on first run)
+python tests/visual_eval/generate_umap_comparisons.py --phase baseline --tier 2
+
+# All datasets (default)
+python tests/visual_eval/generate_umap_comparisons.py --phase baseline --tier all
+python tests/visual_eval/generate_umap_comparisons.py --phase baseline   # same as --tier all
+```
+
+---
+
+## Tier 3 — Single-Cell (Placeholder)
+
+A `singlecell` dataset stub exists for future use. It requires `scanpy` and
+an `.h5ad` file, and currently raises `NotImplementedError`:
+
+```bash
+python tests/visual_eval/generate_umap_comparisons.py --phase baseline \
+    --dataset singlecell --singlecell-path data/pbmc3k.h5ad
+# NotImplementedError: Single-cell loading requires scanpy and a .h5ad file ...
+```
+
 ---
 
 ## Python Environment Setup
