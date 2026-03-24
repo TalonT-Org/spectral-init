@@ -25,16 +25,32 @@ Runs Python UMAP on each Tier 1 synthetic dataset and saves reference outputs:
 - Fuzzy k-NN graph in Rust-compatible CSR format
 - 2×2 comparison plot (spectral init, final embedding, eigenvalue spectrum, metrics)
 
-### Phase 2 — Comparison (future)
+### Phase 2 — Comparison (`--phase compare`)
 
-Loads the Rust spectral init output and compares it visually and numerically against
-the Phase 1 baseline. Generates overlay plots and alignment scores.
+Loads Phase 1 artifacts and Rust spectral init coordinates, runs a three-way UMAP
+SGD comparison (Python spectral, Rust spectral, random), and produces:
+
+- A 2×3 comparison plot (pre-SGD inits and post-SGD embeddings)
+- An overlay plot (Python vs Rust SGD results)
+- Per-dataset metrics JSON with PASS/FAIL verdict
 
 ---
 
-## How to Run Phase 1
+## How to Run
 
-Run from the repository root with the `spectral-test` conda environment active:
+### End-to-end (recommended)
+
+Run the full pipeline from Phase 1 through Phase 2 with a single script:
+
+```bash
+micromamba activate spectral-test
+./tests/visual_eval/run_eval.sh
+```
+
+This runs Phase 1, the Rust export test, and Phase 2 in sequence, then prints a
+per-dataset PASS/FAIL summary.
+
+### Phase 1 only
 
 ```bash
 micromamba activate spectral-test
@@ -47,6 +63,18 @@ python tests/visual_eval/generate_umap_comparisons.py --phase baseline --dataset
 
 # Custom output directory
 python tests/visual_eval/generate_umap_comparisons.py --phase baseline --output-dir /tmp/visual_eval
+```
+
+### Phase 2 only (requires Phase 1 artifacts and Rust export)
+
+```bash
+micromamba activate spectral-test
+
+# All 5 Tier 1 datasets
+python tests/visual_eval/generate_umap_comparisons.py --phase compare
+
+# Single dataset
+python tests/visual_eval/generate_umap_comparisons.py --phase compare --dataset blobs_1000
 ```
 
 ---
@@ -63,8 +91,30 @@ For each dataset `{name}`, Phase 1 writes the following files to `tests/visual_e
 | `{name}_labels.npy` | `(n,)` int32 | Dataset labels for coloring |
 | `{name}_baseline.png` | 2×2 figure | Spectral init / final / eigenvalue spectrum / metrics |
 
+Phase 2 reads `{name}_rust_init.npy` (written by the Rust export test) and adds:
+
+| File | Shape / Type | Description |
+|------|-------------|-------------|
+| `{name}_comparison.png` | 2×3 figure | Pre-SGD inits (top row) and post-SGD embeddings (bottom row) |
+| `{name}_overlay.png` | 1×1 figure | Python vs Rust SGD embeddings overlaid |
+| `{name}_metrics.json` | JSON | Trustworthiness, silhouette, Procrustes, pairwise-dist correlation + PASS/FAIL |
+
 The `output/` directory is gitignored (files are large and regenerated locally).
 Only `output/.gitkeep` is tracked to ensure the directory exists after a fresh clone.
+
+### Phase 2 success criteria
+
+| Metric | Threshold | PASS condition |
+|--------|-----------|---------------|
+| Procrustes disparity (rust vs python) | < 0.05 | Rust embedding aligns with Python after Procrustes |
+| Pairwise distance correlation (rust vs python) | > 0.99 | Pairwise distances are nearly identical |
+| Trustworthiness difference | < 0.01 | Rust embedding preserves local structure as well as Python |
+| Silhouette score difference | < 0.05 | Rust embedding separates clusters as well as Python |
+
+Overall verdict is **PASS** only when all four metrics pass. A FAIL means the Rust spectral init
+diverges from Python in a way that affects downstream SGD quality. A note is printed when the
+random init also passes all thresholds (indicating the dataset may be too easy to distinguish
+initialization strategies).
 
 ---
 
