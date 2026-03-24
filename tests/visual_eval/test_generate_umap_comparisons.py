@@ -48,9 +48,22 @@ def test_load_mnist_deterministic(monkeypatch):
     np.testing.assert_array_equal(y1, y2)
 
 
-def test_plot_large_dataset_uses_small_scatter(tmp_path):
+def test_plot_large_dataset_uses_small_scatter(tmp_path, monkeypatch):
     """_make_baseline_plot applies s=0.5 and alpha=0.3 when n > 5000."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
     from tests.visual_eval.generate_umap_comparisons import _make_baseline_plot
+
+    captured_kwargs: list[dict] = []
+    original_scatter = plt.Axes.scatter
+
+    def mock_scatter(self, *args, **kwargs):
+        captured_kwargs.append(kwargs)
+        return original_scatter(self, *args, **kwargs)
+
+    monkeypatch.setattr(plt.Axes, "scatter", mock_scatter)
+
     n = 10000
     rng = np.random.RandomState(0)
     init = rng.randn(n, 2)
@@ -60,17 +73,18 @@ def test_plot_large_dataset_uses_small_scatter(tmp_path):
     metrics = {"trustworthiness": 0.9, "silhouette": 0.5,
                "n_components": 1, "spectral_gap": 0.1, "condition_number": 10.0}
     _make_baseline_plot("test_large", init, final, labels, eigs, metrics, tmp_path)
+
     assert (tmp_path / "test_large_baseline.png").exists()
+    assert any(kw.get("s") == 0.5 and kw.get("alpha") == 0.3 for kw in captured_kwargs)
 
 
-def test_unknown_dataset_exits(capsys):
+def test_unknown_dataset_exits(monkeypatch):
     from tests.visual_eval.generate_umap_comparisons import main
+    monkeypatch.setattr(sys, "argv", ["prog", "--phase", "baseline", "--dataset", "nonexistent_xyz"])
     with pytest.raises(SystemExit):
-        sys.argv = ["prog", "--phase", "baseline", "--dataset", "nonexistent_xyz"]
         main()
 
 
 def test_all_tier_datasets():
     from tests.visual_eval.generate_umap_comparisons import TIER1_DATASETS, TIER2_DATASETS, ALL_DATASETS
     assert ALL_DATASETS == TIER1_DATASETS + TIER2_DATASETS
-    assert len(ALL_DATASETS) == len(TIER1_DATASETS) + len(TIER2_DATASETS)
