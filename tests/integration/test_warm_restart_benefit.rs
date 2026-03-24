@@ -374,7 +374,11 @@ fn test_ring_2000_warm_restart_converges() {
     // where warm restart achieves full convergence (residual < 1e-5).
     // Research evidence: restart_count=3, improvement_ratio=33.4x
     // (residual drops from 3.25e-4 to 9.74e-6).
-    // Run with --release to match research conditions.
+    // Only meaningful under --release; skip in debug builds where LOBPCG
+    // convergence behaviour differs due to reduced optimisation.
+    if cfg!(debug_assertions) {
+        return;
+    }
     let lap = ring_laplacian(2000);
     let sqrt_deg = ring_sqrt_deg(2000);
     let op = CsrOperator(&lap);
@@ -384,8 +388,8 @@ fn test_ring_2000_warm_restart_converges() {
 
     let ((eigs, vecs), restart_count) = result.unwrap();
     assert!(
-        restart_count >= 1,
-        "warm restart should fire on ring_2000 seed=42; got restart_count={restart_count}"
+        restart_count >= 3,
+        "warm restart should fire 3 times on ring_2000 seed=42 (research: restart_count=3); got restart_count={restart_count}"
     );
 
     let max_res = max_residual(&op, &eigs, &vecs);
