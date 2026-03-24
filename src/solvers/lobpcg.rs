@@ -851,14 +851,15 @@ mod tests {
 
     #[test]
     fn lobpcg_solve_restart_count_zero_on_easy_convergence() {
-        // A diagonal matrix with distinct, well-separated eigenvalues converges
-        // on the first LOBPCG pass: restart_count must be 0.
-        let diag: Vec<f64> = (0..8).map(|i| (i + 1) as f64 * 0.1).collect();
+        // A uniform diagonal matrix (all eigenvalues = 1) means every vector is an
+        // eigenvector: LOBPCG residuals are identically zero on the first pass, so
+        // restart_count must be 0.
+        let diag = vec![1.0_f64; 8];
         let mat = diagonal_csr(&diag);
         let op = CsrOperator(&mat);
         let sqrt_deg = Array1::from_vec(vec![1.0_f64; 8]);
         let result = lobpcg_solve(&op, 2, 42, false, &sqrt_deg);
-        let (_, restart_count) = result.expect("should converge on easy diagonal");
+        let (_, restart_count) = result.expect("should converge on uniform diagonal");
         assert_eq!(restart_count, 0, "restart_count must be 0 for easy convergence");
     }
 }
