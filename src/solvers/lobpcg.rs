@@ -99,6 +99,14 @@ const LOBPCG_INITIAL_MAXITER_CAP: usize = 300;
 /// adversarial graphs with small eigengap (path P_n, ring C_n).
 const LOBPCG_RESTART_MAXITER_CAP: usize = 1000;
 
+/// Convergence tolerance for warm-restart LOBPCG passes (restart > 0).
+/// Tighter than the initial-pass tolerance (1e-5): when seeded from a
+/// partially-converged subspace the solver must refine further to ensure
+/// per-vector residuals drop below LOBPCG_ACCEPT_TOL (1e-5) after
+/// Rayleigh-Ritz. Without the tighter tolerance LOBPCG exits immediately
+/// (seed already satisfies 1e-5), leaving per-vector residuals unchanged.
+const LOBPCG_RESTART_TOL: f32 = 1e-6;
+
 // ─── LOBPCG solver ────────────────────────────────────────────────────────────
 
 /// Chebyshev polynomial preconditioner of degree `degree`.
@@ -286,12 +294,8 @@ pub fn lobpcg_solve<O: LinearOperator>(
     //                           without achieving residuals < LOBPCG_ACCEPT_TOL
     let mut restart_count: usize = 0;
 
-    // Convergence tolerance. Tol is set to 1e-5 (Issue #92): tighter tolerance,
-    // combined with the ChFSI-filtered starting subspace, achieves residual < 1e-5
-    // (REQ-PERF-001). The iteration budget (maxiter) is now per-pass: initial pass
-    // uses LOBPCG_INITIAL_MAXITER_CAP (300), warm-restart passes use
-    // LOBPCG_RESTART_MAXITER_CAP (1000). See Issue #123.
-    let tol: f32 = 1e-5;
+    // tol is now per-pass (computed inside the loop): initial pass uses 1e-5 (Issue #92),
+    // warm-restart passes use LOBPCG_RESTART_TOL (1e-6, Issue #123). See loop body.
 
     // Defined outside the loop: captures nothing from the environment, so no need to
     // re-create it on every iteration.
@@ -306,42 +310,64 @@ pub fn lobpcg_solve<O: LinearOperator>(
             (n * 5).min(LOBPCG_RESTART_MAXITER_CAP)
         };
 
+        // Per-pass tolerance: initial pass uses 1e-5 (Issue #92 REQ-TOL-003), warm-restart
+        // passes use LOBPCG_RESTART_TOL (1e-6, Issue #123). The tighter warm-restart tolerance
+        // forces LOBPCG to keep iterating past the point where the seed eigvecs already satisfy
+        // 1e-5 — without this, LOBPCG exits immediately and per-vector residuals stagnate.
+        let tol: f32 = if restart == 0 { 1e-5 } else { LOBPCG_RESTART_TOL };
+
         // Extract x_init for this iteration (moved into lobpcg; repopulated on warm restart).
         debug_assert!(x_init_opt.is_some(), "x_init_opt must be set at every loop entry");
         let x_init_nd16 = x_init_opt.take().expect("x_init_opt is always set at loop entry");
 
         // ── Run linfa-linalg LOBPCG ──────────────────────────────────────────
-        let lobpcg_result = if regularize {
-            lobpcg(
-                |x: nd16::ArrayView2<f64>| -> nd16::Array2<f64> {
-                    let x17 = from_nd16_view2(x);
-                    let mut y17 = Array2::zeros((n, x17.ncols()));
-                    op.apply(x17.view(), &mut y17);
-                    y17.zip_mut_with(&x17, |yi, &xi| *yi += REGULARIZATION_EPS * xi);
-                    to_nd16_array2(y17)
-                },
-                x_init_nd16,
-                |_: nd16::ArrayViewMut2<f64>| {},
-                None,
-                tol,
-                maxiter,
-                Order::Smallest,
-            )
-        } else {
-            lobpcg(
-                |x: nd16::ArrayView2<f64>| -> nd16::Array2<f64> {
-                    let x17 = from_nd16_view2(x);
-                    let mut y17 = Array2::zeros((n, x17.ncols()));
-                    op.apply(x17.view(), &mut y17);
-                    to_nd16_array2(y17)
-                },
-                x_init_nd16,
-                |_: nd16::ArrayViewMut2<f64>| {},
-                None,
-                tol,
-                maxiter,
-                Order::Smallest,
-            )
+        // Wrapped in catch_unwind: linfa-linalg can panic with "NaN values in array"
+        // after many warm restarts on adversarial graphs (path P_n, ring C_n) when the
+        // nearly-converged x_init leads to a near-degenerate internal eigenproblem.
+        // Catching the panic lets us return last_result rather than crashing the caller.
+        let lobpcg_raw = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            if regularize {
+                lobpcg(
+                    |x: nd16::ArrayView2<f64>| -> nd16::Array2<f64> {
+                        let x17 = from_nd16_view2(x);
+                        let mut y17 = Array2::zeros((n, x17.ncols()));
+                        op.apply(x17.view(), &mut y17);
+                        y17.zip_mut_with(&x17, |yi, &xi| *yi += REGULARIZATION_EPS * xi);
+                        to_nd16_array2(y17)
+                    },
+                    x_init_nd16,
+                    |_: nd16::ArrayViewMut2<f64>| {},
+                    None,
+                    tol,
+                    maxiter,
+                    Order::Smallest,
+                )
+            } else {
+                lobpcg(
+                    |x: nd16::ArrayView2<f64>| -> nd16::Array2<f64> {
+                        let x17 = from_nd16_view2(x);
+                        let mut y17 = Array2::zeros((n, x17.ncols()));
+                        op.apply(x17.view(), &mut y17);
+                        to_nd16_array2(y17)
+                    },
+                    x_init_nd16,
+                    |_: nd16::ArrayViewMut2<f64>| {},
+                    None,
+                    tol,
+                    maxiter,
+                    Order::Smallest,
+                )
+            }
+        }));
+        let lobpcg_result = match lobpcg_raw {
+            Err(_) => {
+                log::debug!(
+                    "[lobpcg] linfa-linalg panicked at restart {restart}/{MAX_WARM_RESTARTS} \
+                     (NaN in near-degenerate subspace); returning last_result"
+                );
+                break;
+            }
+            Ok(r) => r,
         };
 
         // ── Extract eigenpairs if rnorms are acceptable ──────────────────────
