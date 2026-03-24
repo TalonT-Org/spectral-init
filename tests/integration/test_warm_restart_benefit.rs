@@ -369,7 +369,7 @@ fn test_ring_2000_warm_restart() {
 }
 
 #[test]
-fn ring_2000_warm_restart_converges() {
+fn test_ring_2000_warm_restart_converges() {
     // ring_2000 seed=42: single reproducible case from the research experiment
     // where warm restart achieves full convergence (residual < 1e-5).
     // Research evidence: restart_count=3, improvement_ratio=33.4x
