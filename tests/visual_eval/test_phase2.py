@@ -101,7 +101,7 @@ class TestRunCompareFileMissing:
         # Must not raise; should print warning
         run_compare(name, tmp_path)
         captured = capsys.readouterr()
-        assert "warn" in captured.out.lower() or "skip" in captured.out.lower() or "missing" in captured.out.lower()
+        assert "rust_init.npy not found" in captured.out.lower()
         # No output files produced
         assert not (tmp_path / f"{name}_comparison.png").exists()
 
