@@ -79,7 +79,11 @@ class TestComputeMetrics:
         embed = rng.randn(n, 2)
         # Should complete without MemoryError
         result = _compute_metrics(X, labels, embed, embed, rng.randn(n, 2))
-        assert result["rust_spectral"]["pairwise_corr_vs_python"] is not None
+        corr = result["rust_spectral"]["pairwise_corr_vs_python"]
+        assert corr is not None
+        assert isinstance(corr, float)
+        assert -1.0 <= corr <= 1.0
+        assert np.isfinite(corr)
 
 
 class TestRunCompareFileMissing:
