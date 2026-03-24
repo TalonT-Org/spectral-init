@@ -14,8 +14,6 @@ from pathlib import Path
 import numpy as np
 import scipy.sparse
 import scipy.sparse.linalg
-from scipy.sparse import eye, diags
-from scipy.sparse.linalg import eigsh
 
 TIER1_DATASETS = [
     "blobs_1000",
@@ -45,7 +43,9 @@ def load_dataset(name: str) -> tuple[np.ndarray, np.ndarray, str]:
         "circles_1000": lambda: make_circles(
             n_samples=1000, noise=0.05, factor=0.5, random_state=42
         ),
-        "swiss_roll_2000": lambda: _load_swiss_roll(),
+        "swiss_roll_2000": lambda: (
+            lambda X, t: (X, np.digitize(t, np.percentile(t, [20, 40, 60, 80])))
+        )(*make_swiss_roll(n_samples=2000, noise=0.0, random_state=42)),
         "two_moons_1000": lambda: make_moons(
             n_samples=1000, noise=0.05, random_state=42
         ),
@@ -59,14 +59,6 @@ def load_dataset(name: str) -> tuple[np.ndarray, np.ndarray, str]:
 
     X, labels = generators[name]()
     return X.astype(np.float64), labels.astype(np.int32), name
-
-
-def _load_swiss_roll() -> tuple[np.ndarray, np.ndarray]:
-    from sklearn.datasets import make_swiss_roll
-
-    X, t = make_swiss_roll(n_samples=2000, noise=0.0, random_state=42)
-    labels = np.digitize(t, np.percentile(t, [20, 40, 60, 80]))
-    return X, labels
 
 
 def export_graph(graph: scipy.sparse.csr_matrix, path: Path) -> None:
@@ -88,9 +80,11 @@ def run_baseline(name: str, output_dir: Path) -> None:
     from umap.spectral import spectral_layout
     from sklearn.manifold import trustworthiness
     from sklearn.metrics import silhouette_score
+    from scipy.sparse import eye, diags
+    from scipy.sparse.linalg import eigsh
     from scipy.sparse.csgraph import connected_components
 
-    X, labels, name = load_dataset(name)
+    X, labels, _ = load_dataset(name)
 
     # Fit UMAP
     mapper = umap_lib.UMAP(
@@ -118,16 +112,22 @@ def run_baseline(name: str, output_dir: Path) -> None:
     degree = np.array(graph.sum(axis=1)).flatten()
     D_inv_sqrt = diags(1.0 / np.sqrt(np.maximum(degree, 1e-10)))
     L = eye(graph.shape[0]) - D_inv_sqrt @ graph @ D_inv_sqrt
-    eigenvalues, _ = eigsh(L, k=10, which="SM")
+    try:
+        eigenvalues, _ = eigsh(L, k=10, which="SM")
+    except scipy.sparse.linalg.ArpackNoConvergence as exc:
+        raise RuntimeError(
+            f"eigsh failed to converge for dataset {name!r} "
+            f"(matrix shape {L.shape})"
+        ) from exc
     eigenvalues = np.sort(np.maximum(eigenvalues, 0.0))
 
     # Compute quality metrics
     tw = trustworthiness(X, final_embedding, n_neighbors=15)
     sil = silhouette_score(final_embedding, labels)
     n_conn, _ = connected_components(graph, directed=False)
-    spectral_gap = float(eigenvalues[1] - eigenvalues[0])
+    spectral_gap = float(eigenvalues[1] - eigenvalues[0]) if len(eigenvalues) >= 2 else 0.0
     condition_number = (
-        float(eigenvalues[9] / eigenvalues[1]) if eigenvalues[1] > 0 else float("inf")
+        float(eigenvalues[-1] / eigenvalues[1]) if len(eigenvalues) >= 2 and eigenvalues[1] > 0 else float("inf")
     )
     metrics = {
         "trustworthiness": tw,
@@ -193,11 +193,10 @@ def _make_baseline_plot(
     # [1,0] Eigenvalue Spectrum
     ax_eig = axes[1, 0]
     ax_eig.bar(range(len(eigenvalues)), eigenvalues)
-    spectral_gap = eigenvalues[1] - eigenvalues[0]
     ax_eig.text(
         0.98,
         0.95,
-        f"λ₂ - λ₁ = {spectral_gap:.4f}",
+        f"λ₂ - λ₁ = {metrics['spectral_gap']:.4f}",
         transform=ax_eig.transAxes,
         ha="right",
         va="top",
@@ -261,6 +260,8 @@ def main() -> None:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    if args.dataset and args.dataset not in TIER1_DATASETS:
+        parser.error(f"unknown dataset {args.dataset!r}. Valid names: {TIER1_DATASETS}")
     datasets = [args.dataset] if args.dataset else TIER1_DATASETS
 
     for name in datasets:
