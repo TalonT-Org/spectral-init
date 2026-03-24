@@ -423,6 +423,15 @@ def run_compare(name: str, output_dir: Path) -> dict | None:
         print(f"  [WARN] {name}: rust_init.npy not found — skipping")
         return None
 
+    for baseline_file in [
+        output_dir / f"{name}_py_spectral.npy",
+        output_dir / f"{name}_py_final.npy",
+        output_dir / f"{name}_labels.npy",
+    ]:
+        if not baseline_file.exists():
+            raise FileNotFoundError(
+                f"  [ERROR] {name}: baseline file not found — {baseline_file}"
+            )
     py_spectral = np.load(output_dir / f"{name}_py_spectral.npy")
     py_final = np.load(output_dir / f"{name}_py_final.npy")
     rust_init = np.load(rust_init_path)
