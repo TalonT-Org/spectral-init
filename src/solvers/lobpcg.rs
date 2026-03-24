@@ -268,6 +268,11 @@ pub fn lobpcg_solve<O: LinearOperator>(
 
     let mut x_init_opt: Option<nd16::Array2<f64>> = Some(to_nd16_array2(x_init_17));
     let mut last_result: Option<EigenResult> = None;
+    // restart_count semantics (returned as the second element of the tuple):
+    //   0                     — converged in initial pass; no warm restart was needed
+    //   1..=MAX_WARM_RESTARTS — unconvergence detected N times; recovered on warm restart N
+    //   MAX_WARM_RESTARTS + 1 — initial pass + all MAX_WARM_RESTARTS warm restarts exhausted
+    //                           without achieving residuals < LOBPCG_ACCEPT_TOL
     let mut restart_count: usize = 0;
 
     // Convergence tolerance and iteration budget.
@@ -407,14 +412,20 @@ pub fn lobpcg_solve<O: LinearOperator>(
                     .cloned()
                     .fold(0.0_f64, f64::max);
                 restart_count += 1;
-                log::debug!(
-                    "[lobpcg] unconvergence detected after Rayleigh-Ritz \
-                     (max_residual={max_res:.2e}); warm restart {}/{MAX_WARM_RESTARTS}",
-                    restart + 1
-                );
                 // ── Warm restart: use refined eigvecs as next x_init (REQ-UCD-004) ──
                 if restart < MAX_WARM_RESTARTS {
+                    log::debug!(
+                        "[lobpcg] unconvergence detected after Rayleigh-Ritz \
+                         (max_residual={max_res:.2e}); firing warm restart {}/{MAX_WARM_RESTARTS}",
+                        restart + 1
+                    );
                     x_init_opt = Some(to_nd16_array2(result.1.clone()));
+                } else {
+                    log::debug!(
+                        "[lobpcg] unconvergence detected after Rayleigh-Ritz \
+                         (max_residual={max_res:.2e}); \
+                         all {MAX_WARM_RESTARTS}/{MAX_WARM_RESTARTS} warm restarts exhausted"
+                    );
                 }
                 last_result = Some(result);
             }
@@ -836,5 +847,18 @@ mod tests {
             assert!(r < LOBPCG_ACCEPT_TOL,
                 "eigenpair {i} residual={r:.2e} exceeds LOBPCG_ACCEPT_TOL={LOBPCG_ACCEPT_TOL:.2e}");
         }
+    }
+
+    #[test]
+    fn lobpcg_solve_restart_count_zero_on_easy_convergence() {
+        // A diagonal matrix with distinct, well-separated eigenvalues converges
+        // on the first LOBPCG pass: restart_count must be 0.
+        let diag: Vec<f64> = (0..8).map(|i| (i + 1) as f64 * 0.1).collect();
+        let mat = diagonal_csr(&diag);
+        let op = CsrOperator(&mat);
+        let sqrt_deg = Array1::from_vec(vec![1.0_f64; 8]);
+        let result = lobpcg_solve(&op, 2, 42, false, &sqrt_deg);
+        let (_, restart_count) = result.expect("should converge on easy diagonal");
+        assert_eq!(restart_count, 0, "restart_count must be 0 for easy convergence");
     }
 }
