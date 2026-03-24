@@ -1,5 +1,6 @@
 """Unit tests for Phase 2 comparison metrics and flow control."""
 import json
+import subprocess
 import numpy as np
 import pytest
 from pathlib import Path
@@ -144,9 +145,9 @@ class TestCLIPhaseCompare:
     """Test that --phase compare is accepted by argparse."""
 
     def test_compare_choice_accepted(self, monkeypatch):
-        import subprocess, sys
+        script = Path(__file__).parent / "generate_umap_comparisons.py"
         result = subprocess.run(
-            [sys.executable, "tests/visual_eval/generate_umap_comparisons.py", "--phase", "compare", "--help"],
+            [sys.executable, str(script), "--phase", "compare", "--help"],
             capture_output=True, text=True
         )
         assert result.returncode == 0
