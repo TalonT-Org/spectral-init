@@ -1647,7 +1647,7 @@ Eight implementation tickets (A1, A2, B1, B2, B4, C1, C2, C3) and one verificati
 | A2 | #100 | Fix fixture generator — remove explicit f64 upcast that real UMAP doesn't do |
 | B1 | #99 | Chebyshev Filtered Subspace Iteration (ChFSI) preconditioning for LOBPCG |
 | B2 | #103 | Shift-and-invert LOBPCG via faer sparse Cholesky (new Level 2 in escalation) |
-| B4 | #104 | Tighten LOBPCG convergence tolerance from 1e-4 to 1e-6 after preconditioning |
+| B4 | #104 | Tighten LOBPCG convergence tolerance from 1e-4 to 1e-5 after preconditioning |
 | C1 | #101 | Accuracy report tests production paths for disconnected graphs (`embed_disconnected`) |
 | C2 | #106 | Per-component residual metrics for disconnected datasets |
 | C3 | #98 | Split comp_b tolerance into isolated and chained measurements |
