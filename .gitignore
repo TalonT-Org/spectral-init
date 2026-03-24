@@ -16,6 +16,10 @@ Thumbs.db
 # Project
 /temp/
 
+# Visual eval generated outputs (large, regenerated locally)
+tests/visual_eval/output/
+!tests/visual_eval/output/.gitkeep
+
 # Python environment (micromamba prefix, never commit)
 /envs/
 
