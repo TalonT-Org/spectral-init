@@ -252,6 +252,9 @@ def _compute_metrics(
     from scipy.spatial.distance import pdist
 
     n = X.shape[0]
+    for name, arr in [("labels", labels), ("embed_py", embed_py), ("embed_rust", embed_rust), ("embed_rand", embed_rand)]:
+        if arr.shape[0] != n:
+            raise ValueError(f"_compute_metrics: {name} has {arr.shape[0]} rows but X has {n}")
 
     def _tw(emb):
         return float(trustworthiness(X, emb, n_neighbors=15))
