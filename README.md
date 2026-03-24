@@ -1,5 +1,7 @@
 # spectral-init
 
+> **Warning:** This project is under active construction and is not ready for use.
+
 Spectral initialization for UMAP embeddings in Rust.
 
 Computes Laplacian eigenvectors of the fuzzy k-NN graph to provide globally-aware starting coordinates for SGD optimization — the single factor that makes Python UMAP produce superior embeddings.
