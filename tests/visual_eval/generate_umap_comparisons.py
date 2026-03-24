@@ -265,6 +265,10 @@ def _compute_metrics(
         return float(silhouette_score(emb, labels))
 
     def _procrustes_disp(ref, other):
+        if ref.shape != other.shape:
+            raise ValueError(
+                f"_procrustes_disp: shape mismatch ref={ref.shape} other={other.shape}"
+            )
         _, _, disp = procrustes(ref, other)
         return float(disp)
 
