@@ -4,8 +4,9 @@ description: >
   Two-phase technical research recipe. Phase 1 scopes a research question
   and opens an experiment design issue for human review. Phase 2 (resumed
   with issue_number) implements the experiment, runs it, writes a report
-  to research/, and opens a PR. No auto-merge.
-summary: scope > plan > issue > (resume) > implement > experiment > report > open-pr
+  to research/, and opens a PR. Supports optional setup phases for complex
+  experiments requiring prerequisite infrastructure. No auto-merge.
+summary: scope > plan > issue > (resume) > [setup?] > implement > experiment > report > open-pr
 
 ingredients:
   task:
@@ -22,6 +23,15 @@ ingredients:
   base_branch:
     description: Branch to target for the research PR
     default: "main"
+  setup_phases:
+    description: >
+      When 'true', decompose the experiment plan into sequenced setup
+      phases before implementation. Use for complex research requiring
+      prerequisite infrastructure — test harnesses, data generators,
+      plotting scripts, logging, environment setup, etc. Each phase is
+      planned and implemented independently in a shared worktree before
+      the experiment runs.
+    default: "false"
 
 kitchen_rules:
   - >
@@ -39,6 +49,20 @@ kitchen_rules:
     Inconclusive results are valid findings, not failures.
     Always produce a report regardless of experiment outcome.
   - "Route to on_failure when a step fails — do not investigate directly."
+  - >
+    SETUP PHASES MODE: When setup_phases is true, the worktree is created
+    early and shared across all phases. The make-groups decomposition
+    produces sequenced phases that include both prerequisite infrastructure
+    AND experiment implementation. After all phases complete, proceed
+    directly to run_experiment — do NOT invoke implement-experiment
+    (it would create a duplicate worktree). The experiment plan is copied
+    into the worktree so run-experiment can discover it.
+  - >
+    PHASE ITERATION: The agent maintains a phase queue from group_files.
+    For each phase, run make-plan then retry-worktree to implement in the
+    shared worktree. Advance to the next phase only after successful
+    implementation. Track remaining phases in context.group_files to
+    determine next_phase_or_experiment routing.
 
 steps:
   # --- PHASE ROUTER ---
@@ -103,9 +127,20 @@ steps:
         gh issue view ${{ inputs.issue_number }}
         --json body -q .body > .autoskillit/temp/experiment-plan.md
       cwd: "${{ inputs.source_dir }}"
-    on_success: implement_experiment
+    on_success: check_setup_needed
     on_failure: escalate_stop
 
+  check_setup_needed:
+    action: route
+    on_result:
+      - when: "${{ inputs.setup_phases }} == true"
+        route: create_worktree
+      - route: implement_experiment
+    note: >
+      Routes to setup phase decomposition if setup_phases is true,
+      otherwise proceeds with single-shot implement-experiment.
+
+  # --- SIMPLE PATH (original behavior) ---
   implement_experiment:
     tool: run_skill
     with:
@@ -119,6 +154,89 @@ steps:
     on_success: run_experiment
     on_failure: escalate_stop
 
+  # --- SETUP PHASES PATH ---
+  create_worktree:
+    tool: run_cmd
+    with:
+      cmd: >
+        BRANCH="research-$(date +%Y%m%d-%H%M%S)" &&
+        WORKTREE_PATH="../worktrees/${BRANCH}" &&
+        git worktree add -b "${BRANCH}" "${WORKTREE_PATH}" &&
+        RESOLVED="$(cd "${WORKTREE_PATH}" && pwd)" &&
+        mkdir -p ".autoskillit/temp/worktrees/${BRANCH}" &&
+        echo "$(git rev-parse --abbrev-ref HEAD)" > ".autoskillit/temp/worktrees/${BRANCH}/base-branch" &&
+        mkdir -p "${RESOLVED}/.autoskillit/temp" &&
+        cp .autoskillit/temp/experiment-plan.md "${RESOLVED}/.autoskillit/temp/experiment-plan.md" &&
+        echo "worktree_path=${RESOLVED}" &&
+        echo "branch_name=${BRANCH}"
+      cwd: "${{ inputs.source_dir }}"
+    capture:
+      worktree_path: "${{ result.worktree_path }}"
+      branch_name: "${{ result.branch_name }}"
+    on_success: decompose_phases
+    on_failure: escalate_stop
+    note: >
+      Creates the shared worktree early and copies the experiment plan into
+      it. All setup phases and experiment implementation share this worktree.
+
+  decompose_phases:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:make-groups ${{ inputs.source_dir }}/.autoskillit/temp/experiment-plan.md"
+      cwd: "${{ context.worktree_path }}"
+      step_name: decompose
+    capture:
+      group_files: "${{ result.group_files }}"
+    on_success: plan_phase
+    on_failure: escalate_stop
+    note: >
+      Decomposes the experiment plan into sequenced phases. Each phase
+      becomes an independently plannable implementation unit. Typical
+      decomposition: infrastructure/logging -> data generators ->
+      plotting/analysis scripts -> experiment implementation.
+      ITERATION: The agent maintains a phase queue from group_files.
+      For each phase, run plan_phase then implement_phase before advancing.
+
+  plan_phase:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:make-plan CURRENT_PHASE_FILE"
+      cwd: "${{ context.worktree_path }}"
+      step_name: plan_phase
+      group_files: "${{ context.group_files }}"
+    capture:
+      phase_plan_path: "${{ result.plan_path }}"
+    on_success: implement_phase
+    on_failure: escalate_stop
+    note: >
+      Plans the current setup phase. Replace CURRENT_PHASE_FILE with the
+      actual path from context.group_files for the current phase.
+      ITERATION: Pass the current phase's group file path to make-plan.
+
+  implement_phase:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:retry-worktree ${{ context.phase_plan_path }} ${{ context.worktree_path }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: implement_phase
+    on_success: next_phase_or_experiment
+    on_failure: escalate_stop
+    note: >
+      Implements the current phase plan in the shared worktree.
+      Uses retry-worktree which implements a plan in an existing worktree.
+
+  next_phase_or_experiment:
+    action: route
+    on_result:
+      - when: "${{ result.next }} == more_phases"
+        route: plan_phase
+      - route: run_experiment
+    note: >
+      Routing step. The agent evaluates remaining phases:
+      1. If more phases remain in group_files -> route to plan_phase.
+      2. If all phases complete -> route to run_experiment.
+
+  # --- SHARED PATH (both simple and setup converge here) ---
   run_experiment:
     tool: run_skill
     with:
