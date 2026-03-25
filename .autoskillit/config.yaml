@@ -7,4 +7,9 @@ safety:
 test_check:
   command:
   - cargo
-  - test
+  - nextest
+  - run
+  - --profile
+  - ci
+  - --features
+  - testing

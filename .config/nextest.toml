@@ -6,6 +6,10 @@ slow-timeout = { period = "60s" }
 retries = 0
 slow-timeout = { period = "120s" }
 fail-fast = false
+status-level = "fail"
+final-status-level = "fail"
+success-output = "never"
+failure-output = "immediate-final"
 
 [profile.ci.junit]
 path = "target/nextest/ci/junit.xml"
@@ -15,3 +19,12 @@ report-name = "spectral-init-tests"
 retries = 0
 slow-timeout = { period = "120s" }
 # Runs ignored tests too (fixture-dependent)
+
+[profile.quiet]
+retries = 0
+slow-timeout = { period = "120s" }
+fail-fast = false
+status-level = "fail"
+final-status-level = "fail"
+success-output = "never"
+failure-output = "immediate-final"
