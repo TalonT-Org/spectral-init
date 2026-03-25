@@ -4,6 +4,9 @@ generate_umap_comparisons.py — Visual evaluation pipeline for spectral-init.
 
 Phase 1 (--phase baseline): Generates Python UMAP reference outputs for Tier 1
 synthetic datasets: spectral init coords, final embeddings, graphs, and plots.
+
+Phase 2 (--phase compare): Loads Phase 1 artifacts and Rust spectral init
+coordinates, runs three-way UMAP SGD comparison, produces plots and metrics.
 """
 from __future__ import annotations
 
@@ -235,6 +238,244 @@ def _make_baseline_plot(
     print(f"  Saved plot: {out_path}")
 
 
+def _compute_metrics(
+    X: np.ndarray,
+    labels: np.ndarray,
+    embed_py: np.ndarray,
+    embed_rust: np.ndarray,
+    embed_rand: np.ndarray,
+) -> dict:
+    """Compute comparison metrics for three UMAP strategies."""
+    from sklearn.manifold import trustworthiness
+    from sklearn.metrics import silhouette_score
+    from scipy.spatial import procrustes
+    from scipy.spatial.distance import pdist
+
+    n = X.shape[0]
+    for name, arr in [("labels", labels), ("embed_py", embed_py), ("embed_rust", embed_rust), ("embed_rand", embed_rand)]:
+        if arr.shape[0] != n:
+            raise ValueError(f"_compute_metrics: {name} has {arr.shape[0]} rows but X has {n}")
+
+    def _tw(emb):
+        return float(trustworthiness(X, emb, n_neighbors=15))
+
+    def _sil(emb):
+        if len(np.unique(labels)) < 2:
+            return float("nan")
+        return float(silhouette_score(emb, labels))
+
+    def _procrustes_disp(ref, other):
+        if ref.shape != other.shape:
+            raise ValueError(
+                f"_procrustes_disp: shape mismatch ref={ref.shape} other={other.shape}"
+            )
+        _, _, disp = procrustes(ref, other)
+        return float(disp)
+
+    def _pairwise_corr(ref, other):
+        if n > 2000:
+            idx = np.random.RandomState(42).choice(n, 2000, replace=False)
+            ref = ref[idx]
+            other = other[idx]
+        d_ref = pdist(ref)
+        d_other = pdist(other)
+        return float(np.corrcoef(d_ref, d_other)[0, 1])
+
+    tw_py = _tw(embed_py)
+    tw_rust = _tw(embed_rust)
+    tw_rand = _tw(embed_rand)
+
+    sil_py = _sil(embed_py)
+    sil_rust = _sil(embed_rust)
+    sil_rand = _sil(embed_rand)
+
+    proc_rust = _procrustes_disp(embed_py, embed_rust)
+    proc_rand = _procrustes_disp(embed_py, embed_rand)
+
+    corr_rust = _pairwise_corr(embed_py, embed_rust)
+    corr_rand = _pairwise_corr(embed_py, embed_rand)
+
+    pf_proc = "PASS" if proc_rust < 0.05 else "FAIL"
+    pf_corr = "PASS" if corr_rust > 0.99 else "FAIL"
+    pf_tw = "PASS" if abs(tw_rust - tw_py) < 0.01 else "FAIL"
+    pf_sil = "PASS" if abs(sil_rust - sil_py) < 0.05 else "FAIL"
+    overall = "PASS" if all(v == "PASS" for v in [pf_proc, pf_corr, pf_tw, pf_sil]) else "FAIL"
+
+    return {
+        "python_spectral": {
+            "trustworthiness": tw_py,
+            "silhouette": sil_py,
+        },
+        "rust_spectral": {
+            "trustworthiness": tw_rust,
+            "silhouette": sil_rust,
+            "procrustes_vs_python": proc_rust,
+            "pairwise_corr_vs_python": corr_rust,
+        },
+        "random": {
+            "trustworthiness": tw_rand,
+            "silhouette": sil_rand,
+            "procrustes_vs_python": proc_rand,
+            "pairwise_corr_vs_python": corr_rand,
+        },
+        "pass_fail": {
+            "procrustes": pf_proc,
+            "pairwise_corr": pf_corr,
+            "trustworthiness": pf_tw,
+            "silhouette": pf_sil,
+            "overall": overall,
+        },
+    }
+
+
+def _make_comparison_plot(
+    name: str,
+    py_spectral: np.ndarray,
+    rust_init: np.ndarray,
+    embed_py: np.ndarray,
+    embed_rust: np.ndarray,
+    embed_rand: np.ndarray,
+    labels: np.ndarray,
+    output_dir: Path,
+) -> None:
+    """Generate a 2×3 comparison plot (pre-SGD inits and post-SGD embeddings)."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    n = py_spectral.shape[0]
+    rand_init = np.random.RandomState(42).uniform(-10, 10, (n, 2))
+
+    fig, axes = plt.subplots(2, 3, figsize=(18, 10))
+    scatter_kw = dict(c=labels, cmap="tab10", s=2, alpha=0.5)
+
+    # Top row — pre-SGD inits
+    axes[0, 0].scatter(py_spectral[:, 0], py_spectral[:, 1], **scatter_kw)
+    axes[0, 0].set_title(f"{name} — Python Spectral Init (pre-SGD)")
+    axes[0, 0].set_xticks([])
+    axes[0, 0].set_yticks([])
+
+    axes[0, 1].scatter(rust_init[:, 0], rust_init[:, 1], **scatter_kw)
+    axes[0, 1].set_title(f"{name} — Rust Spectral Init (pre-SGD)")
+    axes[0, 1].set_xticks([])
+    axes[0, 1].set_yticks([])
+
+    axes[0, 2].scatter(rand_init[:, 0], rand_init[:, 1], **scatter_kw)
+    axes[0, 2].set_title(f"{name} — Random Init (pre-SGD)")
+    axes[0, 2].set_xticks([])
+    axes[0, 2].set_yticks([])
+
+    # Bottom row — post-SGD embeddings
+    axes[1, 0].scatter(embed_py[:, 0], embed_py[:, 1], **scatter_kw)
+    axes[1, 0].set_title(f"{name} — Python Init → SGD")
+    axes[1, 0].set_xticks([])
+    axes[1, 0].set_yticks([])
+
+    axes[1, 1].scatter(embed_rust[:, 0], embed_rust[:, 1], **scatter_kw)
+    axes[1, 1].set_title(f"{name} — Rust Init → SGD")
+    axes[1, 1].set_xticks([])
+    axes[1, 1].set_yticks([])
+
+    axes[1, 2].scatter(embed_rand[:, 0], embed_rand[:, 1], **scatter_kw)
+    axes[1, 2].set_title(f"{name} — Random Init → SGD")
+    axes[1, 2].set_xticks([])
+    axes[1, 2].set_yticks([])
+
+    plt.tight_layout()
+    out_path = output_dir / f"{name}_comparison.png"
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  Saved plot: {out_path}")
+
+
+def _make_overlay_plot(
+    name: str,
+    embed_py: np.ndarray,
+    embed_rust: np.ndarray,
+    output_dir: Path,
+) -> None:
+    """Generate an overlay plot of Python vs Rust SGD embeddings."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(8, 8))
+    ax.scatter(embed_py[:, 0], embed_py[:, 1], c="blue", marker="o", alpha=0.3, s=3, label="Python Init → SGD")
+    ax.scatter(embed_rust[:, 0], embed_rust[:, 1], c="red", marker="x", alpha=0.3, s=3, label="Rust Init → SGD")
+    ax.legend()
+    ax.set_title(f"{name}: Python vs Rust SGD Overlay")
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+    out_path = output_dir / f"{name}_overlay.png"
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  Saved plot: {out_path}")
+
+
+def run_compare(name: str, output_dir: Path) -> dict | None:
+    """Run Phase 2 comparison for a single dataset."""
+    import json
+    import umap as umap_lib
+
+    rust_init_path = output_dir / f"{name}_rust_init.npy"
+    if not rust_init_path.exists():
+        print(f"  [WARN] {name}: rust_init.npy not found — skipping")
+        return None
+
+    for baseline_file in [
+        output_dir / f"{name}_py_spectral.npy",
+        output_dir / f"{name}_py_final.npy",
+        output_dir / f"{name}_labels.npy",
+    ]:
+        if not baseline_file.exists():
+            raise FileNotFoundError(
+                f"  [ERROR] {name}: baseline file not found — {baseline_file}"
+            )
+    py_spectral = np.load(output_dir / f"{name}_py_spectral.npy")
+    py_final = np.load(output_dir / f"{name}_py_final.npy")
+    rust_init = np.load(rust_init_path)
+    labels = np.load(output_dir / f"{name}_labels.npy")
+    X, _, _ = load_dataset(name)
+
+    umap_kw = dict(
+        n_neighbors=15, min_dist=0.1, n_components=2,
+        metric="euclidean", random_state=42, n_jobs=1,
+    )
+
+    embed_py = py_final.astype(np.float64)
+    embed_rust = umap_lib.UMAP(init=rust_init, **umap_kw).fit_transform(X)
+    embed_rand = umap_lib.UMAP(init="random", **umap_kw).fit_transform(X)
+
+    metrics = _compute_metrics(X, labels, embed_py, embed_rust, embed_rand)
+
+    pf = metrics["pass_fail"]
+    rand_m = metrics["random"]
+    py_m = metrics["python_spectral"]
+
+    rand_proc_pass = rand_m["procrustes_vs_python"] < 0.05
+    rand_corr_pass = rand_m["pairwise_corr_vs_python"] > 0.99
+    rand_tw_pass = abs(rand_m["trustworthiness"] - py_m["trustworthiness"]) < 0.01
+    rand_sil_pass = abs(rand_m["silhouette"] - py_m["silhouette"]) < 0.05
+    if pf["overall"] == "PASS" and all([rand_proc_pass, rand_corr_pass, rand_tw_pass, rand_sil_pass]):
+        print(f"  [WARN] {name}: random init also passes all thresholds — dataset may be too easy")
+
+    _make_comparison_plot(name, py_spectral, rust_init, embed_py, embed_rust, embed_rand, labels, output_dir)
+    _make_overlay_plot(name, embed_py, embed_rust, output_dir)
+
+    result = dict(metrics)
+    result["dataset"] = name
+    result["n_samples"] = int(X.shape[0])
+    result["n_features"] = int(X.shape[1])
+
+    json_path = output_dir / f"{name}_metrics.json"
+    json_path.write_text(json.dumps(result, indent=2))
+    print(f"  Saved metrics: {json_path}")
+
+    print(f"  {name:25s} {pf['overall']}")
+    return result
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Visual evaluation pipeline for spectral-init."
@@ -242,7 +483,7 @@ def main() -> None:
     parser.add_argument(
         "--phase",
         required=True,
-        choices=["baseline"],
+        choices=["baseline", "compare"],
         help="Pipeline phase to run.",
     )
     parser.add_argument(
@@ -267,7 +508,10 @@ def main() -> None:
     for name in datasets:
         t0 = time.time()
         print(f"[{name}] phase={args.phase} ...")
-        run_baseline(name, output_dir)
+        if args.phase == "baseline":
+            run_baseline(name, output_dir)
+        else:
+            run_compare(name, output_dir)
         print(f"[{name}] done in {time.time() - t0:.1f}s")
 
 
