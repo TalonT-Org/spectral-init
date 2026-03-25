@@ -3,7 +3,8 @@
 generate_umap_comparisons.py — Visual evaluation pipeline for spectral-init.
 
 Phase 1 (--phase baseline): Generates Python UMAP reference outputs for Tier 1
-synthetic datasets: spectral init coords, final embeddings, graphs, and plots.
+synthetic datasets and Tier 2 real-world datasets: spectral init coords, final
+embeddings, graphs, and plots.
 
 Phase 2 (--phase compare): Loads Phase 1 artifacts and Rust spectral init
 coordinates, runs three-way UMAP SGD comparison, produces plots and metrics.
@@ -26,11 +27,88 @@ TIER1_DATASETS = [
     "blobs_hd_2000",
 ]
 
+TIER2_DATASETS = [
+    "mnist_10k",
+    "fashion_mnist_10k",
+    "pendigits",
+]
 
-def load_dataset(name: str) -> tuple[np.ndarray, np.ndarray, str]:
-    """Load a Tier 1 synthetic dataset by name.
+ALL_DATASETS = TIER1_DATASETS + TIER2_DATASETS
+VALID_DATASET_NAMES = ALL_DATASETS + ["singlecell"]
 
-    Returns (X, labels, name) where X is float64 and labels is int32.
+
+def load_pendigits() -> tuple[np.ndarray, np.ndarray, str]:
+    """Load sklearn's built-in digits dataset (n=1797, d=64). No download required."""
+    from sklearn.datasets import load_digits
+
+    ds = load_digits()
+    return ds.data.astype(np.float64), ds.target.astype(np.int32), "pendigits"
+
+
+def _fetch_openml(name: str, version: int, data_home: str | None) -> object:
+    """Thin wrapper around fetch_openml; extracted for testability."""
+    from sklearn.datasets import fetch_openml
+
+    return fetch_openml(name, version=version, as_frame=False, data_home=data_home)
+
+
+def load_mnist(
+    n_samples: int = 10_000, data_home: str | None = None
+) -> tuple[np.ndarray, np.ndarray, str]:
+    """Load and subsample MNIST via fetch_openml.
+
+    Subsamples deterministically using RandomState(42).
+    Caches in ~/scikit_learn_data (or data_home if provided).
+    """
+    print("  Loading MNIST (may download on first run)...", flush=True)
+    bundle = _fetch_openml("mnist_784", version=1, data_home=data_home)
+    rng = np.random.RandomState(42)
+    idx = rng.choice(len(bundle.data), n_samples, replace=False)
+    X = bundle.data[idx].astype(np.float64)
+    y = bundle.target[idx].astype(int).astype(np.int32)
+    return X, y, "mnist_10k"
+
+
+def load_fashion_mnist(
+    n_samples: int = 10_000, data_home: str | None = None
+) -> tuple[np.ndarray, np.ndarray, str]:
+    """Load and subsample Fashion-MNIST via fetch_openml.
+
+    Subsamples deterministically using RandomState(42).
+    Caches in ~/scikit_learn_data (or data_home if provided).
+    """
+    print("  Loading Fashion-MNIST (may download on first run)...", flush=True)
+    bundle = _fetch_openml("Fashion-MNIST", version=1, data_home=data_home)
+    rng = np.random.RandomState(42)
+    idx = rng.choice(len(bundle.data), n_samples, replace=False)
+    X = bundle.data[idx].astype(np.float64)
+    y = bundle.target[idx].astype(int).astype(np.int32)
+    return X, y, "fashion_mnist_10k"
+
+
+def load_singlecell(path: str | None = None) -> tuple[np.ndarray, np.ndarray, str]:
+    """Load single-cell data from an AnnData .h5ad file.
+
+    Requires scanpy: pip install scanpy
+    Not implemented yet — placeholder for future use.
+
+    Usage:
+        X, labels, name = load_dataset("singlecell", singlecell_path="data/pbmc3k.h5ad")
+    """
+    raise NotImplementedError(
+        "Single-cell loading requires scanpy and a .h5ad file. "
+        "Install scanpy and provide --singlecell-path to use this dataset."
+    )
+
+
+def load_dataset(
+    name: str,
+    data_home: str | None = None,
+    singlecell_path: str | None = None,
+) -> tuple[np.ndarray, np.ndarray, str]:
+    """Load a dataset by name. Returns (X, labels, name).
+
+    X is float64, labels is int32.
     """
     from sklearn.datasets import (
         make_blobs,
@@ -39,7 +117,7 @@ def load_dataset(name: str) -> tuple[np.ndarray, np.ndarray, str]:
         make_swiss_roll,
     )
 
-    generators = {
+    generators: dict = {
         "blobs_1000": lambda: make_blobs(
             n_samples=1000, n_features=10, centers=5, random_state=42
         ),
@@ -57,11 +135,23 @@ def load_dataset(name: str) -> tuple[np.ndarray, np.ndarray, str]:
         ),
     }
 
-    if name not in generators:
-        raise ValueError(f"Unknown dataset: {name!r}. Valid names: {TIER1_DATASETS}")
+    if name in generators:
+        X, labels = generators[name]()
+        return X.astype(np.float64), labels.astype(np.int32), name
 
-    X, labels = generators[name]()
-    return X.astype(np.float64), labels.astype(np.int32), name
+    if name == "pendigits":
+        return load_pendigits()
+    if name == "mnist_10k":
+        return load_mnist(data_home=data_home)
+    if name == "fashion_mnist_10k":
+        return load_fashion_mnist(data_home=data_home)
+    if name == "singlecell":
+        return load_singlecell(path=singlecell_path)
+
+    raise ValueError(
+        f"Unknown dataset: {name!r}. "
+        f"Valid names: {VALID_DATASET_NAMES}"
+    )
 
 
 def export_graph(graph: scipy.sparse.csr_matrix, path: Path) -> None:
@@ -77,7 +167,12 @@ def export_graph(graph: scipy.sparse.csr_matrix, path: Path) -> None:
     )
 
 
-def run_baseline(name: str, output_dir: Path) -> None:
+def run_baseline(
+    name: str,
+    output_dir: Path,
+    data_home: str | None = None,
+    singlecell_path: str | None = None,
+) -> None:
     """Run Phase 1 baseline generation for a single dataset."""
     import umap as umap_lib
     from umap.spectral import spectral_layout
@@ -87,7 +182,7 @@ def run_baseline(name: str, output_dir: Path) -> None:
     from scipy.sparse.linalg import eigsh
     from scipy.sparse.csgraph import connected_components
 
-    X, labels, _ = load_dataset(name)
+    X, labels, _ = load_dataset(name, data_home=data_home, singlecell_path=singlecell_path)
 
     # Fit UMAP
     mapper = umap_lib.UMAP(
@@ -176,10 +271,14 @@ def _make_baseline_plot(
         except OSError:
             pass  # Use default style if neither is available
 
+    n = len(labels)
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-    fig.suptitle(name, fontsize=14, fontweight="bold")
+    fig.suptitle(f"{name} (n={n})", fontsize=14, fontweight="bold")
 
-    scatter_kw = dict(c=labels, cmap="tab10", s=2, alpha=0.5)
+    if n > 5000:
+        scatter_kw = dict(c=labels, cmap="tab10", s=0.5, alpha=0.3)
+    else:
+        scatter_kw = dict(c=labels, cmap="tab10", s=2, alpha=0.5)
 
     # [0,0] Python Spectral Init
     axes[0, 0].scatter(init_coords[:, 0], init_coords[:, 1], **scatter_kw)
@@ -489,27 +588,61 @@ def main() -> None:
     parser.add_argument(
         "--dataset",
         default=None,
-        help="Run a single named dataset instead of all Tier 1 datasets.",
+        help="Run a single named dataset instead of all tier datasets.",
+    )
+    parser.add_argument(
+        "--tier",
+        default="all",
+        choices=["1", "2", "all"],
+        help="Dataset tier: 1=synthetic, 2=real-world, all=both (default: all).",
     )
     parser.add_argument(
         "--output-dir",
         default="tests/visual_eval/output",
         help="Output directory (default: tests/visual_eval/output).",
     )
+    parser.add_argument(
+        "--data-dir",
+        default=None,
+        metavar="DIR",
+        help=(
+            "Cache directory for downloaded datasets "
+            "(default: ~/scikit_learn_data, managed by sklearn)."
+        ),
+    )
+    parser.add_argument(
+        "--singlecell-path",
+        default=None,
+        metavar="PATH",
+        help="Path to a .h5ad single-cell file (requires scanpy; not yet implemented).",
+    )
     args = parser.parse_args()
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    if args.dataset and args.dataset not in TIER1_DATASETS:
-        parser.error(f"unknown dataset {args.dataset!r}. Valid names: {TIER1_DATASETS}")
-    datasets = [args.dataset] if args.dataset else TIER1_DATASETS
+    # Determine the tier's dataset list
+    if args.tier == "1":
+        tier_datasets = TIER1_DATASETS
+    elif args.tier == "2":
+        tier_datasets = TIER2_DATASETS
+    else:
+        tier_datasets = ALL_DATASETS
+
+    if args.dataset:
+        if args.dataset not in VALID_DATASET_NAMES:
+            parser.error(
+                f"unknown dataset {args.dataset!r}. Valid names: {VALID_DATASET_NAMES}"
+            )
+        datasets = [args.dataset]
+    else:
+        datasets = tier_datasets
 
     for name in datasets:
         t0 = time.time()
         print(f"[{name}] phase={args.phase} ...")
         if args.phase == "baseline":
-            run_baseline(name, output_dir)
+            run_baseline(name, output_dir, data_home=args.data_dir, singlecell_path=args.singlecell_path)
         else:
             run_compare(name, output_dir)
         print(f"[{name}] done in {time.time() - t0:.1f}s")
