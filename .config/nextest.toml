@@ -9,6 +9,7 @@ fail-fast = false
 status-level = "fail"
 final-status-level = "fail"
 success-output = "never"
+failure-output = "immediate-final"
 
 [profile.ci.junit]
 path = "target/nextest/ci/junit.xml"
