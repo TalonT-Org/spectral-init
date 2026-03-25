@@ -1,0 +1,2 @@
+suite,test_name,classname,time_s,status
+spectral-init,solvers::dense::tests::dense_evd_trivial_2x2,spectral-init,0.006,passed

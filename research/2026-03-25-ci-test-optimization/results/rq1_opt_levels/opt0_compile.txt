@@ -1,0 +1,20 @@
+warning: function `ring_sqrt_deg` is never used
+   --> tests/integration/test_adversarial_graphs.rs:302:4
+    |
+302 | fn ring_sqrt_deg(n: usize) -> Array1<f64> {
+    |    ^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `epsilon_bridge_sqrt_deg` is never used
+   --> tests/integration/test_adversarial_graphs.rs:375:4
+    |
+375 | fn epsilon_bridge_sqrt_deg(cluster_size: usize, bridge_weight: f64) -> Array1<f64> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `spectral-init` (test "test_adversarial_graphs") generated 2 warnings
+    Finished `experiment-opt0` profile [unoptimized + debuginfo] target(s) in 0.06s
+
+real	0m0.304s
+user	0m0.209s
+sys	0m0.165s
