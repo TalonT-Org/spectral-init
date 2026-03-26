@@ -196,7 +196,7 @@ pub fn spectral_init(
 
     // ── Component E.5: sign normalization ─────────────────────────────────
     // Enforce argmax sign convention: element with largest absolute value must be positive.
-    // Closes B3 blind spot — negate-coordinates mutation is detected by sign-convention test.
+    // Ensures consistent signs across runs; verified by the sign-convention integration test.
     scaling::normalize_signs(&mut selected);
 
     // ── Component F: scale and add noise ──────────────────────────────────
