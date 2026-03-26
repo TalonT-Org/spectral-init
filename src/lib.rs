@@ -188,11 +188,16 @@ pub fn spectral_init(
     let ((eigenvalues, eigenvectors), _) = solvers::solve_eigenproblem(&lap, n_components, seed, &sqrt_deg);
 
     // ── Component E: eigenvector selection ────────────────────────────────
-    let selected = selection::select_eigenvectors(
+    let mut selected = selection::select_eigenvectors(
         eigenvalues.as_slice_memory_order().expect("eigenvalues must be contiguous"),
         &eigenvectors,
         n_components,
     );
+
+    // ── Component E.5: sign normalization ─────────────────────────────────
+    // Enforce argmax sign convention: element with largest absolute value must be positive.
+    // Closes B3 blind spot — negate-coordinates mutation is detected by sign-convention test.
+    scaling::normalize_signs(&mut selected);
 
     // ── Component F: scale and add noise ──────────────────────────────────
     scaling::scale_and_add_noise(selected, seed)
