@@ -47,6 +47,32 @@ pub(crate) fn noisy_scale_coords(
     Ok(scaled)
 }
 
+/// Enforces a deterministic sign convention (argmax convention) on each eigenvector column.
+///
+/// For each column of `coords`, finds the element with the largest absolute value.
+/// If that element is negative, the entire column is negated.  All-zero columns are
+/// left unchanged.
+///
+/// Uses the argmax absolute value approach (as in scikit-learn's `_deterministic_vector_sign_flip`
+/// and `svd_flip`), which is more robust than a first-element approach for structured graphs
+/// where node 0 may have a near-zero Fiedler vector component.
+///
+/// Must be called on f64 eigenvectors after `select_eigenvectors` and before
+/// `scale_and_add_noise`.
+pub(crate) fn normalize_signs(coords: &mut Array2<f64>) {
+    for col in 0..coords.ncols() {
+        let sign = coords.column(col)
+            .iter()
+            .copied()
+            .reduce(|a, b| if b.abs() > a.abs() { b } else { a })
+            .map(|v| v.signum())
+            .unwrap_or(1.0);
+        if sign < 0.0 {
+            coords.column_mut(col).iter_mut().for_each(|x| *x = -*x);
+        }
+    }
+}
+
 /// Scales columns so max absolute value is 10.0, then adds Gaussian noise
 /// with scale=0.0001. Downcasts to f32.
 pub(crate) fn scale_and_add_noise(
