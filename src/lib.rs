@@ -272,7 +272,7 @@ mod tests {
         // For each column, the element with the largest absolute value must be positive.
         // normalize_signs (argmax convention) runs before scale_and_add_noise.
         // Noise scale is 1e-4; scaled coords are ~10 — noise cannot flip the argmax sign.
-        // With B3 applied (scale_coords returns -x), the argmax element is negated → fails.
+        // If scale_and_add_noise were to negate coordinates, the argmax element would become negative.
         for col in 0..result.ncols() {
             let col_view = result.column(col);
             let argmax_val = col_view.iter().copied()
