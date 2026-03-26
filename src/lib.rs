@@ -188,11 +188,16 @@ pub fn spectral_init(
     let ((eigenvalues, eigenvectors), _) = solvers::solve_eigenproblem(&lap, n_components, seed, &sqrt_deg);
 
     // ── Component E: eigenvector selection ────────────────────────────────
-    let selected = selection::select_eigenvectors(
+    let mut selected = selection::select_eigenvectors(
         eigenvalues.as_slice_memory_order().expect("eigenvalues must be contiguous"),
         &eigenvectors,
         n_components,
     );
+
+    // ── Component E.5: sign normalization ─────────────────────────────────
+    // Enforce argmax sign convention: element with largest absolute value must be positive.
+    // Ensures consistent signs across runs; verified by the sign-convention integration test.
+    scaling::normalize_signs(&mut selected);
 
     // ── Component F: scale and add noise ──────────────────────────────────
     scaling::scale_and_add_noise(selected, seed)
@@ -250,6 +255,36 @@ mod tests {
         assert_eq!(arr.shape(), &[4, 2]);
         for &v in arr.iter() {
             assert!(v.is_finite(), "output contains non-finite value: {v}");
+        }
+    }
+
+    #[test]
+    fn spectral_init_output_respects_sign_convention() {
+        // 4-node path graph: 0-1-2-3
+        let g = CsMatI::<f32, u32, usize>::new(
+            (4, 4),
+            vec![0usize, 1, 3, 5, 6],
+            vec![1u32, 0u32, 2u32, 1u32, 3u32, 2u32],
+            vec![1.0f32; 6],
+        );
+        let result = spectral_init(&g, 2, 42, None, SpectralInitConfig::default())
+            .expect("spectral_init should succeed");
+        // For each column, the element with the largest absolute value must be positive.
+        // normalize_signs (argmax convention) runs before scale_and_add_noise.
+        // Noise scale is 1e-4; scaled coords are ~10 — noise cannot flip the argmax sign.
+        // If scale_and_add_noise were to negate coordinates, the argmax element would become negative.
+        for col in 0..result.ncols() {
+            let col_view = result.column(col);
+            let argmax_val = col_view.iter().copied()
+                .reduce(|a, b| if b.abs() > a.abs() { b } else { a });
+            let v = argmax_val.unwrap_or_else(|| {
+                panic!("column {col}: argmax returned None — coordinate column is degenerate")
+            });
+            assert!(
+                v > 0.0,
+                "column {col}: sign convention violated — argmax element is \
+                 {v:.6}, expected positive"
+            );
         }
     }
 }

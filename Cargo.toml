@@ -29,6 +29,14 @@ humantime = "2"
 criterion = { version = "0.5", features = ["html_reports"] }
 proptest = "1"
 
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.test.package.spectral-init]
+opt-level = 2
+debug-assertions = true
+overflow-checks = true
+
 [[test]]
 name = "test_comp_e_selection"
 path = "tests/integration/test_comp_e_selection.rs"
