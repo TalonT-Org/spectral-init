@@ -408,6 +408,57 @@ fn test_ring_3000_warm_restart() {
     run_warm_restart_test(&op, &sqrt_deg, 2, "ring_3000");
 }
 
+// ─── Warm-restart fires assertions (B6 detection) ────────────────────────────
+
+#[test]
+fn test_ring_2000_warm_restart_fires() {
+    // ring_2000 seed=42: research shows restart_count=3 at opt-level=2.
+    // At opt-level=2 the solver completes 300 iters/pass quickly; warm restart fires
+    // because 300 iters yields residual 3.25e-4 >> 1e-5 threshold.
+    // With B6 applied (for restart in 0..=0), restart_count=0 → assertion fails.
+    // NOTE: This assertion is FP-sensitive — LLVM FP reassociation at opt-level=2 can
+    // change Gram matrix conditioning, affecting whether Cholesky triggers a restart.
+    // Uses restart_count > 0 (weaker than >= 3) to reduce toolchain-version fragility.
+    let lap = ring_laplacian(2000);
+    let sqrt_deg = ring_sqrt_deg(2000);
+    let op = CsrOperator(&lap);
+    let result = lobpcg_solve(&op, 2, 42, false, &sqrt_deg);
+    assert!(result.is_some(), "lobpcg_solve returned None for ring_2000 seed=42");
+    let (_, restart_count) = result.unwrap();
+    assert!(
+        restart_count > 0,
+        "ring_2000 seed=42 must trigger at least one warm restart at opt-level=2; \
+         got restart_count={restart_count}"
+    );
+}
+
+#[test]
+fn test_path_2000_warm_restart_fires() {
+    // path_2000 is a known hard input: high condition number, small spectral gap.
+    // At opt-level=2, at least one of seeds 42/43/44 will trigger warm restart.
+    // With B6 applied (for restart in 0..=0), restart_count=0 for ALL seeds → fails.
+    // NOTE: This assertion is FP-sensitive — same LLVM reassociation concern as above.
+    // Uses total_restarts > 0 across 3 seeds to reduce single-seed fragility.
+    // ⚠️ Historical note: test_path_2000_warm_restart_majority_converged was marked
+    // #[ignore] in de36131 due to ~20 min CI timing at opt-level=0 on path_2000.
+    // This test requires Step 1 (opt-level=2) to be implemented first; at opt-level=0
+    // the 3-seed run will be extremely slow.
+    let lap = path_laplacian(2000);
+    let sqrt_deg = path_sqrt_deg(2000);
+    let op = CsrOperator(&lap);
+    let mut total_restarts = 0usize;
+    for seed in [42u64, 43, 44] {
+        if let Some((_, rc)) = lobpcg_solve(&op, 2, seed, false, &sqrt_deg) {
+            total_restarts += rc;
+        }
+    }
+    assert!(
+        total_restarts > 0,
+        "path_2000: expected warm restart to fire on at least one of seeds 42/43/44 \
+         at opt-level=2; got total_restarts={total_restarts}"
+    );
+}
+
 // ─── Epsilon-bridge sweep ─────────────────────────────────────────────────────
 
 #[test]
