@@ -3,6 +3,9 @@
 //! All tests are fully synthetic — no .npz fixture files required.
 //! This test target requires `--features testing` (for solver-level tests).
 
+#[path = "../common/mod.rs"]
+mod common;
+
 use ndarray::{Array1, Array2, Axis, s};
 use sprs::CsMatI;
 use spectral_init::{spectral_init, SpectralError, SpectralInitConfig};
@@ -33,25 +36,6 @@ fn make_barbell(clique_size: u32) -> CsMatI<f32, u32, usize> {
     make_epsilon_bridge(clique_size, 1.0f32)
 }
 
-/// Path graph P_n: edges (i, i+1), weight 1.0.
-fn make_path(n: u32) -> CsMatI<f32, u32, usize> {
-    let n_usize = n as usize;
-    let mut indptr = vec![0usize; n_usize + 1];
-    let mut indices: Vec<u32> = Vec::new();
-    let mut data: Vec<f32> = Vec::new();
-    for i in 0..n_usize {
-        if i > 0 {
-            indices.push((i - 1) as u32);
-            data.push(1.0f32);
-        }
-        if i + 1 < n_usize {
-            indices.push((i + 1) as u32);
-            data.push(1.0f32);
-        }
-        indptr[i + 1] = indices.len();
-    }
-    CsMatI::<f32, u32, usize>::new((n_usize, n_usize), indptr, indices, data)
-}
 
 /// Star S_n: hub node 0, leaf nodes 1..n, edges (0, i) weight 1.0.
 fn make_star(n: u32) -> CsMatI<f32, u32, usize> {
@@ -74,24 +58,6 @@ fn make_star(n: u32) -> CsMatI<f32, u32, usize> {
     CsMatI::<f32, u32, usize>::new((n_usize, n_usize), indptr, indices, data)
 }
 
-/// Ring C_n: edges (i, (i+1) % n), weight 1.0.
-fn make_ring(n: u32) -> CsMatI<f32, u32, usize> {
-    let n_usize = n as usize;
-    let mut indptr = vec![0usize; n_usize + 1];
-    let mut indices: Vec<u32> = Vec::new();
-    let mut data: Vec<f32> = Vec::new();
-    for i in 0..n_usize {
-        let prev = (i + n_usize - 1) % n_usize;
-        let next = (i + 1) % n_usize;
-        let (lo, hi) = if prev < next { (prev, next) } else { (next, prev) };
-        indices.push(lo as u32);
-        data.push(1.0f32);
-        indices.push(hi as u32);
-        data.push(1.0f32);
-        indptr[i + 1] = indices.len();
-    }
-    CsMatI::<f32, u32, usize>::new((n_usize, n_usize), indptr, indices, data)
-}
 
 /// Complete bipartite K_{m,n}: left nodes 0..m, right nodes m..m+n.
 fn make_complete_bipartite(m: u32, n: u32) -> CsMatI<f32, u32, usize> {
@@ -439,7 +405,7 @@ fn test_barbell_valid_embedding() {
 
 #[test]
 fn test_path_valid_embedding() {
-    let graph = make_path(100); // n = 100
+    let graph = common::make_path(100); // n = 100
     let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default()).expect("path should not fail");
     assert_eq!(result.shape(), &[100, 2]);
     assert!(
@@ -485,7 +451,7 @@ fn test_complete_bipartite_valid_embedding() {
 
 #[test]
 fn test_ring_valid_embedding() {
-    let graph = make_ring(100); // n = 100
+    let graph = common::make_ring(100); // n = 100
     let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default()).expect("ring should not fail");
     assert_eq!(result.shape(), &[100, 2]);
     assert!(

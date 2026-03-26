@@ -1,0 +1,9 @@
+bug_id,mutation_target,tests_failed,tests_passed,detected
+B1,src/solvers/dense.rs,2,7,1
+B2,src/solvers/mod.rs,0,9,0
+B3,src/scaling.rs,0,9,0
+B4,src/multi_component.rs,0,9,0
+B5,src/laplacian.rs,0,9,0
+B6,src/solvers/lobpcg.rs,0,9,0
+B7,src/solvers/rsvd.rs,0,9,0
+B8,src/solvers/sinv.rs,0,9,0

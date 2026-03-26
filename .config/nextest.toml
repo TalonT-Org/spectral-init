@@ -28,3 +28,13 @@ status-level = "fail"
 final-status-level = "fail"
 success-output = "never"
 failure-output = "immediate-final"
+
+[profile.ci-fast]
+retries = 0
+slow-timeout = { period = "30s" }
+fail-fast = false
+status-level = "fail"
+final-status-level = "fail"
+success-output = "never"
+failure-output = "immediate-final"
+default-filter = 'not test(/warm_restart/) and not test(/accuracy_report/)'
