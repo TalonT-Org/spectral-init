@@ -24,6 +24,25 @@ pub type EigenResult = (Array1<f64>, Array2<f64>);
 /// Graphs with n < DENSE_N_THRESHOLD use Level 0 (dense EVD) directly.
 const DENSE_N_THRESHOLD: usize = 2000;
 
+/// Returns the effective dense-EVD size threshold.
+///
+/// In test builds (`--features testing`), reads the `SPECTRAL_DENSE_N_THRESHOLD`
+/// environment variable, falling back to `DENSE_N_THRESHOLD` on absence or
+/// parse error.  In release builds the function is a trivial constant return
+/// that the compiler inlines away entirely.
+#[cfg(feature = "testing")]
+fn dense_n_threshold() -> usize {
+    std::env::var("SPECTRAL_DENSE_N_THRESHOLD")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(DENSE_N_THRESHOLD)
+}
+
+#[cfg(not(feature = "testing"))]
+fn dense_n_threshold() -> usize {
+    DENSE_N_THRESHOLD
+}
+
 /// Maximum acceptable max-residual from rSVD before falling to Level 4.
 /// rSVD with 2 power iterations typically achieves 1e-4 to 1e-6 on well-conditioned
 /// graphs; 1e-2 accepts all such results while correctly escalating pathological cases.
@@ -91,7 +110,7 @@ pub(crate) fn solve_eigenproblem(
     let op = CsrOperator(laplacian);
 
     // Level 0: Dense EVD — exact, used for small n where O(n³) is acceptable.
-    if n < DENSE_N_THRESHOLD {
+    if n < dense_n_threshold() {
         match dense_evd(laplacian, n_components + 1) {
             Ok((eigs, vecs)) => {
                 let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
@@ -448,5 +467,28 @@ mod tests {
             residual < DENSE_EVD_QUALITY_THRESHOLD,
             "Level 0 dense EVD residual={residual:.2e} should be < DENSE_EVD_QUALITY_THRESHOLD={DENSE_EVD_QUALITY_THRESHOLD:.2e}"
         );
+    }
+
+    #[test]
+    fn dense_n_threshold_returns_default_when_env_unset() {
+        // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
+        unsafe { std::env::remove_var("SPECTRAL_DENSE_N_THRESHOLD"); }
+        assert_eq!(dense_n_threshold(), DENSE_N_THRESHOLD);
+    }
+
+    #[test]
+    fn dense_n_threshold_reads_env_override() {
+        // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
+        unsafe { std::env::set_var("SPECTRAL_DENSE_N_THRESHOLD", "50"); }
+        assert_eq!(dense_n_threshold(), 50);
+        unsafe { std::env::remove_var("SPECTRAL_DENSE_N_THRESHOLD"); }
+    }
+
+    #[test]
+    fn dense_n_threshold_falls_back_on_parse_error() {
+        // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
+        unsafe { std::env::set_var("SPECTRAL_DENSE_N_THRESHOLD", "not_a_number"); }
+        assert_eq!(dense_n_threshold(), DENSE_N_THRESHOLD);
+        unsafe { std::env::remove_var("SPECTRAL_DENSE_N_THRESHOLD"); }
     }
 }
