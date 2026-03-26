@@ -1,0 +1,825 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="spectral-init-tests" tests="207" failures="19" errors="0" uuid="3fe3481f-a2a1-4e72-b09c-7ef8223d276b" timestamp="2026-03-25T15:26:59.555-07:00" time="639.128">
+    <testsuite name="spectral-init" tests="85" disabled="0" errors="0" failures="3">
+        <testcase name="config_tests::compute_mode_variants_exhaustive" classname="spectral-init" timestamp="2026-03-25T15:26:59.556-07:00" time="0.004">
+        </testcase>
+        <testcase name="config_tests::default_config_is_python_compat" classname="spectral-init" timestamp="2026-03-25T15:26:59.556-07:00" time="0.004">
+        </testcase>
+        <testcase name="components::tests::test_two_connected_nodes" classname="spectral-init" timestamp="2026-03-25T15:26:59.556-07:00" time="0.004">
+        </testcase>
+        <testcase name="laplacian::tests::build_laplacian_symmetry" classname="spectral-init" timestamp="2026-03-25T15:26:59.556-07:00" time="0.004">
+        </testcase>
+        <testcase name="components::tests::test_empty_graph" classname="spectral-init" timestamp="2026-03-25T15:26:59.556-07:00" time="0.004">
+        </testcase>
+        <testcase name="laplacian::tests::build_laplacian_two_node_complete_graph" classname="spectral-init" timestamp="2026-03-25T15:26:59.556-07:00" time="0.004">
+        </testcase>
+        <testcase name="components::tests::test_three_isolated_nodes" classname="spectral-init" timestamp="2026-03-25T15:26:59.556-07:00" time="0.004">
+        </testcase>
+        <testcase name="config_tests::compute_mode_rust_native_neq_python_compat" classname="spectral-init" timestamp="2026-03-25T15:26:59.556-07:00" time="0.005">
+        </testcase>
+        <testcase name="components::tests::test_two_isolated_nodes" classname="spectral-init" timestamp="2026-03-25T15:26:59.556-07:00" time="0.005">
+        </testcase>
+        <testcase name="components::tests::test_two_components_four_nodes" classname="spectral-init" timestamp="2026-03-25T15:26:59.556-07:00" time="0.005">
+        </testcase>
+        <testcase name="components::tests::test_path_graph_3" classname="spectral-init" timestamp="2026-03-25T15:26:59.556-07:00" time="0.005">
+        </testcase>
+        <testcase name="config_tests::compute_mode_copy_clone_eq" classname="spectral-init" timestamp="2026-03-25T15:26:59.556-07:00" time="0.005">
+        </testcase>
+        <testcase name="components::tests::test_single_node_no_edges" classname="spectral-init" timestamp="2026-03-25T15:26:59.556-07:00" time="0.008">
+        </testcase>
+        <testcase name="laplacian::tests::compute_degrees_python_compat_matches_column_sum" classname="spectral-init" timestamp="2026-03-25T15:26:59.560-07:00" time="0.004">
+        </testcase>
+        <testcase name="laplacian::tests::compute_degrees_zero_degree_node" classname="spectral-init" timestamp="2026-03-25T15:26:59.560-07:00" time="0.004">
+        </testcase>
+        <testcase name="laplacian::tests::build_laplacian_isolated_node" classname="spectral-init" timestamp="2026-03-25T15:26:59.556-07:00" time="0.005">
+        </testcase>
+        <testcase name="multi_component::tests::test_orthogonal_meta_embedding_2_comp_2_dim" classname="spectral-init" timestamp="2026-03-25T15:26:59.561-07:00" time="0.004">
+        </testcase>
+        <testcase name="laplacian::tests::compute_degrees_rust_native_uses_f64_row_sum" classname="spectral-init" timestamp="2026-03-25T15:26:59.560-07:00" time="0.004">
+        </testcase>
+        <testcase name="multi_component::tests::test_embed_disconnected_two_pairs_shape_and_finite" classname="spectral-init" timestamp="2026-03-25T15:26:59.560-07:00" time="0.005">
+        </testcase>
+        <testcase name="multi_component::tests::test_orthogonal_meta_embedding_1_comp_3_dim" classname="spectral-init" timestamp="2026-03-25T15:26:59.561-07:00" time="0.004">
+        </testcase>
+        <testcase name="multi_component::tests::test_extract_subgraph_two_components" classname="spectral-init" timestamp="2026-03-25T15:26:59.561-07:00" time="0.004">
+        </testcase>
+        <testcase name="multi_component::tests::test_embed_disconnected_tiny_components_placed_at_meta_pos" classname="spectral-init" timestamp="2026-03-25T15:26:59.561-07:00" time="0.005">
+        </testcase>
+        <testcase name="laplacian::tests::build_laplacian_weighted_edge" classname="spectral-init" timestamp="2026-03-25T15:26:59.560-07:00" time="0.004">
+            <failure message="thread &apos;laplacian::tests::build_laplacian_weighted_edge&apos; (3044477) panicked at src/laplacian.rs:207:9" type="test failure with exit code 101">thread &apos;laplacian::tests::build_laplacian_weighted_edge&apos; (3044477) panicked at src/laplacian.rs:207:9:
+assertion failed: (l.get(0, 1).copied().unwrap_or(0.0) - (-1.0)).abs() &lt; 1e-15
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace</failure>
+            <system-out>
+running 1 test
+test laplacian::tests::build_laplacian_weighted_edge ... FAILED
+
+failures:
+
+failures:
+    laplacian::tests::build_laplacian_weighted_edge
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 99 filtered out; finished in 0.00s
+
+</system-out>
+            <system-err>
+thread &apos;laplacian::tests::build_laplacian_weighted_edge&apos; (3044477) panicked at src/laplacian.rs:207:9:
+assertion failed: (l.get(0, 1).copied().unwrap_or(0.0) - (-1.0)).abs() &lt; 1e-15
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+</system-err>
+        </testcase>
+        <testcase name="multi_component::tests::test_orthogonal_meta_embedding_4_comp_2_dim" classname="spectral-init" timestamp="2026-03-25T15:26:59.562-07:00" time="0.004">
+        </testcase>
+        <testcase name="config_tests::spectral_init_with_default_config_compiles_and_runs" classname="spectral-init" timestamp="2026-03-25T15:26:59.556-07:00" time="0.010">
+        </testcase>
+        <testcase name="multi_component::tests::test_extract_subgraph_single_node" classname="spectral-init" timestamp="2026-03-25T15:26:59.561-07:00" time="0.006">
+        </testcase>
+        <testcase name="config_tests::python_compat_and_rust_native_same_subspace" classname="spectral-init" timestamp="2026-03-25T15:26:59.556-07:00" time="0.012">
+        </testcase>
+        <testcase name="operator::tests::test_csr_operator_residual_diagonal" classname="spectral-init" timestamp="2026-03-25T15:26:59.564-07:00" time="0.004">
+        </testcase>
+        <testcase name="operator::tests::test_spmv_identity_matrix" classname="spectral-init" timestamp="2026-03-25T15:26:59.565-07:00" time="0.004">
+        </testcase>
+        <testcase name="operator::tests::test_spmv_diagonal_matrix" classname="spectral-init" timestamp="2026-03-25T15:26:59.564-07:00" time="0.005">
+        </testcase>
+        <testcase name="multi_component::tests::test_embed_disconnected_intracomp_lt_intercomp" classname="spectral-init" timestamp="2026-03-25T15:26:59.560-07:00" time="0.009">
+        </testcase>
+        <testcase name="operator::tests::test_spmv_matches_dense_reference" classname="spectral-init" timestamp="2026-03-25T15:26:59.565-07:00" time="0.004">
+        </testcase>
+        <testcase name="operator::tests::test_csr_operator_block_matches_sequential" classname="spectral-init" timestamp="2026-03-25T15:26:59.564-07:00" time="0.005">
+        </testcase>
+        <testcase name="selection::tests::selects_correct_columns_sorted_input" classname="spectral-init" timestamp="2026-03-25T15:26:59.565-07:00" time="0.004">
+        </testcase>
+        <testcase name="operator::tests::test_csr_operator_single_vector" classname="spectral-init" timestamp="2026-03-25T15:26:59.564-07:00" time="0.005">
+        </testcase>
+        <testcase name="operator::tests::test_spmv_matches_csr_operator_single_vector" classname="spectral-init" timestamp="2026-03-25T15:26:59.565-07:00" time="0.004">
+        </testcase>
+        <testcase name="solvers::dense::tests::dense_evd_k_greater_than_n_returns_error" classname="spectral-init" timestamp="2026-03-25T15:26:59.566-07:00" time="0.004">
+        </testcase>
+        <testcase name="selection::tests::selects_single_nontrivial_eigenvector" classname="spectral-init" timestamp="2026-03-25T15:26:59.565-07:00" time="0.006">
+        </testcase>
+        <testcase name="selection::tests::sorts_before_skipping_trivial" classname="spectral-init" timestamp="2026-03-25T15:26:59.565-07:00" time="0.006">
+        </testcase>
+        <testcase name="solvers::lobpcg::tests::chebyshev_precond_degree1_matches_formula" classname="spectral-init" timestamp="2026-03-25T15:26:59.568-07:00" time="0.004">
+        </testcase>
+        <testcase name="solvers::lobpcg::tests::chebyshev_precond_filters_high_eigenvalues" classname="spectral-init" timestamp="2026-03-25T15:26:59.568-07:00" time="0.004">
+        </testcase>
+        <testcase name="solvers::lobpcg::tests::lobpcg_accept_tol_is_1e5" classname="spectral-init" timestamp="2026-03-25T15:26:59.569-07:00" time="0.004">
+        </testcase>
+        <testcase name="solvers::dense::tests::dense_evd_trivial_2x2" classname="spectral-init" timestamp="2026-03-25T15:26:59.566-07:00" time="0.007">
+        </testcase>
+        <testcase name="solvers::dense::tests::dense_evd_truncation_k_less_than_n" classname="spectral-init" timestamp="2026-03-25T15:26:59.566-07:00" time="0.009">
+        </testcase>
+        <testcase name="solvers::lobpcg::tests::per_vector_residuals_exact_near_zero" classname="spectral-init" timestamp="2026-03-25T15:26:59.571-07:00" time="0.005">
+        </testcase>
+        <testcase name="solvers::dense::tests::dense_evd_identity_3x3" classname="spectral-init" timestamp="2026-03-25T15:26:59.566-07:00" time="0.011">
+        </testcase>
+        <testcase name="solvers::lobpcg::tests::lobpcg_solve_level2_eigenvalues_corrected" classname="spectral-init" timestamp="2026-03-25T15:26:59.569-07:00" time="0.008">
+        </testcase>
+        <testcase name="solvers::lobpcg::tests::per_vector_residuals_non_eigenvector_large" classname="spectral-init" timestamp="2026-03-25T15:26:59.571-07:00" time="0.006">
+        </testcase>
+        <testcase name="solvers::lobpcg::tests::lobpcg_solve_restart_count_zero_on_easy_convergence" classname="spectral-init" timestamp="2026-03-25T15:26:59.569-07:00" time="0.009">
+        </testcase>
+        <testcase name="solvers::lobpcg::tests::lobpcg_solve_diagonal_level1" classname="spectral-init" timestamp="2026-03-25T15:26:59.569-07:00" time="0.009">
+        </testcase>
+        <testcase name="solvers::lobpcg::tests::rayleigh_ritz_refine_rotated_basis_recovers_eigenvalues" classname="spectral-init" timestamp="2026-03-25T15:26:59.573-07:00" time="0.006">
+        </testcase>
+        <testcase name="solvers::sinv::tests::sinv_returns_none_for_empty_or_degenerate" classname="spectral-init" timestamp="2026-03-25T15:26:59.577-07:00" time="0.004">
+        </testcase>
+        <testcase name="solvers::lobpcg::tests::rayleigh_ritz_refine_perturbed_eigenvectors" classname="spectral-init" timestamp="2026-03-25T15:26:59.573-07:00" time="0.009">
+        </testcase>
+        <testcase name="solvers::lobpcg::tests::lobpcg_solve_eigenvectors_orthonormal" classname="spectral-init" timestamp="2026-03-25T15:26:59.569-07:00" time="0.013">
+        </testcase>
+        <testcase name="solvers::rsvd::tests::test_two_i_minus_laplacian_path_3" classname="spectral-init" timestamp="2026-03-25T15:26:59.576-07:00" time="0.006">
+        </testcase>
+        <testcase name="solvers::lobpcg::tests::rayleigh_ritz_refine_exact_eigenvectors_diagonal" classname="spectral-init" timestamp="2026-03-25T15:26:59.573-07:00" time="0.010">
+        </testcase>
+        <testcase name="solvers::sinv::tests::eigenvalue_recovery_formula_exact" classname="spectral-init" timestamp="2026-03-25T15:26:59.577-07:00" time="0.006">
+        </testcase>
+        <testcase name="solvers::lobpcg::tests::lobpcg_solve_rr_achieves_tight_residuals" classname="spectral-init" timestamp="2026-03-25T15:26:59.570-07:00" time="0.014">
+        </testcase>
+        <testcase name="solvers::rsvd::tests::test_rsvd_solve_residuals_ring_6" classname="spectral-init" timestamp="2026-03-25T15:26:59.573-07:00" time="0.012">
+            <failure message="thread &apos;solvers::rsvd::tests::test_rsvd_solve_residuals_ring_6&apos; (3044711) panicked at src/solvers/rsvd.rs:369:9" type="test failure with exit code 101">thread &apos;solvers::rsvd::tests::test_rsvd_solve_residuals_ring_6&apos; (3044711) panicked at src/solvers/rsvd.rs:369:9:
+trivial eigenvalue=-1.00000000, expected ≈ 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace</failure>
+            <system-out>
+running 1 test
+test solvers::rsvd::tests::test_rsvd_solve_residuals_ring_6 ... FAILED
+
+failures:
+
+failures:
+    solvers::rsvd::tests::test_rsvd_solve_residuals_ring_6
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 99 filtered out; finished in 0.00s
+
+</system-out>
+            <system-err>
+thread &apos;solvers::rsvd::tests::test_rsvd_solve_residuals_ring_6&apos; (3044711) panicked at src/solvers/rsvd.rs:369:9:
+trivial eigenvalue=-1.00000000, expected ≈ 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+</system-err>
+        </testcase>
+        <testcase name="solvers::sinv::tests::sprs_csc_to_faer_identity_roundtrip" classname="spectral-init" timestamp="2026-03-25T15:26:59.579-07:00" time="0.005">
+        </testcase>
+        <testcase name="solvers::sinv::tests::sinv_solve_diagonal_eigenvalues_accurate" classname="spectral-init" timestamp="2026-03-25T15:26:59.577-07:00" time="0.008">
+        </testcase>
+        <testcase name="solvers::tests::lobpcg_quality_threshold_is_1e5" classname="spectral-init" timestamp="2026-03-25T15:26:59.582-07:00" time="0.004">
+        </testcase>
+        <testcase name="solvers::tests::max_eigenpair_residual_large_for_non_eigenvector" classname="spectral-init" timestamp="2026-03-25T15:26:59.582-07:00" time="0.004">
+        </testcase>
+        <testcase name="solvers::rsvd::tests::test_rsvd_solve_shapes_complete_5" classname="spectral-init" timestamp="2026-03-25T15:26:59.575-07:00" time="0.012">
+            <failure message="thread &apos;solvers::rsvd::tests::test_rsvd_solve_shapes_complete_5&apos; (3044786) panicked at src/solvers/rsvd.rs:326:13" type="test failure with exit code 101">thread &apos;solvers::rsvd::tests::test_rsvd_solve_shapes_complete_5&apos; (3044786) panicked at src/solvers/rsvd.rs:326:13:
+eigenvalue -3.000000 out of [0, 2]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace</failure>
+            <system-out>
+running 1 test
+test solvers::rsvd::tests::test_rsvd_solve_shapes_complete_5 ... FAILED
+
+failures:
+
+failures:
+    solvers::rsvd::tests::test_rsvd_solve_shapes_complete_5
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 99 filtered out; finished in 0.00s
+
+</system-out>
+            <system-err>
+thread &apos;solvers::rsvd::tests::test_rsvd_solve_shapes_complete_5&apos; (3044786) panicked at src/solvers/rsvd.rs:326:13:
+eigenvalue -3.000000 out of [0, 2]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+</system-err>
+        </testcase>
+        <testcase name="solvers::sinv::tests::sprs_csc_to_faer_shifted_diagonal" classname="spectral-init" timestamp="2026-03-25T15:26:59.581-07:00" time="0.007">
+        </testcase>
+        <testcase name="solvers::tests::max_eigenpair_residual_trivial_near_zero" classname="spectral-init" timestamp="2026-03-25T15:26:59.583-07:00" time="0.006">
+        </testcase>
+        <testcase name="solvers::tests::quality_gate_accepts_near_eigenvector_at_lobpcg_threshold" classname="spectral-init" timestamp="2026-03-25T15:26:59.583-07:00" time="0.007">
+        </testcase>
+        <testcase name="solvers::tests::sinv_quality_threshold_ordering" classname="spectral-init" timestamp="2026-03-25T15:26:59.585-07:00" time="0.005">
+        </testcase>
+        <testcase name="solvers::tests::quality_gate_catches_garbage_at_dense_evd_threshold" classname="spectral-init" timestamp="2026-03-25T15:26:59.585-07:00" time="0.006">
+        </testcase>
+        <testcase name="solvers::tests::level0_result_passes_dense_evd_quality_gate" classname="spectral-init" timestamp="2026-03-25T15:26:59.581-07:00" time="0.010">
+        </testcase>
+        <testcase name="tests::spectral_error_is_std_error" classname="spectral-init" timestamp="2026-03-25T15:26:59.588-07:00" time="0.005">
+        </testcase>
+        <testcase name="solvers::tests::solve_eigenproblem_returns_k_plus_one_pairs" classname="spectral-init" timestamp="2026-03-25T15:26:59.587-07:00" time="0.009">
+        </testcase>
+        <testcase name="tests::spectral_init_empty_graph_returns_error" classname="spectral-init" timestamp="2026-03-25T15:26:59.590-07:00" time="0.005">
+        </testcase>
+        <testcase name="solvers::tests::threshold_ordering_is_strict" classname="spectral-init" timestamp="2026-03-25T15:26:59.587-07:00" time="0.008">
+        </testcase>
+        <testcase name="tests::spectral_init_too_few_nodes_returns_error" classname="spectral-init" timestamp="2026-03-25T15:26:59.590-07:00" time="0.005">
+        </testcase>
+        <testcase name="tests::spectral_init_zero_components_returns_error" classname="spectral-init" timestamp="2026-03-25T15:26:59.591-07:00" time="0.005">
+        </testcase>
+        <testcase name="solvers::tests::solve_eigenproblem_eigenvalues_nonneg_and_sorted" classname="spectral-init" timestamp="2026-03-25T15:26:59.585-07:00" time="0.011">
+        </testcase>
+        <testcase name="tests::spectral_init_connected_graph_succeeds_and_has_correct_shape" classname="spectral-init" timestamp="2026-03-25T15:26:59.589-07:00" time="0.010">
+        </testcase>
+        <testcase name="solvers::lobpcg::tests::lobpcg_injects_trivial_eigenvector" classname="spectral-init" timestamp="2026-03-25T15:26:59.569-07:00" time="0.039">
+        </testcase>
+        <testcase name="solvers::sinv::tests::sinv_solve_eigenvectors_orthonormal" classname="spectral-init" timestamp="2026-03-25T15:26:59.579-07:00" time="0.055">
+        </testcase>
+        <testcase name="solvers::sinv::tests::sinv_solve_returns_k_plus_one_pairs" classname="spectral-init" timestamp="2026-03-25T15:26:59.579-07:00" time="0.056">
+        </testcase>
+        <testcase name="solvers::lobpcg::tests::lobpcg_solve_returns_k_plus_one_eigenpairs" classname="spectral-init" timestamp="2026-03-25T15:26:59.570-07:00" time="0.086">
+        </testcase>
+        <testcase name="solvers::lobpcg::tests::lobpcg_solve_near_degenerate_residuals_within_tol" classname="spectral-init" timestamp="2026-03-25T15:26:59.569-07:00" time="4.825">
+        </testcase>
+        <testcase name="solvers::tests::solve_eigenproblem_level_numbering" classname="spectral-init" timestamp="2026-03-25T15:26:59.586-07:00" time="16.141">
+        </testcase>
+        <testcase name="solvers::tests::solve_eigenproblem_large_n_routes_through_lobpcg" classname="spectral-init" timestamp="2026-03-25T15:26:59.586-07:00" time="17.128">
+        </testcase>
+    </testsuite>
+    <testsuite name="spectral-init::npz_loading" tests="1" disabled="0" errors="0" failures="0">
+        <testcase name="smoke_load_comp_a_degrees_blobs_connected_200" classname="spectral-init::npz_loading" timestamp="2026-03-25T15:26:59.592-07:00" time="0.005">
+        </testcase>
+    </testsuite>
+    <testsuite name="spectral-init::test_adversarial_graphs" tests="21" disabled="0" errors="0" failures="0">
+        <testcase name="large_epsilon_bridge_laplacian_shape_and_symmetry" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T15:26:59.595-07:00" time="0.006">
+        </testcase>
+        <testcase name="large_ring_laplacian_diagonal_is_one" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T15:26:59.595-07:00" time="0.007">
+        </testcase>
+        <testcase name="large_ring_laplacian_shape_and_nnz" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T15:26:59.595-07:00" time="0.010">
+        </testcase>
+        <testcase name="test_complete_bipartite_coordinate_stability" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T15:26:59.596-07:00" time="0.015">
+        </testcase>
+        <testcase name="test_complete_bipartite_valid_embedding" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T15:26:59.597-07:00" time="0.015">
+        </testcase>
+        <testcase name="test_level_0_dense_evd_for_small_n" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T15:26:59.605-07:00" time="0.010">
+        </testcase>
+        <testcase name="test_barbell_valid_embedding" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T15:26:59.595-07:00" time="0.021">
+        </testcase>
+        <testcase name="test_complete_k20_valid_embedding" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T15:26:59.599-07:00" time="0.017">
+        </testcase>
+        <testcase name="test_barbell_separates_communities" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T15:26:59.595-07:00" time="0.023">
+        </testcase>
+        <testcase name="test_single_edge_returns_too_few_nodes" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T15:26:59.619-07:00" time="0.005">
+        </testcase>
+        <testcase name="test_epsilon_bridge_separates_communities" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T15:26:59.601-07:00" time="0.023">
+        </testcase>
+        <testcase name="test_epsilon_bridge_valid_embedding" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T15:26:59.603-07:00" time="0.024">
+        </testcase>
+        <testcase name="test_lollipop_valid_embedding" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T15:26:59.616-07:00" time="0.019">
+        </testcase>
+        <testcase name="test_star_valid_embedding" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T15:26:59.625-07:00" time="0.020">
+        </testcase>
+        <testcase name="test_star_coordinate_stability" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T15:26:59.623-07:00" time="0.022">
+        </testcase>
+        <testcase name="test_weighted_exponential_valid_embedding" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T15:26:59.627-07:00" time="0.112">
+        </testcase>
+        <testcase name="test_ring_valid_embedding" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T15:26:59.616-07:00" time="0.147">
+        </testcase>
+        <testcase name="test_path_valid_embedding" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T15:26:59.616-07:00" time="0.152">
+        </testcase>
+        <testcase name="test_level_1_lobpcg_for_large_well_conditioned_n" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T15:26:59.608-07:00" time="18.622">
+        </testcase>
+        <testcase name="test_level_2_regularized_lobpcg_produces_valid_result" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T15:26:59.611-07:00" time="36.856">
+        </testcase>
+        <testcase name="test_level_3_rsvd_valid_on_large_path" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T15:26:59.611-07:00" time="236.342">
+        </testcase>
+    </testsuite>
+    <testsuite name="spectral-init::test_comp_a_degrees" tests="18" disabled="0" errors="0" failures="0">
+        <testcase name="comp_a_degrees_matches_python_blobs_50" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T15:26:59.634-07:00" time="0.009">
+        </testcase>
+        <testcase name="comp_a_degrees_matches_python_blobs_500" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T15:26:59.635-07:00" time="0.012">
+        </testcase>
+        <testcase name="comp_a_degrees_matches_python_blobs_connected_200" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T15:26:59.643-07:00" time="0.006">
+        </testcase>
+        <testcase name="comp_a_degrees_matches_python_circles_300" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T15:26:59.646-07:00" time="0.007">
+        </testcase>
+        <testcase name="comp_a_degrees_matches_python_disconnected_200" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T15:26:59.647-07:00" time="0.007">
+        </testcase>
+        <testcase name="comp_a_degrees_matches_python_moons_200" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T15:26:59.650-07:00" time="0.008">
+        </testcase>
+        <testcase name="comp_a_degrees_rust_native_blobs_50" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T15:26:59.654-07:00" time="0.006">
+        </testcase>
+        <testcase name="comp_a_degrees_matches_python_near_dupes_100" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T15:26:59.652-07:00" time="0.008">
+        </testcase>
+        <testcase name="comp_a_degrees_rust_native_blobs_500" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T15:26:59.656-07:00" time="0.008">
+        </testcase>
+        <testcase name="comp_a_degrees_matches_python_blobs_connected_2000" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T15:26:59.645-07:00" time="0.019">
+        </testcase>
+        <testcase name="comp_a_degrees_rust_native_blobs_connected_200" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T15:26:59.660-07:00" time="0.007">
+        </testcase>
+        <testcase name="comp_a_degrees_rust_native_circles_300" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T15:26:59.664-07:00" time="0.007">
+        </testcase>
+        <testcase name="comp_a_degrees_matches_python_blobs_5000" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T15:26:59.635-07:00" time="0.040">
+        </testcase>
+        <testcase name="comp_a_degrees_rust_native_blobs_connected_2000" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T15:26:59.660-07:00" time="0.015">
+        </testcase>
+        <testcase name="comp_a_degrees_rust_native_disconnected_200" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T15:26:59.665-07:00" time="0.012">
+        </testcase>
+        <testcase name="comp_a_degrees_rust_native_moons_200" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T15:26:59.666-07:00" time="0.010">
+        </testcase>
+        <testcase name="comp_a_degrees_rust_native_near_dupes_100" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T15:26:59.671-07:00" time="0.007">
+        </testcase>
+        <testcase name="comp_a_degrees_rust_native_blobs_5000" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T15:26:59.657-07:00" time="0.037">
+        </testcase>
+    </testsuite>
+    <testsuite name="spectral-init::test_comp_b_laplacian" tests="9" disabled="0" errors="0" failures="9">
+        <testcase name="comp_b_laplacian_matches_python_blobs_50" classname="spectral-init::test_comp_b_laplacian" timestamp="2026-03-25T15:26:59.675-07:00" time="0.008">
+            <failure message="thread &apos;comp_b_laplacian_matches_python_blobs_50&apos; (3045313) panicked at tests/integration/test_comp_b_laplacian.rs:32:9" type="test failure with exit code 101">thread &apos;comp_b_laplacian_matches_python_blobs_50&apos; (3045313) panicked at tests/integration/test_comp_b_laplacian.rs:32:9:
+L[0,4]: got -0.029139697551727295, want -0.005196116009871871, diff 0.023943581541855424
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace</failure>
+            <system-out>
+running 1 test
+test comp_b_laplacian_matches_python_blobs_50 ... FAILED
+
+failures:
+
+failures:
+    comp_b_laplacian_matches_python_blobs_50
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s
+
+</system-out>
+            <system-err>
+thread &apos;comp_b_laplacian_matches_python_blobs_50&apos; (3045313) panicked at tests/integration/test_comp_b_laplacian.rs:32:9:
+L[0,4]: got -0.029139697551727295, want -0.005196116009871871, diff 0.023943581541855424
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+</system-err>
+        </testcase>
+        <testcase name="comp_b_laplacian_matches_python_blobs_connected_200" classname="spectral-init::test_comp_b_laplacian" timestamp="2026-03-25T15:26:59.677-07:00" time="0.016">
+            <failure message="thread &apos;comp_b_laplacian_matches_python_blobs_connected_200&apos; (3045316) panicked at tests/integration/test_comp_b_laplacian.rs:32:9" type="test failure with exit code 101">thread &apos;comp_b_laplacian_matches_python_blobs_connected_200&apos; (3045316) panicked at tests/integration/test_comp_b_laplacian.rs:32:9:
+L[0,12]: got -1, want -0.08745542706912056, diff 0.9125445729308794
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace</failure>
+            <system-out>
+running 1 test
+test comp_b_laplacian_matches_python_blobs_connected_200 ... FAILED
+
+failures:
+
+failures:
+    comp_b_laplacian_matches_python_blobs_connected_200
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.01s
+
+</system-out>
+            <system-err>
+thread &apos;comp_b_laplacian_matches_python_blobs_connected_200&apos; (3045316) panicked at tests/integration/test_comp_b_laplacian.rs:32:9:
+L[0,12]: got -1, want -0.08745542706912056, diff 0.9125445729308794
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+</system-err>
+        </testcase>
+        <testcase name="comp_b_laplacian_matches_python_blobs_500" classname="spectral-init::test_comp_b_laplacian" timestamp="2026-03-25T15:26:59.675-07:00" time="0.020">
+            <failure message="thread &apos;comp_b_laplacian_matches_python_blobs_500&apos; (3045312) panicked at tests/integration/test_comp_b_laplacian.rs:32:9" type="test failure with exit code 101">thread &apos;comp_b_laplacian_matches_python_blobs_500&apos; (3045312) panicked at tests/integration/test_comp_b_laplacian.rs:32:9:
+L[0,11]: got -0.5151187181472778, want -0.0783171825484212, diff 0.43680153559885665
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace</failure>
+            <system-out>
+running 1 test
+test comp_b_laplacian_matches_python_blobs_500 ... FAILED
+
+failures:
+
+failures:
+    comp_b_laplacian_matches_python_blobs_500
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.02s
+
+</system-out>
+            <system-err>
+thread &apos;comp_b_laplacian_matches_python_blobs_500&apos; (3045312) panicked at tests/integration/test_comp_b_laplacian.rs:32:9:
+L[0,11]: got -0.5151187181472778, want -0.0783171825484212, diff 0.43680153559885665
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+</system-err>
+        </testcase>
+        <testcase name="comp_b_laplacian_matches_python_near_dupes_100" classname="spectral-init::test_comp_b_laplacian" timestamp="2026-03-25T15:26:59.696-07:00" time="0.009">
+            <failure message="thread &apos;comp_b_laplacian_matches_python_near_dupes_100&apos; (3045323) panicked at tests/integration/test_comp_b_laplacian.rs:32:9" type="test failure with exit code 101">thread &apos;comp_b_laplacian_matches_python_near_dupes_100&apos; (3045323) panicked at tests/integration/test_comp_b_laplacian.rs:32:9:
+L[0,3]: got -0.023027822375297546, want -0.004183082756780929, diff 0.01884473961851662
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace</failure>
+            <system-out>
+running 1 test
+test comp_b_laplacian_matches_python_near_dupes_100 ... FAILED
+
+failures:
+
+failures:
+    comp_b_laplacian_matches_python_near_dupes_100
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.01s
+
+</system-out>
+            <system-err>
+thread &apos;comp_b_laplacian_matches_python_near_dupes_100&apos; (3045323) panicked at tests/integration/test_comp_b_laplacian.rs:32:9:
+L[0,3]: got -0.023027822375297546, want -0.004183082756780929, diff 0.01884473961851662
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+</system-err>
+        </testcase>
+        <testcase name="comp_b_laplacian_matches_python_disconnected_200" classname="spectral-init::test_comp_b_laplacian" timestamp="2026-03-25T15:26:59.693-07:00" time="0.013">
+            <failure message="thread &apos;comp_b_laplacian_matches_python_disconnected_200&apos; (3045322) panicked at tests/integration/test_comp_b_laplacian.rs:32:9" type="test failure with exit code 101">thread &apos;comp_b_laplacian_matches_python_disconnected_200&apos; (3045322) panicked at tests/integration/test_comp_b_laplacian.rs:32:9:
+L[0,3]: got -0.09092710167169571, want -0.017096150646749415, diff 0.0738309510249463
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace</failure>
+            <system-out>
+running 1 test
+test comp_b_laplacian_matches_python_disconnected_200 ... FAILED
+
+failures:
+
+failures:
+    comp_b_laplacian_matches_python_disconnected_200
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.01s
+
+</system-out>
+            <system-err>
+thread &apos;comp_b_laplacian_matches_python_disconnected_200&apos; (3045322) panicked at tests/integration/test_comp_b_laplacian.rs:32:9:
+L[0,3]: got -0.09092710167169571, want -0.017096150646749415, diff 0.0738309510249463
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+</system-err>
+        </testcase>
+        <testcase name="comp_b_laplacian_matches_python_circles_300" classname="spectral-init::test_comp_b_laplacian" timestamp="2026-03-25T15:26:59.691-07:00" time="0.017">
+            <failure message="thread &apos;comp_b_laplacian_matches_python_circles_300&apos; (3045321) panicked at tests/integration/test_comp_b_laplacian.rs:32:9" type="test failure with exit code 101">thread &apos;comp_b_laplacian_matches_python_circles_300&apos; (3045321) panicked at tests/integration/test_comp_b_laplacian.rs:32:9:
+L[0,6]: got -0.4013671875, want -0.06888237415991076, diff 0.3324848133400892
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace</failure>
+            <system-out>
+running 1 test
+test comp_b_laplacian_matches_python_circles_300 ... FAILED
+
+failures:
+
+failures:
+    comp_b_laplacian_matches_python_circles_300
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.01s
+
+</system-out>
+            <system-err>
+thread &apos;comp_b_laplacian_matches_python_circles_300&apos; (3045321) panicked at tests/integration/test_comp_b_laplacian.rs:32:9:
+L[0,6]: got -0.4013671875, want -0.06888237415991076, diff 0.3324848133400892
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+</system-err>
+        </testcase>
+        <testcase name="comp_b_laplacian_matches_python_moons_200" classname="spectral-init::test_comp_b_laplacian" timestamp="2026-03-25T15:26:59.695-07:00" time="0.021">
+            <failure message="thread &apos;comp_b_laplacian_matches_python_moons_200&apos; (3045324) panicked at tests/integration/test_comp_b_laplacian.rs:32:9" type="test failure with exit code 101">thread &apos;comp_b_laplacian_matches_python_moons_200&apos; (3045324) panicked at tests/integration/test_comp_b_laplacian.rs:32:9:
+L[0,23]: got -0.09497387707233429, want -0.016157658599828137, diff 0.07881621847250615
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace</failure>
+            <system-out>
+running 1 test
+test comp_b_laplacian_matches_python_moons_200 ... FAILED
+
+failures:
+
+failures:
+    comp_b_laplacian_matches_python_moons_200
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.02s
+
+</system-out>
+            <system-err>
+thread &apos;comp_b_laplacian_matches_python_moons_200&apos; (3045324) panicked at tests/integration/test_comp_b_laplacian.rs:32:9:
+L[0,23]: got -0.09497387707233429, want -0.016157658599828137, diff 0.07881621847250615
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+</system-err>
+        </testcase>
+        <testcase name="comp_b_laplacian_matches_python_blobs_connected_2000" classname="spectral-init::test_comp_b_laplacian" timestamp="2026-03-25T15:26:59.677-07:00" time="0.072">
+            <failure message="thread &apos;comp_b_laplacian_matches_python_blobs_connected_2000&apos; (3045315) panicked at tests/integration/test_comp_b_laplacian.rs:32:9" type="test failure with exit code 101">thread &apos;comp_b_laplacian_matches_python_blobs_connected_2000&apos; (3045315) panicked at tests/integration/test_comp_b_laplacian.rs:32:9:
+L[0,44]: got -1, want -0.0420502965332369, diff 0.9579497034667631
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace</failure>
+            <system-out>
+running 1 test
+test comp_b_laplacian_matches_python_blobs_connected_2000 ... FAILED
+
+failures:
+
+failures:
+    comp_b_laplacian_matches_python_blobs_connected_2000
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.07s
+
+</system-out>
+            <system-err>
+thread &apos;comp_b_laplacian_matches_python_blobs_connected_2000&apos; (3045315) panicked at tests/integration/test_comp_b_laplacian.rs:32:9:
+L[0,44]: got -1, want -0.0420502965332369, diff 0.9579497034667631
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+</system-err>
+        </testcase>
+        <testcase name="comp_b_laplacian_matches_python_blobs_5000" classname="spectral-init::test_comp_b_laplacian" timestamp="2026-03-25T15:26:59.676-07:00" time="0.144">
+            <failure message="thread &apos;comp_b_laplacian_matches_python_blobs_5000&apos; (3045314) panicked at tests/integration/test_comp_b_laplacian.rs:32:9" type="test failure with exit code 101">thread &apos;comp_b_laplacian_matches_python_blobs_5000&apos; (3045314) panicked at tests/integration/test_comp_b_laplacian.rs:32:9:
+L[0,508]: got -0.24340926110744476, want -0.045044847328494106, diff 0.19836441377895064
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace</failure>
+            <system-out>
+running 1 test
+test comp_b_laplacian_matches_python_blobs_5000 ... FAILED
+
+failures:
+
+failures:
+    comp_b_laplacian_matches_python_blobs_5000
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.14s
+
+</system-out>
+            <system-err>
+thread &apos;comp_b_laplacian_matches_python_blobs_5000&apos; (3045314) panicked at tests/integration/test_comp_b_laplacian.rs:32:9:
+L[0,508]: got -0.24340926110744476, want -0.045044847328494106, diff 0.19836441377895064
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+</system-err>
+        </testcase>
+    </testsuite>
+    <testsuite name="spectral-init::test_comp_d_dense_evd" tests="5" disabled="0" errors="0" failures="0">
+        <testcase name="comp_d_dense_evd_near_dupes_100" classname="spectral-init::test_comp_d_dense_evd" timestamp="2026-03-25T15:26:59.739-07:00" time="0.160">
+        </testcase>
+        <testcase name="comp_d_dense_evd_blobs_connected_200" classname="spectral-init::test_comp_d_dense_evd" timestamp="2026-03-25T15:26:59.705-07:00" time="0.710">
+        </testcase>
+        <testcase name="comp_d_dense_evd_moons_200" classname="spectral-init::test_comp_d_dense_evd" timestamp="2026-03-25T15:26:59.716-07:00" time="0.950">
+        </testcase>
+        <testcase name="comp_d_dense_evd_circles_300" classname="spectral-init::test_comp_d_dense_evd" timestamp="2026-03-25T15:26:59.707-07:00" time="1.933">
+        </testcase>
+        <testcase name="comp_d_dense_evd_blobs_connected_2000" classname="spectral-init::test_comp_d_dense_evd" timestamp="2026-03-25T15:26:59.707-07:00" time="91.317">
+        </testcase>
+    </testsuite>
+    <testsuite name="spectral-init::test_comp_e_selection" tests="6" disabled="0" errors="0" failures="0">
+        <testcase name="comp_e_selection_matches_python_blobs_connected_200" classname="spectral-init::test_comp_e_selection" timestamp="2026-03-25T15:26:58.958-07:00" time="0.010">
+        </testcase>
+        <testcase name="comp_e_selection_matches_python_blobs_connected_2000" classname="spectral-init::test_comp_e_selection" timestamp="2026-03-25T15:26:58.968-07:00" time="0.010">
+        </testcase>
+        <testcase name="comp_e_selection_matches_python_circles_300" classname="spectral-init::test_comp_e_selection" timestamp="2026-03-25T15:26:58.978-07:00" time="0.006">
+        </testcase>
+        <testcase name="comp_e_selection_matches_python_disconnected_200" classname="spectral-init::test_comp_e_selection" timestamp="2026-03-25T15:26:58.984-07:00" time="0.019">
+        </testcase>
+        <testcase name="comp_e_selection_matches_python_moons_200" classname="spectral-init::test_comp_e_selection" timestamp="2026-03-25T15:26:59.003-07:00" time="0.010">
+        </testcase>
+        <testcase name="comp_e_selection_matches_python_near_dupes_100" classname="spectral-init::test_comp_e_selection" timestamp="2026-03-25T15:26:59.012-07:00" time="0.007">
+        </testcase>
+    </testsuite>
+    <testsuite name="spectral-init::test_comp_f_lobpcg" tests="11" disabled="0" errors="0" failures="0">
+        <testcase name="lobpcg_blobs_2000_residual_below_1e5_with_chebyshev" classname="spectral-init::test_comp_f_lobpcg" timestamp="2026-03-25T15:26:59.020-07:00" time="6.079">
+        </testcase>
+        <testcase name="lobpcg_blobs_connected_200_eigenvalues" classname="spectral-init::test_comp_f_lobpcg" timestamp="2026-03-25T15:27:05.099-07:00" time="0.254">
+        </testcase>
+        <testcase name="lobpcg_blobs_connected_2000_eigenvalues" classname="spectral-init::test_comp_f_lobpcg" timestamp="2026-03-25T15:26:59.932-07:00" time="5.526">
+        </testcase>
+        <testcase name="lobpcg_blobs_connected_200_level2" classname="spectral-init::test_comp_f_lobpcg" timestamp="2026-03-25T15:27:05.353-07:00" time="0.476">
+        </testcase>
+        <testcase name="lobpcg_blobs_connected_2000_level2" classname="spectral-init::test_comp_f_lobpcg" timestamp="2026-03-25T15:27:02.687-07:00" time="4.910">
+        </testcase>
+        <testcase name="lobpcg_circles_300_eigenvalues" classname="spectral-init::test_comp_f_lobpcg" timestamp="2026-03-25T15:27:05.458-07:00" time="2.577">
+        </testcase>
+        <testcase name="lobpcg_circles_300_level2" classname="spectral-init::test_comp_f_lobpcg" timestamp="2026-03-25T15:27:05.829-07:00" time="2.743">
+        </testcase>
+        <testcase name="lobpcg_near_dupes_100_eigenvalues" classname="spectral-init::test_comp_f_lobpcg" timestamp="2026-03-25T15:27:08.571-07:00" time="0.212">
+        </testcase>
+        <testcase name="lobpcg_moons_200_eigenvalues" classname="spectral-init::test_comp_f_lobpcg" timestamp="2026-03-25T15:27:07.597-07:00" time="1.358">
+        </testcase>
+        <testcase name="lobpcg_near_dupes_100_level2" classname="spectral-init::test_comp_f_lobpcg" timestamp="2026-03-25T15:27:08.784-07:00" time="0.328">
+        </testcase>
+        <testcase name="lobpcg_moons_200_level2" classname="spectral-init::test_comp_f_lobpcg" timestamp="2026-03-25T15:27:08.035-07:00" time="1.257">
+        </testcase>
+    </testsuite>
+    <testsuite name="spectral-init::test_comp_g_sinv" tests="18" disabled="0" errors="0" failures="0">
+        <testcase name="sinv_eigenvalue_accuracy_blobs_50" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T15:27:08.955-07:00" time="0.016">
+        </testcase>
+        <testcase name="sinv_eigenvalue_accuracy_blobs_500" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T15:27:08.971-07:00" time="0.010">
+        </testcase>
+        <testcase name="sinv_eigenvalue_accuracy_blobs_5000" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T15:27:08.981-07:00" time="0.035">
+        </testcase>
+        <testcase name="sinv_eigenvalue_accuracy_blobs_connected_200" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T15:27:09.016-07:00" time="0.177">
+        </testcase>
+        <testcase name="sinv_eigenvalue_accuracy_disconnected_200" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T15:27:09.293-07:00" time="0.014">
+        </testcase>
+        <testcase name="sinv_eigenvalue_accuracy_moons_200" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T15:27:09.307-07:00" time="0.231">
+        </testcase>
+        <testcase name="sinv_eigenvalue_accuracy_near_dupes_100" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T15:27:09.538-07:00" time="0.085">
+        </testcase>
+        <testcase name="sinv_eigenvalue_accuracy_circles_300" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T15:27:09.193-07:00" time="0.452">
+        </testcase>
+        <testcase name="sinv_residual_quality_blobs_50" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T15:27:09.624-07:00" time="0.029">
+        </testcase>
+        <testcase name="sinv_residual_quality_blobs_500" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T15:27:09.645-07:00" time="0.010">
+        </testcase>
+        <testcase name="sinv_residual_quality_blobs_5000" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T15:27:09.653-07:00" time="0.005">
+        </testcase>
+        <testcase name="sinv_residual_quality_blobs_connected_200" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T15:27:09.656-07:00" time="0.175">
+        </testcase>
+        <testcase name="sinv_residual_quality_circles_300" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T15:27:09.831-07:00" time="0.257">
+        </testcase>
+        <testcase name="sinv_residual_quality_disconnected_200" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T15:27:10.088-07:00" time="0.051">
+        </testcase>
+        <testcase name="sinv_residual_quality_moons_200" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T15:27:10.139-07:00" time="0.207">
+        </testcase>
+        <testcase name="sinv_residual_quality_near_dupes_100" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T15:27:10.346-07:00" time="0.177">
+        </testcase>
+        <testcase name="sinv_eigenvalue_accuracy_blobs_connected_2000" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T15:27:09.111-07:00" time="17.500">
+        </testcase>
+        <testcase name="sinv_residual_quality_blobs_connected_2000" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T15:27:09.658-07:00" time="18.784">
+        </testcase>
+    </testsuite>
+    <testsuite name="spectral-init::test_e2e_validation" tests="14" disabled="0" errors="0" failures="7">
+        <testcase name="test_e2e_disconnected_200_component_separation" classname="spectral-init::test_e2e_validation" timestamp="2026-03-25T15:27:10.523-07:00" time="0.145">
+        </testcase>
+        <testcase name="test_e2e_exact_knn_blobs_50" classname="spectral-init::test_e2e_validation" timestamp="2026-03-25T15:27:10.669-07:00" time="0.033">
+        </testcase>
+        <testcase name="test_e2e_exact_knn_blobs_connected_200" classname="spectral-init::test_e2e_validation" timestamp="2026-03-25T15:27:10.702-07:00" time="0.729">
+        </testcase>
+        <testcase name="test_e2e_exact_knn_circles_300" classname="spectral-init::test_e2e_validation" timestamp="2026-03-25T15:27:11.431-07:00" time="2.885">
+        </testcase>
+        <testcase name="test_e2e_exact_knn_near_dupes_100" classname="spectral-init::test_e2e_validation" timestamp="2026-03-25T15:27:14.316-07:00" time="0.300">
+        </testcase>
+        <testcase name="test_e2e_exact_knn_moons_200" classname="spectral-init::test_e2e_validation" timestamp="2026-03-25T15:27:14.019-07:00" time="1.247">
+        </testcase>
+        <testcase name="test_e2e_residual_quality_blobs_connected_200" classname="spectral-init::test_e2e_validation" timestamp="2026-03-25T15:27:15.006-07:00" time="1.447">
+            <failure message="thread &apos;test_e2e_residual_quality_blobs_connected_200&apos; (3046801) panicked at tests/integration/test_e2e_validation.rs:68:9" type="test failure with exit code 101">thread &apos;test_e2e_residual_quality_blobs_connected_200&apos; (3046801) panicked at tests/integration/test_e2e_validation.rs:68:9:
+residual quality check failed for blobs_connected_200 column 0: residual=1.277844e-1 &gt;= 0.005
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace</failure>
+            <system-out>
+running 1 test
+test test_e2e_residual_quality_blobs_connected_200 ... FAILED
+
+failures:
+
+failures:
+    test_e2e_residual_quality_blobs_connected_200
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 13 filtered out; finished in 1.39s
+
+</system-out>
+            <system-err>
+thread &apos;test_e2e_residual_quality_blobs_connected_200&apos; (3046801) panicked at tests/integration/test_e2e_validation.rs:68:9:
+residual quality check failed for blobs_connected_200 column 0: residual=1.277844e-1 &gt;= 0.005
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+</system-err>
+        </testcase>
+        <testcase name="test_e2e_residual_quality_moons_200" classname="spectral-init::test_e2e_validation" timestamp="2026-03-25T15:27:16.522-07:00" time="1.307">
+            <failure message="thread &apos;test_e2e_residual_quality_moons_200&apos; (3046964) panicked at tests/integration/test_e2e_validation.rs:68:9" type="test failure with exit code 101">thread &apos;test_e2e_residual_quality_moons_200&apos; (3046964) panicked at tests/integration/test_e2e_validation.rs:68:9:
+residual quality check failed for moons_200 column 0: residual=8.769281e-2 &gt;= 0.005
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace</failure>
+            <system-out>
+running 1 test
+test test_e2e_residual_quality_moons_200 ... FAILED
+
+failures:
+
+failures:
+    test_e2e_residual_quality_moons_200
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 13 filtered out; finished in 1.29s
+
+</system-out>
+            <system-err>
+thread &apos;test_e2e_residual_quality_moons_200&apos; (3046964) panicked at tests/integration/test_e2e_validation.rs:68:9:
+residual quality check failed for moons_200 column 0: residual=8.769281e-2 &gt;= 0.005
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+</system-err>
+        </testcase>
+        <testcase name="test_e2e_residual_quality_near_dupes_100" classname="spectral-init::test_e2e_validation" timestamp="2026-03-25T15:27:17.829-07:00" time="0.268">
+            <failure message="thread &apos;test_e2e_residual_quality_near_dupes_100&apos; (3047049) panicked at tests/integration/test_e2e_validation.rs:68:9" type="test failure with exit code 101">thread &apos;test_e2e_residual_quality_near_dupes_100&apos; (3047049) panicked at tests/integration/test_e2e_validation.rs:68:9:
+residual quality check failed for near_dupes_100 column 0: residual=7.417824e-2 &gt;= 0.005
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace</failure>
+            <system-out>
+running 1 test
+test test_e2e_residual_quality_near_dupes_100 ... FAILED
+
+failures:
+
+failures:
+    test_e2e_residual_quality_near_dupes_100
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 13 filtered out; finished in 0.24s
+
+</system-out>
+            <system-err>
+thread &apos;test_e2e_residual_quality_near_dupes_100&apos; (3047049) panicked at tests/integration/test_e2e_validation.rs:68:9:
+residual quality check failed for near_dupes_100 column 0: residual=7.417824e-2 &gt;= 0.005
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+</system-err>
+        </testcase>
+        <testcase name="test_e2e_residual_quality_circles_300" classname="spectral-init::test_e2e_validation" timestamp="2026-03-25T15:27:16.454-07:00" time="2.861">
+            <failure message="thread &apos;test_e2e_residual_quality_circles_300&apos; (3046946) panicked at tests/integration/test_e2e_validation.rs:68:9" type="test failure with exit code 101">thread &apos;test_e2e_residual_quality_circles_300&apos; (3046946) panicked at tests/integration/test_e2e_validation.rs:68:9:
+residual quality check failed for circles_300 column 0: residual=7.617430e-2 &gt;= 0.005
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace</failure>
+            <system-out>
+running 1 test
+test test_e2e_residual_quality_circles_300 ... FAILED
+
+failures:
+
+failures:
+    test_e2e_residual_quality_circles_300
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 13 filtered out; finished in 2.85s
+
+</system-out>
+            <system-err>
+thread &apos;test_e2e_residual_quality_circles_300&apos; (3046946) panicked at tests/integration/test_e2e_validation.rs:68:9:
+residual quality check failed for circles_300 column 0: residual=7.617430e-2 &gt;= 0.005
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+</system-err>
+        </testcase>
+        <testcase name="test_e2e_subspace_near_dupes_100" classname="spectral-init::test_e2e_validation" timestamp="2026-03-25T15:27:19.315-07:00" time="0.240">
+            <failure message="thread &apos;test_e2e_subspace_near_dupes_100&apos; (3047099) panicked at tests/integration/test_e2e_validation.rs:205:5" type="test failure with exit code 101">thread &apos;test_e2e_subspace_near_dupes_100&apos; (3047099) panicked at tests/integration/test_e2e_validation.rs:205:5:
+near_dupes_100: Gram determinant 0.387461 &lt;= 0.95; eigenvector subspaces do not match
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace</failure>
+            <system-out>
+running 1 test
+test test_e2e_subspace_near_dupes_100 ... FAILED
+
+failures:
+
+failures:
+    test_e2e_subspace_near_dupes_100
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 13 filtered out; finished in 0.23s
+
+</system-out>
+            <system-err>
+thread &apos;test_e2e_subspace_near_dupes_100&apos; (3047099) panicked at tests/integration/test_e2e_validation.rs:205:5:
+near_dupes_100: Gram determinant 0.387461 &lt;= 0.95; eigenvector subspaces do not match
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+</system-err>
+        </testcase>
+        <testcase name="test_e2e_subspace_circles_300" classname="spectral-init::test_e2e_validation" timestamp="2026-03-25T15:27:18.097-07:00" time="2.446">
+            <failure message="thread &apos;test_e2e_subspace_circles_300&apos; (3047067) panicked at tests/integration/test_e2e_validation.rs:165:5" type="test failure with exit code 101">thread &apos;test_e2e_subspace_circles_300&apos; (3047067) panicked at tests/integration/test_e2e_validation.rs:165:5:
+circles_300: Gram determinant 0.001930 &lt;= 0.95; eigenvector subspaces do not match
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace</failure>
+            <system-out>
+running 1 test
+test test_e2e_subspace_circles_300 ... FAILED
+
+failures:
+
+failures:
+    test_e2e_subspace_circles_300
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 13 filtered out; finished in 2.44s
+
+</system-out>
+            <system-err>
+thread &apos;test_e2e_subspace_circles_300&apos; (3047067) panicked at tests/integration/test_e2e_validation.rs:165:5:
+circles_300: Gram determinant 0.001930 &lt;= 0.95; eigenvector subspaces do not match
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+</system-err>
+        </testcase>
+        <testcase name="test_e2e_residual_quality_blobs_connected_2000" classname="spectral-init::test_e2e_validation" timestamp="2026-03-25T15:27:15.267-07:00" time="6.775">
+            <failure message="thread &apos;test_e2e_residual_quality_blobs_connected_2000&apos; (3046820) panicked at tests/integration/test_e2e_validation.rs:68:9" type="test failure with exit code 101">thread &apos;test_e2e_residual_quality_blobs_connected_2000&apos; (3046820) panicked at tests/integration/test_e2e_validation.rs:68:9:
+residual quality check failed for blobs_connected_2000 column 0: residual=2.041334e-1 &gt;= 0.005
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace</failure>
+            <system-out>
+running 1 test
+test test_e2e_residual_quality_blobs_connected_2000 ... FAILED
+
+failures:
+
+failures:
+    test_e2e_residual_quality_blobs_connected_2000
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 13 filtered out; finished in 6.75s
+
+</system-out>
+            <system-err>
+thread &apos;test_e2e_residual_quality_blobs_connected_2000&apos; (3046820) panicked at tests/integration/test_e2e_validation.rs:68:9:
+residual quality check failed for blobs_connected_2000 column 0: residual=2.041334e-1 &gt;= 0.005
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+</system-err>
+        </testcase>
+        <testcase name="test_e2e_performance_blobs_5000" classname="spectral-init::test_e2e_validation" timestamp="2026-03-25T15:27:14.616-07:00" time="39.727">
+        </testcase>
+    </testsuite>
+    <testsuite name="spectral-init::test_pipeline" tests="6" disabled="0" errors="0" failures="0">
+        <testcase name="spectral_init_fully_connected_uniform" classname="spectral-init::test_pipeline" timestamp="2026-03-25T15:27:19.555-07:00" time="0.036">
+        </testcase>
+        <testcase name="spectral_init_single_point" classname="spectral-init::test_pipeline" timestamp="2026-03-25T15:27:19.591-07:00" time="0.036">
+        </testcase>
+        <testcase name="spectral_init_synthetic_disconnected_preserves_component_structure" classname="spectral-init::test_pipeline" timestamp="2026-03-25T15:27:19.628-07:00" time="0.020">
+        </testcase>
+        <testcase name="spectral_init_synthetic_disconnected_produces_valid_embedding" classname="spectral-init::test_pipeline" timestamp="2026-03-25T15:27:19.647-07:00" time="0.012">
+        </testcase>
+        <testcase name="spectral_init_ten_component_graph" classname="spectral-init::test_pipeline" timestamp="2026-03-25T15:27:19.659-07:00" time="0.044">
+        </testcase>
+        <testcase name="spectral_init_two_points_connected" classname="spectral-init::test_pipeline" timestamp="2026-03-25T15:27:19.703-07:00" time="0.016">
+        </testcase>
+    </testsuite>
+    <testsuite name="spectral-init::test_warm_restart_benefit" tests="6" disabled="0" errors="0" failures="0">
+        <testcase name="test_ring_2000_warm_restart_converges" classname="spectral-init::test_warm_restart_benefit" timestamp="2026-03-25T15:27:28.443-07:00" time="0.008">
+        </testcase>
+        <testcase name="test_ring_2000_warm_restart" classname="spectral-init::test_warm_restart_benefit" timestamp="2026-03-25T15:27:26.612-07:00" time="214.352">
+        </testcase>
+        <testcase name="test_ring_3000_warm_restart" classname="spectral-init::test_warm_restart_benefit" timestamp="2026-03-25T15:27:28.451-07:00" time="315.964">
+        </testcase>
+        <testcase name="test_epsilon_bridge_sweep" classname="spectral-init::test_warm_restart_benefit" timestamp="2026-03-25T15:27:19.719-07:00" time="453.626">
+        </testcase>
+        <testcase name="test_path_2000_warm_restart" classname="spectral-init::test_warm_restart_benefit" timestamp="2026-03-25T15:27:20.543-07:00" time="501.171">
+        </testcase>
+        <testcase name="test_path_3000_warm_restart" classname="spectral-init::test_warm_restart_benefit" timestamp="2026-03-25T15:27:22.041-07:00" time="614.934">
+        </testcase>
+    </testsuite>
+    <testsuite name="spectral-init::test_comp_d_rsvd" tests="6" disabled="0" errors="0" failures="0">
+        <testcase name="comp_d_rsvd_near_dupes_100" classname="spectral-init::test_comp_d_rsvd" timestamp="2026-03-25T15:26:58.707-07:00" time="35.457">
+        </testcase>
+        <testcase name="comp_d_rsvd_moons_200" classname="spectral-init::test_comp_d_rsvd" timestamp="2026-03-25T15:26:58.191-07:00" time="82.689">
+        </testcase>
+        <testcase name="comp_d_rsvd_blobs_connected_200" classname="spectral-init::test_comp_d_rsvd" timestamp="2026-03-25T15:26:59.763-07:00" time="84.085">
+        </testcase>
+        <testcase name="comp_d_rsvd_circles_300" classname="spectral-init::test_comp_d_rsvd" timestamp="2026-03-25T15:26:58.114-07:00" time="104.410">
+        </testcase>
+        <testcase name="comp_d_rsvd_blobs_500" classname="spectral-init::test_comp_d_rsvd" timestamp="2026-03-25T15:26:59.750-07:00" time="111.043">
+        </testcase>
+        <testcase name="comp_d_rsvd_blobs_connected_2000" classname="spectral-init::test_comp_d_rsvd" timestamp="2026-03-25T15:26:59.768-07:00" time="245.719">
+        </testcase>
+    </testsuite>
+    <testsuite name="spectral-init::test_accuracy_report" tests="1" disabled="0" errors="0" failures="0">
+        <testcase name="generate_accuracy_report" classname="spectral-init::test_accuracy_report" timestamp="2026-03-25T15:26:59.593-07:00" time="115.180">
+        </testcase>
+    </testsuite>
+</testsuites>

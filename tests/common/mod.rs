@@ -161,6 +161,73 @@ pub fn partition_of(labels: &[usize]) -> std::collections::BTreeSet<std::collect
     map.into_values().collect()
 }
 
+/// Normalized Laplacian of C_n (ring graph) in f64.
+/// Every node has degree 2. L = D^{-1/2}(D - A)D^{-1/2}:
+///   diagonal = 1.0, off-diagonals = -0.5 (= -1/(sqrt(2)*sqrt(2))).
+pub fn ring_laplacian(n: usize) -> sprs::CsMatI<f64, usize> {
+    let mut indptr = vec![0usize; n + 1];
+    let mut indices: Vec<usize> = Vec::new();
+    let mut data: Vec<f64> = Vec::new();
+    for i in 0..n {
+        let left = if i == 0 { n - 1 } else { i - 1 };
+        let right = if i + 1 == n { 0 } else { i + 1 };
+        let mut entries = [(left, -0.5_f64), (i, 1.0_f64), (right, -0.5_f64)];
+        entries.sort_unstable_by_key(|&(col, _)| col);
+        for (col, val) in entries {
+            indices.push(col);
+            data.push(val);
+        }
+        indptr[i + 1] = indices.len();
+    }
+    sprs::CsMatI::new((n, n), indptr, indices, data)
+}
+
+/// sqrt_deg vector for C_n (ring graph): all entries are sqrt(2).
+pub fn ring_sqrt_deg(n: usize) -> ndarray::Array1<f64> {
+    ndarray::Array1::from_elem(n, 2.0_f64.sqrt())
+}
+
+/// Ring graph C_n as adjacency matrix: edges (i, (i±1) % n), weight 1.0.
+/// Returns CsMatI<f32, u32, usize> suitable for spectral_init().
+pub fn make_ring(n: u32) -> CsMatI<f32, u32, usize> {
+    let n_usize = n as usize;
+    let mut indptr = vec![0usize; n_usize + 1];
+    let mut indices: Vec<u32> = Vec::new();
+    let mut data: Vec<f32> = Vec::new();
+    for i in 0..n_usize {
+        let prev = (i + n_usize - 1) % n_usize;
+        let next = (i + 1) % n_usize;
+        let (lo, hi) = if prev < next { (prev, next) } else { (next, prev) };
+        indices.push(lo as u32);
+        data.push(1.0f32);
+        indices.push(hi as u32);
+        data.push(1.0f32);
+        indptr[i + 1] = indices.len();
+    }
+    CsMatI::<f32, u32, usize>::new((n_usize, n_usize), indptr, indices, data)
+}
+
+/// Path graph P_n as adjacency matrix: edges (i, i+1), weight 1.0.
+/// Returns CsMatI<f32, u32, usize> suitable for spectral_init().
+pub fn make_path(n: u32) -> CsMatI<f32, u32, usize> {
+    let n_usize = n as usize;
+    let mut indptr = vec![0usize; n_usize + 1];
+    let mut indices: Vec<u32> = Vec::new();
+    let mut data: Vec<f32> = Vec::new();
+    for i in 0..n_usize {
+        if i > 0 {
+            indices.push((i - 1) as u32);
+            data.push(1.0f32);
+        }
+        if i + 1 < n_usize {
+            indices.push((i + 1) as u32);
+            data.push(1.0f32);
+        }
+        indptr[i + 1] = indices.len();
+    }
+    CsMatI::<f32, u32, usize>::new((n_usize, n_usize), indptr, indices, data)
+}
+
 pub fn load_sparse_csr_f32_u32(path: &Path) -> CsMatI<f32, u32, usize> {
     let file = std::fs::File::open(path)
         .unwrap_or_else(|e| panic!("cannot open fixture {:?}: {}", path, e));

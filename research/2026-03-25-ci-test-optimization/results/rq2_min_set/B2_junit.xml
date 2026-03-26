@@ -1,0 +1,493 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="spectral-init-tests" tests="207" failures="2" errors="0" uuid="86424e37-d35f-4edd-aad2-14a65ad3cacc" timestamp="2026-03-25T14:55:56.996-07:00" time="646.764">
+    <testsuite name="spectral-init" tests="85" disabled="0" errors="0" failures="0">
+        <testcase name="laplacian::tests::build_laplacian_symmetry" classname="spectral-init" timestamp="2026-03-25T14:55:56.997-07:00" time="0.004">
+        </testcase>
+        <testcase name="components::tests::test_empty_graph" classname="spectral-init" timestamp="2026-03-25T14:55:56.997-07:00" time="0.004">
+        </testcase>
+        <testcase name="config_tests::default_config_is_python_compat" classname="spectral-init" timestamp="2026-03-25T14:55:56.997-07:00" time="0.004">
+        </testcase>
+        <testcase name="components::tests::test_three_isolated_nodes" classname="spectral-init" timestamp="2026-03-25T14:55:56.997-07:00" time="0.004">
+        </testcase>
+        <testcase name="config_tests::compute_mode_copy_clone_eq" classname="spectral-init" timestamp="2026-03-25T14:55:56.997-07:00" time="0.004">
+        </testcase>
+        <testcase name="components::tests::test_path_graph_3" classname="spectral-init" timestamp="2026-03-25T14:55:56.997-07:00" time="0.004">
+        </testcase>
+        <testcase name="config_tests::compute_mode_rust_native_neq_python_compat" classname="spectral-init" timestamp="2026-03-25T14:55:56.997-07:00" time="0.004">
+        </testcase>
+        <testcase name="laplacian::tests::build_laplacian_isolated_node" classname="spectral-init" timestamp="2026-03-25T14:55:56.997-07:00" time="0.005">
+        </testcase>
+        <testcase name="config_tests::compute_mode_variants_exhaustive" classname="spectral-init" timestamp="2026-03-25T14:55:56.997-07:00" time="0.005">
+        </testcase>
+        <testcase name="components::tests::test_two_isolated_nodes" classname="spectral-init" timestamp="2026-03-25T14:55:56.997-07:00" time="0.005">
+        </testcase>
+        <testcase name="laplacian::tests::build_laplacian_two_node_complete_graph" classname="spectral-init" timestamp="2026-03-25T14:55:56.997-07:00" time="0.005">
+        </testcase>
+        <testcase name="components::tests::test_two_components_four_nodes" classname="spectral-init" timestamp="2026-03-25T14:55:56.997-07:00" time="0.005">
+        </testcase>
+        <testcase name="components::tests::test_two_connected_nodes" classname="spectral-init" timestamp="2026-03-25T14:55:56.997-07:00" time="0.005">
+        </testcase>
+        <testcase name="components::tests::test_single_node_no_edges" classname="spectral-init" timestamp="2026-03-25T14:55:56.997-07:00" time="0.006">
+        </testcase>
+        <testcase name="laplacian::tests::build_laplacian_weighted_edge" classname="spectral-init" timestamp="2026-03-25T14:55:57.001-07:00" time="0.004">
+        </testcase>
+        <testcase name="laplacian::tests::compute_degrees_python_compat_matches_column_sum" classname="spectral-init" timestamp="2026-03-25T14:55:57.001-07:00" time="0.004">
+        </testcase>
+        <testcase name="laplacian::tests::compute_degrees_zero_degree_node" classname="spectral-init" timestamp="2026-03-25T14:55:57.001-07:00" time="0.004">
+        </testcase>
+        <testcase name="multi_component::tests::test_embed_disconnected_tiny_components_placed_at_meta_pos" classname="spectral-init" timestamp="2026-03-25T14:55:57.001-07:00" time="0.004">
+        </testcase>
+        <testcase name="multi_component::tests::test_extract_subgraph_two_components" classname="spectral-init" timestamp="2026-03-25T14:55:57.002-07:00" time="0.004">
+        </testcase>
+        <testcase name="laplacian::tests::compute_degrees_rust_native_uses_f64_row_sum" classname="spectral-init" timestamp="2026-03-25T14:55:57.001-07:00" time="0.005">
+        </testcase>
+        <testcase name="config_tests::spectral_init_with_default_config_compiles_and_runs" classname="spectral-init" timestamp="2026-03-25T14:55:56.997-07:00" time="0.009">
+        </testcase>
+        <testcase name="operator::tests::test_csr_operator_residual_diagonal" classname="spectral-init" timestamp="2026-03-25T14:55:57.002-07:00" time="0.004">
+        </testcase>
+        <testcase name="multi_component::tests::test_extract_subgraph_single_node" classname="spectral-init" timestamp="2026-03-25T14:55:57.002-07:00" time="0.005">
+        </testcase>
+        <testcase name="config_tests::python_compat_and_rust_native_same_subspace" classname="spectral-init" timestamp="2026-03-25T14:55:56.997-07:00" time="0.010">
+        </testcase>
+        <testcase name="multi_component::tests::test_orthogonal_meta_embedding_1_comp_3_dim" classname="spectral-init" timestamp="2026-03-25T14:55:57.002-07:00" time="0.005">
+        </testcase>
+        <testcase name="multi_component::tests::test_orthogonal_meta_embedding_4_comp_2_dim" classname="spectral-init" timestamp="2026-03-25T14:55:57.003-07:00" time="0.005">
+        </testcase>
+        <testcase name="multi_component::tests::test_embed_disconnected_two_pairs_shape_and_finite" classname="spectral-init" timestamp="2026-03-25T14:55:57.001-07:00" time="0.006">
+        </testcase>
+        <testcase name="operator::tests::test_csr_operator_block_matches_sequential" classname="spectral-init" timestamp="2026-03-25T14:55:57.002-07:00" time="0.005">
+        </testcase>
+        <testcase name="multi_component::tests::test_orthogonal_meta_embedding_2_comp_2_dim" classname="spectral-init" timestamp="2026-03-25T14:55:57.002-07:00" time="0.006">
+        </testcase>
+        <testcase name="operator::tests::test_spmv_matches_dense_reference" classname="spectral-init" timestamp="2026-03-25T14:55:57.006-07:00" time="0.004">
+        </testcase>
+        <testcase name="operator::tests::test_spmv_diagonal_matrix" classname="spectral-init" timestamp="2026-03-25T14:55:57.005-07:00" time="0.004">
+        </testcase>
+        <testcase name="selection::tests::selects_correct_columns_sorted_input" classname="spectral-init" timestamp="2026-03-25T14:55:57.006-07:00" time="0.004">
+        </testcase>
+        <testcase name="selection::tests::sorts_before_skipping_trivial" classname="spectral-init" timestamp="2026-03-25T14:55:57.006-07:00" time="0.004">
+        </testcase>
+        <testcase name="operator::tests::test_spmv_identity_matrix" classname="spectral-init" timestamp="2026-03-25T14:55:57.006-07:00" time="0.005">
+        </testcase>
+        <testcase name="multi_component::tests::test_embed_disconnected_intracomp_lt_intercomp" classname="spectral-init" timestamp="2026-03-25T14:55:57.001-07:00" time="0.009">
+        </testcase>
+        <testcase name="operator::tests::test_csr_operator_single_vector" classname="spectral-init" timestamp="2026-03-25T14:55:57.005-07:00" time="0.005">
+        </testcase>
+        <testcase name="selection::tests::selects_single_nontrivial_eigenvector" classname="spectral-init" timestamp="2026-03-25T14:55:57.006-07:00" time="0.005">
+        </testcase>
+        <testcase name="operator::tests::test_spmv_matches_csr_operator_single_vector" classname="spectral-init" timestamp="2026-03-25T14:55:57.006-07:00" time="0.005">
+        </testcase>
+        <testcase name="solvers::dense::tests::dense_evd_k_greater_than_n_returns_error" classname="spectral-init" timestamp="2026-03-25T14:55:57.008-07:00" time="0.004">
+        </testcase>
+        <testcase name="solvers::lobpcg::tests::chebyshev_precond_degree1_matches_formula" classname="spectral-init" timestamp="2026-03-25T14:55:57.008-07:00" time="0.004">
+        </testcase>
+        <testcase name="solvers::lobpcg::tests::chebyshev_precond_filters_high_eigenvalues" classname="spectral-init" timestamp="2026-03-25T14:55:57.008-07:00" time="0.004">
+        </testcase>
+        <testcase name="solvers::lobpcg::tests::lobpcg_accept_tol_is_1e5" classname="spectral-init" timestamp="2026-03-25T14:55:57.008-07:00" time="0.004">
+        </testcase>
+        <testcase name="solvers::dense::tests::dense_evd_identity_3x3" classname="spectral-init" timestamp="2026-03-25T14:55:57.006-07:00" time="0.007">
+        </testcase>
+        <testcase name="solvers::dense::tests::dense_evd_truncation_k_less_than_n" classname="spectral-init" timestamp="2026-03-25T14:55:57.008-07:00" time="0.007">
+        </testcase>
+        <testcase name="solvers::dense::tests::dense_evd_trivial_2x2" classname="spectral-init" timestamp="2026-03-25T14:55:57.008-07:00" time="0.007">
+        </testcase>
+        <testcase name="solvers::lobpcg::tests::lobpcg_solve_diagonal_level1" classname="spectral-init" timestamp="2026-03-25T14:55:57.010-07:00" time="0.008">
+        </testcase>
+        <testcase name="solvers::lobpcg::tests::rayleigh_ritz_refine_perturbed_eigenvectors" classname="spectral-init" timestamp="2026-03-25T14:55:57.012-07:00" time="0.006">
+        </testcase>
+        <testcase name="solvers::lobpcg::tests::per_vector_residuals_exact_near_zero" classname="spectral-init" timestamp="2026-03-25T14:55:57.011-07:00" time="0.009">
+        </testcase>
+        <testcase name="solvers::lobpcg::tests::lobpcg_solve_level2_eigenvalues_corrected" classname="spectral-init" timestamp="2026-03-25T14:55:57.010-07:00" time="0.010">
+        </testcase>
+        <testcase name="solvers::rsvd::tests::test_two_i_minus_laplacian_path_3" classname="spectral-init" timestamp="2026-03-25T14:55:57.015-07:00" time="0.005">
+        </testcase>
+        <testcase name="solvers::lobpcg::tests::per_vector_residuals_non_eigenvector_large" classname="spectral-init" timestamp="2026-03-25T14:55:57.012-07:00" time="0.008">
+        </testcase>
+        <testcase name="solvers::lobpcg::tests::lobpcg_solve_eigenvectors_orthonormal" classname="spectral-init" timestamp="2026-03-25T14:55:57.010-07:00" time="0.010">
+        </testcase>
+        <testcase name="solvers::lobpcg::tests::lobpcg_solve_rr_achieves_tight_residuals" classname="spectral-init" timestamp="2026-03-25T14:55:57.011-07:00" time="0.010">
+        </testcase>
+        <testcase name="solvers::lobpcg::tests::rayleigh_ritz_refine_exact_eigenvectors_diagonal" classname="spectral-init" timestamp="2026-03-25T14:55:57.012-07:00" time="0.009">
+        </testcase>
+        <testcase name="solvers::lobpcg::tests::lobpcg_solve_restart_count_zero_on_easy_convergence" classname="spectral-init" timestamp="2026-03-25T14:55:57.011-07:00" time="0.011">
+        </testcase>
+        <testcase name="solvers::sinv::tests::eigenvalue_recovery_formula_exact" classname="spectral-init" timestamp="2026-03-25T14:55:57.018-07:00" time="0.005">
+        </testcase>
+        <testcase name="solvers::sinv::tests::sinv_returns_none_for_empty_or_degenerate" classname="spectral-init" timestamp="2026-03-25T14:55:57.018-07:00" time="0.005">
+        </testcase>
+        <testcase name="solvers::rsvd::tests::test_rsvd_solve_shapes_complete_5" classname="spectral-init" timestamp="2026-03-25T14:55:57.014-07:00" time="0.010">
+        </testcase>
+        <testcase name="solvers::sinv::tests::sprs_csc_to_faer_identity_roundtrip" classname="spectral-init" timestamp="2026-03-25T14:55:57.020-07:00" time="0.004">
+        </testcase>
+        <testcase name="solvers::lobpcg::tests::rayleigh_ritz_refine_rotated_basis_recovers_eigenvalues" classname="spectral-init" timestamp="2026-03-25T14:55:57.012-07:00" time="0.012">
+        </testcase>
+        <testcase name="solvers::tests::lobpcg_quality_threshold_is_1e5" classname="spectral-init" timestamp="2026-03-25T14:55:57.021-07:00" time="0.006">
+        </testcase>
+        <testcase name="solvers::tests::max_eigenpair_residual_large_for_non_eigenvector" classname="spectral-init" timestamp="2026-03-25T14:55:57.022-07:00" time="0.005">
+        </testcase>
+        <testcase name="solvers::sinv::tests::sprs_csc_to_faer_shifted_diagonal" classname="spectral-init" timestamp="2026-03-25T14:55:57.020-07:00" time="0.007">
+        </testcase>
+        <testcase name="solvers::tests::max_eigenpair_residual_trivial_near_zero" classname="spectral-init" timestamp="2026-03-25T14:55:57.023-07:00" time="0.004">
+        </testcase>
+        <testcase name="solvers::tests::quality_gate_accepts_near_eigenvector_at_lobpcg_threshold" classname="spectral-init" timestamp="2026-03-25T14:55:57.023-07:00" time="0.004">
+        </testcase>
+        <testcase name="solvers::tests::sinv_quality_threshold_ordering" classname="spectral-init" timestamp="2026-03-25T14:55:57.024-07:00" time="0.004">
+        </testcase>
+        <testcase name="solvers::sinv::tests::sinv_solve_diagonal_eigenvalues_accurate" classname="spectral-init" timestamp="2026-03-25T14:55:57.020-07:00" time="0.009">
+        </testcase>
+        <testcase name="solvers::rsvd::tests::test_rsvd_solve_residuals_ring_6" classname="spectral-init" timestamp="2026-03-25T14:55:57.014-07:00" time="0.015">
+        </testcase>
+        <testcase name="solvers::tests::quality_gate_catches_garbage_at_dense_evd_threshold" classname="spectral-init" timestamp="2026-03-25T14:55:57.024-07:00" time="0.005">
+        </testcase>
+        <testcase name="solvers::tests::threshold_ordering_is_strict" classname="spectral-init" timestamp="2026-03-25T14:55:57.027-07:00" time="0.004">
+        </testcase>
+        <testcase name="tests::spectral_init_empty_graph_returns_error" classname="spectral-init" timestamp="2026-03-25T14:55:57.028-07:00" time="0.004">
+        </testcase>
+        <testcase name="tests::spectral_init_zero_components_returns_error" classname="spectral-init" timestamp="2026-03-25T14:55:57.029-07:00" time="0.004">
+        </testcase>
+        <testcase name="tests::spectral_init_too_few_nodes_returns_error" classname="spectral-init" timestamp="2026-03-25T14:55:57.029-07:00" time="0.005">
+        </testcase>
+        <testcase name="solvers::tests::solve_eigenproblem_eigenvalues_nonneg_and_sorted" classname="spectral-init" timestamp="2026-03-25T14:55:57.024-07:00" time="0.010">
+        </testcase>
+        <testcase name="tests::spectral_error_is_std_error" classname="spectral-init" timestamp="2026-03-25T14:55:57.027-07:00" time="0.008">
+        </testcase>
+        <testcase name="solvers::tests::level0_result_passes_dense_evd_quality_gate" classname="spectral-init" timestamp="2026-03-25T14:55:57.021-07:00" time="0.018">
+        </testcase>
+        <testcase name="tests::spectral_init_connected_graph_succeeds_and_has_correct_shape" classname="spectral-init" timestamp="2026-03-25T14:55:57.028-07:00" time="0.011">
+        </testcase>
+        <testcase name="solvers::tests::solve_eigenproblem_returns_k_plus_one_pairs" classname="spectral-init" timestamp="2026-03-25T14:55:57.027-07:00" time="0.012">
+        </testcase>
+        <testcase name="solvers::lobpcg::tests::lobpcg_injects_trivial_eigenvector" classname="spectral-init" timestamp="2026-03-25T14:55:57.009-07:00" time="0.041">
+        </testcase>
+        <testcase name="solvers::sinv::tests::sinv_solve_eigenvectors_orthonormal" classname="spectral-init" timestamp="2026-03-25T14:55:57.020-07:00" time="0.051">
+        </testcase>
+        <testcase name="solvers::sinv::tests::sinv_solve_returns_k_plus_one_pairs" classname="spectral-init" timestamp="2026-03-25T14:55:57.020-07:00" time="0.059">
+        </testcase>
+        <testcase name="solvers::lobpcg::tests::lobpcg_solve_returns_k_plus_one_eigenpairs" classname="spectral-init" timestamp="2026-03-25T14:55:57.012-07:00" time="0.080">
+        </testcase>
+        <testcase name="solvers::lobpcg::tests::lobpcg_solve_near_degenerate_residuals_within_tol" classname="spectral-init" timestamp="2026-03-25T14:55:57.012-07:00" time="5.399">
+        </testcase>
+        <testcase name="solvers::tests::solve_eigenproblem_level_numbering" classname="spectral-init" timestamp="2026-03-25T14:55:57.027-07:00" time="15.807">
+        </testcase>
+        <testcase name="solvers::tests::solve_eigenproblem_large_n_routes_through_lobpcg" classname="spectral-init" timestamp="2026-03-25T14:55:57.027-07:00" time="17.496">
+        </testcase>
+    </testsuite>
+    <testsuite name="spectral-init::npz_loading" tests="1" disabled="0" errors="0" failures="0">
+        <testcase name="smoke_load_comp_a_degrees_blobs_connected_200" classname="spectral-init::npz_loading" timestamp="2026-03-25T14:55:57.031-07:00" time="0.005">
+        </testcase>
+    </testsuite>
+    <testsuite name="spectral-init::test_adversarial_graphs" tests="21" disabled="0" errors="0" failures="1">
+        <testcase name="large_ring_laplacian_shape_and_nnz" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T14:55:57.035-07:00" time="0.004">
+        </testcase>
+        <testcase name="large_epsilon_bridge_laplacian_shape_and_symmetry" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T14:55:57.033-07:00" time="0.006">
+        </testcase>
+        <testcase name="large_ring_laplacian_diagonal_is_one" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T14:55:57.034-07:00" time="0.006">
+        </testcase>
+        <testcase name="test_complete_k20_valid_embedding" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T14:55:57.039-07:00" time="0.012">
+        </testcase>
+        <testcase name="test_barbell_separates_communities" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T14:55:57.035-07:00" time="0.016">
+        </testcase>
+        <testcase name="test_level_0_dense_evd_for_small_n" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T14:55:57.040-07:00" time="0.011">
+            <failure message="thread &apos;test_level_0_dense_evd_for_small_n&apos; (2935925) panicked at tests/integration/test_adversarial_graphs.rs:619:5" type="test failure with exit code 101">thread &apos;test_level_0_dense_evd_for_small_n&apos; (2935925) panicked at tests/integration/test_adversarial_graphs.rs:619:5:
+assertion `left == right` failed: n=6 must use Level 0 dense EVD
+  left: 1
+ right: 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace</failure>
+            <system-out>
+running 1 test
+test test_level_0_dense_evd_for_small_n ... FAILED
+
+failures:
+
+failures:
+    test_level_0_dense_evd_for_small_n
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 20 filtered out; finished in 0.01s
+
+</system-out>
+            <system-err>
+thread &apos;test_level_0_dense_evd_for_small_n&apos; (2935925) panicked at tests/integration/test_adversarial_graphs.rs:619:5:
+assertion `left == right` failed: n=6 must use Level 0 dense EVD
+  left: 1
+ right: 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+</system-err>
+        </testcase>
+        <testcase name="test_epsilon_bridge_separates_communities" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T14:55:57.039-07:00" time="0.013">
+        </testcase>
+        <testcase name="test_complete_bipartite_coordinate_stability" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T14:55:57.039-07:00" time="0.013">
+        </testcase>
+        <testcase name="test_complete_bipartite_valid_embedding" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T14:55:57.039-07:00" time="0.016">
+        </testcase>
+        <testcase name="test_barbell_valid_embedding" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T14:55:57.037-07:00" time="0.022">
+        </testcase>
+        <testcase name="test_epsilon_bridge_valid_embedding" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T14:55:57.040-07:00" time="0.020">
+        </testcase>
+        <testcase name="test_single_edge_returns_too_few_nodes" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T14:55:57.055-07:00" time="0.005">
+        </testcase>
+        <testcase name="test_star_coordinate_stability" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T14:55:57.059-07:00" time="0.012">
+        </testcase>
+        <testcase name="test_star_valid_embedding" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T14:55:57.059-07:00" time="0.012">
+        </testcase>
+        <testcase name="test_lollipop_valid_embedding" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T14:55:57.052-07:00" time="0.057">
+        </testcase>
+        <testcase name="test_ring_valid_embedding" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T14:55:57.052-07:00" time="0.459">
+        </testcase>
+        <testcase name="test_weighted_exponential_valid_embedding" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T14:55:57.060-07:00" time="0.601">
+        </testcase>
+        <testcase name="test_path_valid_embedding" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T14:55:57.052-07:00" time="0.631">
+        </testcase>
+        <testcase name="test_level_1_lobpcg_for_large_well_conditioned_n" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T14:55:57.050-07:00" time="16.793">
+        </testcase>
+        <testcase name="test_level_2_regularized_lobpcg_produces_valid_result" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T14:55:57.051-07:00" time="32.784">
+        </testcase>
+        <testcase name="test_level_3_rsvd_valid_on_large_path" classname="spectral-init::test_adversarial_graphs" timestamp="2026-03-25T14:55:57.051-07:00" time="249.166">
+        </testcase>
+    </testsuite>
+    <testsuite name="spectral-init::test_comp_a_degrees" tests="18" disabled="0" errors="0" failures="0">
+        <testcase name="comp_a_degrees_matches_python_blobs_500" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T14:55:57.071-07:00" time="0.008">
+        </testcase>
+        <testcase name="comp_a_degrees_matches_python_blobs_50" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T14:55:57.071-07:00" time="0.013">
+        </testcase>
+        <testcase name="comp_a_degrees_matches_python_blobs_connected_200" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T14:55:57.079-07:00" time="0.007">
+        </testcase>
+        <testcase name="comp_a_degrees_matches_python_circles_300" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T14:55:57.084-07:00" time="0.007">
+        </testcase>
+        <testcase name="comp_a_degrees_matches_python_disconnected_200" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T14:55:57.086-07:00" time="0.007">
+        </testcase>
+        <testcase name="comp_a_degrees_matches_python_near_dupes_100" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T14:55:57.091-07:00" time="0.007">
+        </testcase>
+        <testcase name="comp_a_degrees_matches_python_blobs_connected_2000" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T14:55:57.079-07:00" time="0.020">
+        </testcase>
+        <testcase name="comp_a_degrees_matches_python_moons_200" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T14:55:57.091-07:00" time="0.008">
+        </testcase>
+        <testcase name="comp_a_degrees_rust_native_blobs_50" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T14:55:57.094-07:00" time="0.008">
+        </testcase>
+        <testcase name="comp_a_degrees_matches_python_blobs_5000" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T14:55:57.072-07:00" time="0.033">
+        </testcase>
+        <testcase name="comp_a_degrees_rust_native_blobs_500" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T14:55:57.099-07:00" time="0.008">
+        </testcase>
+        <testcase name="comp_a_degrees_rust_native_blobs_connected_200" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T14:55:57.100-07:00" time="0.011">
+        </testcase>
+        <testcase name="comp_a_degrees_rust_native_circles_300" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T14:55:57.105-07:00" time="0.007">
+        </testcase>
+        <testcase name="comp_a_degrees_rust_native_disconnected_200" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T14:55:57.107-07:00" time="0.007">
+        </testcase>
+        <testcase name="comp_a_degrees_rust_native_moons_200" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T14:55:57.109-07:00" time="0.006">
+        </testcase>
+        <testcase name="comp_a_degrees_rust_native_blobs_connected_2000" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T14:55:57.101-07:00" time="0.015">
+        </testcase>
+        <testcase name="comp_a_degrees_rust_native_near_dupes_100" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T14:55:57.110-07:00" time="0.009">
+        </testcase>
+        <testcase name="comp_a_degrees_rust_native_blobs_5000" classname="spectral-init::test_comp_a_degrees" timestamp="2026-03-25T14:55:57.099-07:00" time="0.029">
+        </testcase>
+    </testsuite>
+    <testsuite name="spectral-init::test_comp_b_laplacian" tests="9" disabled="0" errors="0" failures="0">
+        <testcase name="comp_b_laplacian_matches_python_blobs_50" classname="spectral-init::test_comp_b_laplacian" timestamp="2026-03-25T14:55:57.112-07:00" time="0.008">
+        </testcase>
+        <testcase name="comp_b_laplacian_matches_python_blobs_connected_200" classname="spectral-init::test_comp_b_laplacian" timestamp="2026-03-25T14:55:57.116-07:00" time="0.015">
+        </testcase>
+        <testcase name="comp_b_laplacian_matches_python_circles_300" classname="spectral-init::test_comp_b_laplacian" timestamp="2026-03-25T14:55:57.120-07:00" time="0.014">
+        </testcase>
+        <testcase name="comp_b_laplacian_matches_python_blobs_500" classname="spectral-init::test_comp_b_laplacian" timestamp="2026-03-25T14:55:57.113-07:00" time="0.024">
+        </testcase>
+        <testcase name="comp_b_laplacian_matches_python_disconnected_200" classname="spectral-init::test_comp_b_laplacian" timestamp="2026-03-25T14:55:57.128-07:00" time="0.012">
+        </testcase>
+        <testcase name="comp_b_laplacian_matches_python_near_dupes_100" classname="spectral-init::test_comp_b_laplacian" timestamp="2026-03-25T14:55:57.134-07:00" time="0.011">
+        </testcase>
+        <testcase name="comp_b_laplacian_matches_python_moons_200" classname="spectral-init::test_comp_b_laplacian" timestamp="2026-03-25T14:55:57.131-07:00" time="0.014">
+        </testcase>
+        <testcase name="comp_b_laplacian_matches_python_blobs_connected_2000" classname="spectral-init::test_comp_b_laplacian" timestamp="2026-03-25T14:55:57.119-07:00" time="0.098">
+        </testcase>
+        <testcase name="comp_b_laplacian_matches_python_blobs_5000" classname="spectral-init::test_comp_b_laplacian" timestamp="2026-03-25T14:55:57.115-07:00" time="0.201">
+        </testcase>
+    </testsuite>
+    <testsuite name="spectral-init::test_comp_d_dense_evd" tests="5" disabled="0" errors="0" failures="0">
+        <testcase name="comp_d_dense_evd_near_dupes_100" classname="spectral-init::test_comp_d_dense_evd" timestamp="2026-03-25T14:55:57.217-07:00" time="0.162">
+        </testcase>
+        <testcase name="comp_d_dense_evd_moons_200" classname="spectral-init::test_comp_d_dense_evd" timestamp="2026-03-25T14:55:57.145-07:00" time="0.720">
+        </testcase>
+        <testcase name="comp_d_dense_evd_blobs_connected_200" classname="spectral-init::test_comp_d_dense_evd" timestamp="2026-03-25T14:55:57.138-07:00" time="0.764">
+        </testcase>
+        <testcase name="comp_d_dense_evd_circles_300" classname="spectral-init::test_comp_d_dense_evd" timestamp="2026-03-25T14:55:57.145-07:00" time="1.895">
+        </testcase>
+        <testcase name="comp_d_dense_evd_blobs_connected_2000" classname="spectral-init::test_comp_d_dense_evd" timestamp="2026-03-25T14:55:57.141-07:00" time="94.170">
+        </testcase>
+    </testsuite>
+    <testsuite name="spectral-init::test_comp_e_selection" tests="6" disabled="0" errors="0" failures="0">
+        <testcase name="comp_e_selection_matches_python_blobs_connected_200" classname="spectral-init::test_comp_e_selection" timestamp="2026-03-25T14:55:57.902-07:00" time="0.027">
+        </testcase>
+        <testcase name="comp_e_selection_matches_python_blobs_connected_2000" classname="spectral-init::test_comp_e_selection" timestamp="2026-03-25T14:55:57.929-07:00" time="0.013">
+        </testcase>
+        <testcase name="comp_e_selection_matches_python_circles_300" classname="spectral-init::test_comp_e_selection" timestamp="2026-03-25T14:55:57.942-07:00" time="0.022">
+        </testcase>
+        <testcase name="comp_e_selection_matches_python_disconnected_200" classname="spectral-init::test_comp_e_selection" timestamp="2026-03-25T14:55:57.964-07:00" time="0.012">
+        </testcase>
+        <testcase name="comp_e_selection_matches_python_moons_200" classname="spectral-init::test_comp_e_selection" timestamp="2026-03-25T14:55:57.976-07:00" time="0.012">
+        </testcase>
+        <testcase name="comp_e_selection_matches_python_near_dupes_100" classname="spectral-init::test_comp_e_selection" timestamp="2026-03-25T14:55:57.988-07:00" time="0.005">
+        </testcase>
+    </testsuite>
+    <testsuite name="spectral-init::test_comp_f_lobpcg" tests="11" disabled="0" errors="0" failures="0">
+        <testcase name="lobpcg_blobs_2000_residual_below_1e5_with_chebyshev" classname="spectral-init::test_comp_f_lobpcg" timestamp="2026-03-25T14:55:57.993-07:00" time="4.589">
+        </testcase>
+        <testcase name="lobpcg_blobs_connected_200_eigenvalues" classname="spectral-init::test_comp_f_lobpcg" timestamp="2026-03-25T14:56:02.583-07:00" time="0.337">
+        </testcase>
+        <testcase name="lobpcg_blobs_connected_200_level2" classname="spectral-init::test_comp_f_lobpcg" timestamp="2026-03-25T14:56:02.919-07:00" time="0.888">
+        </testcase>
+        <testcase name="lobpcg_blobs_connected_2000_eigenvalues" classname="spectral-init::test_comp_f_lobpcg" timestamp="2026-03-25T14:55:59.040-07:00" time="4.948">
+        </testcase>
+        <testcase name="lobpcg_circles_300_level2" classname="spectral-init::test_comp_f_lobpcg" timestamp="2026-03-25T14:56:03.988-07:00" time="2.659">
+        </testcase>
+        <testcase name="lobpcg_circles_300_eigenvalues" classname="spectral-init::test_comp_f_lobpcg" timestamp="2026-03-25T14:56:03.807-07:00" time="2.916">
+        </testcase>
+        <testcase name="lobpcg_moons_200_eigenvalues" classname="spectral-init::test_comp_f_lobpcg" timestamp="2026-03-25T14:56:06.647-07:00" time="0.879">
+        </testcase>
+        <testcase name="lobpcg_near_dupes_100_eigenvalues" classname="spectral-init::test_comp_f_lobpcg" timestamp="2026-03-25T14:56:07.526-07:00" time="0.268">
+        </testcase>
+        <testcase name="lobpcg_moons_200_level2" classname="spectral-init::test_comp_f_lobpcg" timestamp="2026-03-25T14:56:06.723-07:00" time="1.219">
+        </testcase>
+        <testcase name="lobpcg_near_dupes_100_level2" classname="spectral-init::test_comp_f_lobpcg" timestamp="2026-03-25T14:56:07.793-07:00" time="0.206">
+        </testcase>
+        <testcase name="lobpcg_blobs_connected_2000_level2" classname="spectral-init::test_comp_f_lobpcg" timestamp="2026-03-25T14:56:02.410-07:00" time="6.437">
+        </testcase>
+    </testsuite>
+    <testsuite name="spectral-init::test_comp_g_sinv" tests="18" disabled="0" errors="0" failures="0">
+        <testcase name="sinv_eigenvalue_accuracy_blobs_50" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T14:56:07.942-07:00" time="0.006">
+        </testcase>
+        <testcase name="sinv_eigenvalue_accuracy_blobs_500" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T14:56:07.948-07:00" time="0.004">
+        </testcase>
+        <testcase name="sinv_eigenvalue_accuracy_blobs_5000" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T14:56:07.952-07:00" time="0.015">
+        </testcase>
+        <testcase name="sinv_eigenvalue_accuracy_blobs_connected_200" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T14:56:07.967-07:00" time="0.184">
+        </testcase>
+        <testcase name="sinv_eigenvalue_accuracy_circles_300" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T14:56:08.152-07:00" time="0.489">
+        </testcase>
+        <testcase name="sinv_eigenvalue_accuracy_disconnected_200" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T14:56:08.640-07:00" time="0.027">
+        </testcase>
+        <testcase name="sinv_eigenvalue_accuracy_near_dupes_100" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T14:56:08.848-07:00" time="0.111">
+        </testcase>
+        <testcase name="sinv_eigenvalue_accuracy_moons_200" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T14:56:08.667-07:00" time="0.297">
+        </testcase>
+        <testcase name="sinv_residual_quality_blobs_50" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T14:56:08.959-07:00" time="0.009">
+        </testcase>
+        <testcase name="sinv_residual_quality_blobs_5000" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T14:56:08.968-07:00" time="0.010">
+        </testcase>
+        <testcase name="sinv_residual_quality_blobs_500" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T14:56:08.965-07:00" time="0.023">
+        </testcase>
+        <testcase name="sinv_residual_quality_blobs_connected_200" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T14:56:08.978-07:00" time="0.158">
+        </testcase>
+        <testcase name="sinv_residual_quality_circles_300" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T14:56:09.137-07:00" time="0.575">
+        </testcase>
+        <testcase name="sinv_residual_quality_disconnected_200" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T14:56:09.711-07:00" time="0.039">
+        </testcase>
+        <testcase name="sinv_residual_quality_moons_200" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T14:56:09.751-07:00" time="0.364">
+        </testcase>
+        <testcase name="sinv_residual_quality_near_dupes_100" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T14:56:10.115-07:00" time="0.172">
+        </testcase>
+        <testcase name="sinv_eigenvalue_accuracy_blobs_connected_2000" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T14:56:07.999-07:00" time="18.318">
+        </testcase>
+        <testcase name="sinv_residual_quality_blobs_connected_2000" classname="spectral-init::test_comp_g_sinv" timestamp="2026-03-25T14:56:08.988-07:00" time="18.340">
+        </testcase>
+    </testsuite>
+    <testsuite name="spectral-init::test_e2e_validation" tests="14" disabled="0" errors="0" failures="0">
+        <testcase name="test_e2e_disconnected_200_component_separation" classname="spectral-init::test_e2e_validation" timestamp="2026-03-25T14:56:10.288-07:00" time="0.424">
+        </testcase>
+        <testcase name="test_e2e_exact_knn_blobs_50" classname="spectral-init::test_e2e_validation" timestamp="2026-03-25T14:56:10.712-07:00" time="0.084">
+        </testcase>
+        <testcase name="test_e2e_exact_knn_blobs_connected_200" classname="spectral-init::test_e2e_validation" timestamp="2026-03-25T14:56:10.797-07:00" time="0.411">
+        </testcase>
+        <testcase name="test_e2e_exact_knn_moons_200" classname="spectral-init::test_e2e_validation" timestamp="2026-03-25T14:56:12.835-07:00" time="1.093">
+        </testcase>
+        <testcase name="test_e2e_exact_knn_circles_300" classname="spectral-init::test_e2e_validation" timestamp="2026-03-25T14:56:11.208-07:00" time="2.799">
+        </testcase>
+        <testcase name="test_e2e_exact_knn_near_dupes_100" classname="spectral-init::test_e2e_validation" timestamp="2026-03-25T14:56:13.844-07:00" time="0.218">
+        </testcase>
+        <testcase name="test_e2e_residual_quality_blobs_connected_200" classname="spectral-init::test_e2e_validation" timestamp="2026-03-25T14:56:14.006-07:00" time="0.597">
+        </testcase>
+        <testcase name="test_e2e_residual_quality_moons_200" classname="spectral-init::test_e2e_validation" timestamp="2026-03-25T14:56:14.603-07:00" time="1.227">
+        </testcase>
+        <testcase name="test_e2e_residual_quality_near_dupes_100" classname="spectral-init::test_e2e_validation" timestamp="2026-03-25T14:56:15.831-07:00" time="0.410">
+        </testcase>
+        <testcase name="test_e2e_residual_quality_circles_300" classname="spectral-init::test_e2e_validation" timestamp="2026-03-25T14:56:14.524-07:00" time="2.596">
+        </testcase>
+        <testcase name="test_e2e_subspace_near_dupes_100" classname="spectral-init::test_e2e_validation" timestamp="2026-03-25T14:56:17.120-07:00" time="0.203">
+        </testcase>
+        <testcase name="test_e2e_subspace_circles_300" classname="spectral-init::test_e2e_validation" timestamp="2026-03-25T14:56:16.241-07:00" time="2.567">
+        </testcase>
+        <testcase name="test_e2e_residual_quality_blobs_connected_2000" classname="spectral-init::test_e2e_validation" timestamp="2026-03-25T14:56:14.062-07:00" time="5.555">
+        </testcase>
+        <testcase name="test_e2e_performance_blobs_5000" classname="spectral-init::test_e2e_validation" timestamp="2026-03-25T14:56:13.927-07:00" time="86.700">
+        </testcase>
+    </testsuite>
+    <testsuite name="spectral-init::test_pipeline" tests="6" disabled="0" errors="0" failures="0">
+        <testcase name="spectral_init_fully_connected_uniform" classname="spectral-init::test_pipeline" timestamp="2026-03-25T14:56:17.323-07:00" time="0.057">
+        </testcase>
+        <testcase name="spectral_init_single_point" classname="spectral-init::test_pipeline" timestamp="2026-03-25T14:56:17.380-07:00" time="0.016">
+        </testcase>
+        <testcase name="spectral_init_synthetic_disconnected_preserves_component_structure" classname="spectral-init::test_pipeline" timestamp="2026-03-25T14:56:17.396-07:00" time="0.013">
+        </testcase>
+        <testcase name="spectral_init_synthetic_disconnected_produces_valid_embedding" classname="spectral-init::test_pipeline" timestamp="2026-03-25T14:56:17.409-07:00" time="0.014">
+        </testcase>
+        <testcase name="spectral_init_ten_component_graph" classname="spectral-init::test_pipeline" timestamp="2026-03-25T14:56:17.423-07:00" time="0.021">
+        </testcase>
+        <testcase name="spectral_init_two_points_connected" classname="spectral-init::test_pipeline" timestamp="2026-03-25T14:56:17.444-07:00" time="0.019">
+        </testcase>
+    </testsuite>
+    <testsuite name="spectral-init::test_warm_restart_benefit" tests="6" disabled="0" errors="0" failures="0">
+        <testcase name="test_ring_2000_warm_restart_converges" classname="spectral-init::test_warm_restart_benefit" timestamp="2026-03-25T14:56:25.643-07:00" time="0.017">
+        </testcase>
+        <testcase name="test_ring_2000_warm_restart" classname="spectral-init::test_warm_restart_benefit" timestamp="2026-03-25T14:56:26.317-07:00" time="221.308">
+        </testcase>
+        <testcase name="test_ring_3000_warm_restart" classname="spectral-init::test_warm_restart_benefit" timestamp="2026-03-25T14:56:25.660-07:00" time="322.095">
+        </testcase>
+        <testcase name="test_epsilon_bridge_sweep" classname="spectral-init::test_warm_restart_benefit" timestamp="2026-03-25T14:56:17.463-07:00" time="466.712">
+        </testcase>
+        <testcase name="test_path_2000_warm_restart" classname="spectral-init::test_warm_restart_benefit" timestamp="2026-03-25T14:56:18.808-07:00" time="513.011">
+        </testcase>
+        <testcase name="test_path_3000_warm_restart" classname="spectral-init::test_warm_restart_benefit" timestamp="2026-03-25T14:56:19.617-07:00" time="624.142">
+        </testcase>
+    </testsuite>
+    <testsuite name="spectral-init::test_comp_d_rsvd" tests="6" disabled="0" errors="0" failures="0">
+        <testcase name="comp_d_rsvd_near_dupes_100" classname="spectral-init::test_comp_d_rsvd" timestamp="2026-03-25T14:55:57.866-07:00" time="38.525">
+        </testcase>
+        <testcase name="comp_d_rsvd_blobs_connected_200" classname="spectral-init::test_comp_d_rsvd" timestamp="2026-03-25T14:55:57.380-07:00" time="84.393">
+        </testcase>
+        <testcase name="comp_d_rsvd_moons_200" classname="spectral-init::test_comp_d_rsvd" timestamp="2026-03-25T14:55:57.683-07:00" time="84.758">
+        </testcase>
+        <testcase name="comp_d_rsvd_circles_300" classname="spectral-init::test_comp_d_rsvd" timestamp="2026-03-25T14:55:57.661-07:00" time="110.887">
+        </testcase>
+        <testcase name="comp_d_rsvd_blobs_500" classname="spectral-init::test_comp_d_rsvd" timestamp="2026-03-25T14:55:57.317-07:00" time="112.888">
+        </testcase>
+        <testcase name="comp_d_rsvd_blobs_connected_2000" classname="spectral-init::test_comp_d_rsvd" timestamp="2026-03-25T14:55:57.512-07:00" time="258.258">
+        </testcase>
+    </testsuite>
+    <testsuite name="spectral-init::test_accuracy_report" tests="1" disabled="0" errors="0" failures="1">
+        <testcase name="generate_accuracy_report" classname="spectral-init::test_accuracy_report" timestamp="2026-03-25T14:55:57.033-07:00" time="205.426">
+            <failure message="thread &apos;generate_accuracy_report&apos; (2935901) panicked at tests/integration/test_accuracy_report.rs:851:21" type="test failure with exit code 101">thread &apos;generate_accuracy_report&apos; (2935901) panicked at tests/integration/test_accuracy_report.rs:851:21:
+per-comp residual 4.78e-6 for component (size=17) in &quot;blobs_50&quot; exceeds Dense EVD tolerance 1e-8
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace</failure>
+            <system-out>
+running 1 test
+test generate_accuracy_report has been running for over 60 seconds
+Accuracy report written to:
+  /home/talon/projects/worktrees/research-20260325-105823/target/accuracy-report.md
+  /home/talon/projects/worktrees/research-20260325-105823/target/accuracy-report.json
+test generate_accuracy_report ... FAILED
+
+failures:
+
+failures:
+    generate_accuracy_report
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 205.42s
+
+</system-out>
+            <system-err>
+thread &apos;generate_accuracy_report&apos; (2935901) panicked at tests/integration/test_accuracy_report.rs:851:21:
+per-comp residual 4.78e-6 for component (size=17) in &quot;blobs_50&quot; exceeds Dense EVD tolerance 1e-8
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+</system-err>
+        </testcase>
+    </testsuite>
+</testsuites>
