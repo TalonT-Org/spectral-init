@@ -64,7 +64,7 @@ pub(crate) fn normalize_signs(coords: &mut Array2<f64>) {
         let sign = coords.column(col)
             .iter()
             .copied()
-            .reduce(|a, b| if b.abs() > a.abs() { b } else { a })
+            .reduce(|a, b| if b.abs().total_cmp(&a.abs()).is_gt() { b } else { a })
             .map(|v| v.signum())
             .unwrap_or(1.0);
         if sign < 0.0 {
