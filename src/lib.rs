@@ -277,13 +277,14 @@ mod tests {
             let col_view = result.column(col);
             let argmax_val = col_view.iter().copied()
                 .reduce(|a, b| if b.abs() > a.abs() { b } else { a });
-            if let Some(v) = argmax_val {
-                assert!(
-                    v > 0.0,
-                    "column {col}: sign convention violated — argmax element is \
-                     {v:.6}, expected positive (B3 mutation?)"
-                );
-            }
+            let v = argmax_val.unwrap_or_else(|| {
+                panic!("column {col}: argmax returned None — coordinate column is degenerate")
+            });
+            assert!(
+                v > 0.0,
+                "column {col}: sign convention violated — argmax element is \
+                 {v:.6}, expected positive"
+            );
         }
     }
 }
