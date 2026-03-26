@@ -423,8 +423,7 @@ fn test_ring_2000_warm_restart_fires() {
     let sqrt_deg = ring_sqrt_deg(2000);
     let op = CsrOperator(&lap);
     let result = lobpcg_solve(&op, 2, 42, false, &sqrt_deg);
-    assert!(result.is_some(), "lobpcg_solve returned None for ring_2000 seed=42");
-    let (_, restart_count) = result.unwrap();
+    let (_, restart_count) = result.expect("lobpcg_solve returned None for ring_2000 seed=42");
     assert!(
         restart_count > 0,
         "ring_2000 seed=42 must trigger at least one warm restart at opt-level=2; \
