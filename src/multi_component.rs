@@ -5,6 +5,7 @@ use crate::{
     ComputeMode,
     SpectralError,
     laplacian::{build_normalized_laplacian, compute_degrees},
+    scaling,
     selection::select_eigenvectors,
     solvers::solve_eigenproblem,
 };
@@ -292,6 +293,7 @@ fn embed_single_component(
         .as_slice_memory_order()
         .ok_or(SpectralError::ConvergenceFailure)?;
     let mut coords = select_eigenvectors(evals_slice, &evecs, n_embedding_dims);
+    scaling::normalize_signs(&mut coords);
 
     // Scale to data_range
     let max_abs = coords.fold(0.0_f64, |a, &x| a.max(x.abs()));
