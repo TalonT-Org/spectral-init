@@ -257,6 +257,35 @@ mod tests {
             assert!(v.is_finite(), "output contains non-finite value: {v}");
         }
     }
+
+    #[test]
+    fn spectral_init_output_respects_sign_convention() {
+        // 4-node path graph: 0-1-2-3
+        let g = CsMatI::<f32, u32, usize>::new(
+            (4, 4),
+            vec![0usize, 1, 3, 5, 6],
+            vec![1u32, 0u32, 2u32, 1u32, 3u32, 2u32],
+            vec![1.0f32; 6],
+        );
+        let result = spectral_init(&g, 2, 42, None, SpectralInitConfig::default())
+            .expect("spectral_init should succeed");
+        // For each column, the element with the largest absolute value must be positive.
+        // normalize_signs (argmax convention) runs before scale_and_add_noise.
+        // Noise scale is 1e-4; scaled coords are ~10 — noise cannot flip the argmax sign.
+        // With B3 applied (scale_coords returns -x), the argmax element is negated → fails.
+        for col in 0..result.ncols() {
+            let col_view = result.column(col);
+            let argmax_val = col_view.iter().copied()
+                .reduce(|a, b| if b.abs() > a.abs() { b } else { a });
+            if let Some(v) = argmax_val {
+                assert!(
+                    v > 0.0,
+                    "column {col}: sign convention violated — argmax element is \
+                     {v:.6}, expected positive (B3 mutation?)"
+                );
+            }
+        }
+    }
 }
 
 #[cfg(test)]
