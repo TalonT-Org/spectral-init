@@ -106,18 +106,28 @@ pub(crate) fn solve_eigenproblem(
     seed: u64,
     sqrt_deg: &ndarray::Array1<f64>,
 ) -> (EigenResult, u8) {
+    #[cfg(feature = "testing")]
+    let _t_solve = std::time::Instant::now();
+
     let n = laplacian.rows();
     let op = CsrOperator(laplacian);
 
     // Level 0: Dense EVD — exact, used for small n where O(n³) is acceptable.
     if n < dense_n_threshold() {
-        match dense_evd(laplacian, n_components + 1) {
+        #[cfg(feature = "testing")]
+        let _t0 = std::time::Instant::now();
+        let _l0_result = dense_evd(laplacian, n_components + 1);
+        #[cfg(feature = "testing")]
+        eprintln!("[timing:level_0] {}µs", _t0.elapsed().as_micros());
+        match _l0_result {
             Ok((eigs, vecs)) => {
                 let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
                 if quality < DENSE_EVD_QUALITY_THRESHOLD {
                     log::debug!(
                         "[spectral] Level 0 (dense EVD) succeeded (n={n}, max_residual={quality:.2e})"
                     );
+                    #[cfg(feature = "testing")]
+                    eprintln!("[timing:level_total] {}µs", _t_solve.elapsed().as_micros());
                     return ((eigs, vecs), 0);
                 }
                 log::debug!(
@@ -132,12 +142,19 @@ pub(crate) fn solve_eigenproblem(
     }
 
     // Level 1: LOBPCG without regularization.
-    if let Some(((eigs, vecs), _restarts)) = lobpcg::lobpcg_solve(&op, n_components, seed, false, sqrt_deg) {
+    #[cfg(feature = "testing")]
+    let _t1 = std::time::Instant::now();
+    let _l1 = lobpcg::lobpcg_solve(&op, n_components, seed, false, sqrt_deg);
+    #[cfg(feature = "testing")]
+    eprintln!("[timing:level_1] {}µs", _t1.elapsed().as_micros());
+    if let Some(((eigs, vecs), _restarts)) = _l1 {
         let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
         if quality < LOBPCG_QUALITY_THRESHOLD {
             log::debug!(
                 "[spectral] Level 1 (LOBPCG) succeeded (n={n}, max_residual={quality:.2e})"
             );
+            #[cfg(feature = "testing")]
+            eprintln!("[timing:level_total] {}µs", _t_solve.elapsed().as_micros());
             return ((eigs, vecs), 1);
         }
         log::debug!(
@@ -150,12 +167,19 @@ pub(crate) fn solve_eigenproblem(
     // sprs_csc_to_faer converts the Laplacian to faer CSC and adds SINV_SHIFT to the
     // diagonal, producing M = L + εI. sp_cholesky factorizes M; if it fails (e.g. M
     // is not SPD due to numerical degenerate edges) we skip silently to Level 3.
-    if let Some((eigs, vecs)) = sinv::lobpcg_sinv_solve(laplacian, n_components, seed, sqrt_deg) {
+    #[cfg(feature = "testing")]
+    let _t2 = std::time::Instant::now();
+    let _l2 = sinv::lobpcg_sinv_solve(laplacian, n_components, seed, sqrt_deg);
+    #[cfg(feature = "testing")]
+    eprintln!("[timing:level_2] {}µs", _t2.elapsed().as_micros());
+    if let Some((eigs, vecs)) = _l2 {
         let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
         if quality < SINV_LOBPCG_QUALITY_THRESHOLD {
             log::debug!(
                 "[spectral] Level 2 (sinv LOBPCG) succeeded (n={n}, max_residual={quality:.2e})"
             );
+            #[cfg(feature = "testing")]
+            eprintln!("[timing:level_total] {}µs", _t_solve.elapsed().as_micros());
             return ((eigs, vecs), 2);
         }
         log::debug!(
@@ -168,12 +192,19 @@ pub(crate) fn solve_eigenproblem(
     // lobpcg_solve(regularize=true) applies Rayleigh-Ritz refinement internally
     // (G = X^T L X against the true Laplacian), so eigs are exact Rayleigh quotients
     // and can be passed directly to the residual check.
-    if let Some(((eigs, vecs), _restarts)) = lobpcg::lobpcg_solve(&op, n_components, seed, true, sqrt_deg) {
+    #[cfg(feature = "testing")]
+    let _t3 = std::time::Instant::now();
+    let _l3 = lobpcg::lobpcg_solve(&op, n_components, seed, true, sqrt_deg);
+    #[cfg(feature = "testing")]
+    eprintln!("[timing:level_3] {}µs", _t3.elapsed().as_micros());
+    if let Some(((eigs, vecs), _restarts)) = _l3 {
         let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
         if quality < LOBPCG_QUALITY_THRESHOLD {
             log::debug!(
                 "[spectral] Level 3 (LOBPCG+reg) succeeded (n={n}, max_residual={quality:.2e})"
             );
+            #[cfg(feature = "testing")]
+            eprintln!("[timing:level_total] {}µs", _t_solve.elapsed().as_micros());
             return ((eigs, vecs), 3);
         }
         log::debug!(
@@ -185,12 +216,18 @@ pub(crate) fn solve_eigenproblem(
     // Level 4: Randomized SVD via 2I-L trick.
     // rsvd_solve is infallible; gate on output quality via residual check.
     {
+        #[cfg(feature = "testing")]
+        let _t4 = std::time::Instant::now();
         let (eigs, vecs) = rsvd::rsvd_solve(laplacian, n_components, seed);
+        #[cfg(feature = "testing")]
+        eprintln!("[timing:level_4] {}µs", _t4.elapsed().as_micros());
         let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
         if quality < RSVD_QUALITY_THRESHOLD {
             log::debug!(
                 "[spectral] Level 4 (rSVD) succeeded (n={n}, max_residual={quality:.2e})"
             );
+            #[cfg(feature = "testing")]
+            eprintln!("[timing:level_total] {}µs", _t_solve.elapsed().as_micros());
             return ((eigs, vecs), 4);
         }
         log::debug!(
@@ -205,14 +242,18 @@ pub(crate) fn solve_eigenproblem(
     // unrecoverable and should surface as an assertion failure, not a silent
     // ConvergenceFailure that would produce a garbage embedding.
     log::debug!("[spectral] Level 5 (forced dense EVD) (n={n})");
-    (
-        dense_evd(laplacian, n_components + 1).expect(
-            "solve_eigenproblem: Level 5 forced dense EVD failed — \
-             this is a bug; the spectral theorem guarantees eigenvectors \
-             exist for any symmetric positive semidefinite matrix",
-        ),
-        5,
-    )
+    #[cfg(feature = "testing")]
+    let _t5 = std::time::Instant::now();
+    let result = dense_evd(laplacian, n_components + 1).expect(
+        "solve_eigenproblem: Level 5 forced dense EVD failed — \
+         this is a bug; the spectral theorem guarantees eigenvectors \
+         exist for any symmetric positive semidefinite matrix",
+    );
+    #[cfg(feature = "testing")]
+    eprintln!("[timing:level_5] {}µs", _t5.elapsed().as_micros());
+    #[cfg(feature = "testing")]
+    eprintln!("[timing:level_total] {}µs", _t_solve.elapsed().as_micros());
+    (result, 5)
 }
 
 // ─── Unit Tests ──────────────────────────────────────────────────────────────

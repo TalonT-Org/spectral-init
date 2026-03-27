@@ -3,7 +3,9 @@
 //! Run with: cargo bench --features testing --bench simd_spmv_exp
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use ndarray_npy::NpzReader;
 use spectral_init::operator::spmv_csr;
+use spectral_init::solve_eigenproblem_pub;
 use std::hint::black_box;
 
 // ─── Ring Laplacian builder ───────────────────────────────────────────────────
@@ -385,7 +387,75 @@ fn bench_spmv_avx2(c: &mut Criterion) {
     group.finish();
 }
 
+// ─── blobs_5000 fixture loader ─────────────────────────────────────────────────
+
+fn load_blobs5000_laplacian() -> sprs::CsMatI<f64, usize> {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/blobs_5000/comp_b_laplacian.npz");
+    let file = std::fs::File::open(&path)
+        .unwrap_or_else(|e| panic!("cannot open blobs_5000 fixture {:?}: {}", path, e));
+    let mut npz = NpzReader::new(file).expect("NpzReader failed on blobs_5000");
+
+    let data: Vec<f64> = npz
+        .by_name::<ndarray::OwnedRepr<f64>, ndarray::Ix1>("data")
+        .expect("data key not found")
+        .into_iter()
+        .collect();
+
+    let indices: Vec<usize> = npz
+        .by_name::<ndarray::OwnedRepr<i32>, ndarray::Ix1>("indices")
+        .expect("indices key not found")
+        .iter()
+        .map(|&x| x as usize)
+        .collect();
+
+    let indptr: Vec<usize> = npz
+        .by_name::<ndarray::OwnedRepr<i32>, ndarray::Ix1>("indptr")
+        .expect("indptr key not found")
+        .iter()
+        .map(|&x| x as usize)
+        .collect();
+
+    let shape: Vec<usize> = npz
+        .by_name::<ndarray::OwnedRepr<i64>, ndarray::Ix1>("shape")
+        .expect("shape key not found")
+        .iter()
+        .map(|&x| x as usize)
+        .collect();
+
+    sprs::CsMatI::try_new((shape[0], shape[1]), indptr, indices, data)
+        .expect("blobs_5000 CSR structure invalid")
+}
+
+fn bench_pipeline_blobs5000(c: &mut Criterion) {
+    let laplacian = load_blobs5000_laplacian();
+    let seed = 42_u64;
+
+    // Warm-up: one call outside iter to prime instruction caches and BLAS state.
+    let _ = solve_eigenproblem_pub(black_box(&laplacian), black_box(2), black_box(seed));
+
+    let mut group = c.benchmark_group("pipeline_blobs5000");
+    group.sample_size(10); // Criterion minimum; eigenproblem is slow so we keep it at the floor
+    group.bench_function("blobs5000_solver", |b| {
+        b.iter(|| {
+            solve_eigenproblem_pub(
+                black_box(&laplacian),
+                black_box(2),
+                black_box(seed),
+            )
+        });
+    });
+    group.finish();
+}
+
 // ─── Registration ─────────────────────────────────────────────────────────────
 
-criterion_group!(benches, bench_spmv_csr_scaling, bench_spmv_sell_c, bench_spmv_sell_c_conversion, bench_spmv_avx2);
+criterion_group!(
+    benches,
+    bench_spmv_csr_scaling,
+    bench_spmv_sell_c,
+    bench_spmv_sell_c_conversion,
+    bench_spmv_avx2,
+    bench_pipeline_blobs5000
+);
 criterion_main!(benches);
