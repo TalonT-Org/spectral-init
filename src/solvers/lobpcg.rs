@@ -623,10 +623,9 @@ mod tests {
         let diag = [0.02_f64, 0.02, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
         let mat = diagonal_csr(&diag);
         let op = CsrOperator(&mat);
-        let l_op = |x: ndarray::ArrayView2<f64>| -> Array2<f64> {
-            let mut y = Array2::zeros((mat.rows(), x.ncols()));
-            op.apply(x, &mut y);
-            y
+        let l_op = |x: ndarray::ArrayView2<f64>, out: &mut Array2<f64>| {
+            out.fill(0.0);
+            op.apply(x, out);
         };
 
         // column 0 = e_0 (eigenvalue 0.02 direction), column 1 = e_2 (eigenvalue 1.0 direction)
@@ -654,10 +653,9 @@ mod tests {
         let diag = [0.5_f64, 1.5, 0.5, 1.5];
         let mat = diagonal_csr(&diag);
         let op = CsrOperator(&mat);
-        let l_op = |x: ndarray::ArrayView2<f64>| -> Array2<f64> {
-            let mut y = Array2::zeros((mat.rows(), x.ncols()));
-            op.apply(x, &mut y);
-            y
+        let l_op = |x: ndarray::ArrayView2<f64>, out: &mut Array2<f64>| {
+            out.fill(0.0);
+            op.apply(x, out);
         };
 
         let r = Array2::ones((4, 1));
