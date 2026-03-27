@@ -437,6 +437,7 @@ mod tests {
     }
 
     // T2 — env override is respected
+    #[cfg(feature = "testing")]
     #[test]
     fn rsvd_k_sub_reads_env_override() {
         // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers

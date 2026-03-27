@@ -476,6 +476,7 @@ mod tests {
         assert_eq!(dense_n_threshold(), DENSE_N_THRESHOLD);
     }
 
+    #[cfg(feature = "testing")]
     #[test]
     fn dense_n_threshold_reads_env_override() {
         // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
