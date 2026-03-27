@@ -1,0 +1,22 @@
+# LLVM Vectorization Remarks — spmv_csr (opt-level=2, target-cpu=native)
+# Generated: 2026-03-27
+# Command: RUSTFLAGS="-C target-cpu=native -C opt-level=2" cargo rustc --features testing -- -Cremark=loop-vectorize
+
+RESULT: No loop-vectorize remarks emitted for spmv_csr inner loop.
+
+LLVM produced zero "missed vectorization" or "vectorized" notes for the
+spectral_init::operator::spmv_csr function at opt-level=2.
+
+This is consistent with the assembly listing (asm_spmv_csr.txt), which shows
+the inner loop uses scalar VEX instructions exclusively:
+  vmovsd  (%r8,%rbp,8), %xmm1       ; scalar load: data[k]
+  vmulsd  (%r15,%r11,8), %xmm1, %xmm1  ; scalar mul: data[k] * x[indices[k]]
+  vaddsd  %xmm1, %xmm0, %xmm0         ; scalar add: acc += product
+
+No vfmadd231pd, vaddpd, vmulpd, vmovapd, or vgatherdpd instructions present.
+
+The inner loop has an indirect indexed load (x[indices[k]]) which LLVM
+cannot vectorize with standard loop-vectorize: the gather pattern requires
+explicit intrinsic use (_mm256_i32gather_pd) or LLVM's gather vectorization
+(which requires proving absence of aliasing and is rarely triggered for
+pointer-chasing patterns like CSR SpMV).

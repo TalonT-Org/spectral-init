@@ -1,0 +1,158 @@
+warning: field `perm` is never read
+  --> benches/simd_spmv_exp.rs:58:5
+   |
+52 | struct SellCsigma {
+   |        ---------- field in this struct
+...
+58 |     perm: Vec<usize>,       // perm[orig_row] = sorted_pos (σ-sort permutation)
+   |     ^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `verify_sell_c` is never used
+   --> benches/simd_spmv_exp.rs:232:4
+    |
+232 | fn verify_sell_c(n: usize, c: usize) {
+    |    ^^^^^^^^^^^^^
+
+warning: function `verify_avx2` is never used
+   --> benches/simd_spmv_exp.rs:255:4
+    |
+255 | fn verify_avx2(n: usize) {
+    |    ^^^^^^^^^^^
+
+warning: `spectral-init` (bench "simd_spmv_exp") generated 3 warnings
+    Finished `bench` profile [optimized] target(s) in 0.04s
+     Running benches/simd_spmv_exp.rs (target/release/deps/simd_spmv_exp-47b4e629a959b79b)
+Gnuplot not found, using plotters backend
+Benchmarking spmv_sell_c/C4/200
+Benchmarking spmv_sell_c/C4/200: Warming up for 3.0000 s
+Benchmarking spmv_sell_c/C4/200: Collecting 100 samples in estimated 5.0041 s (3.0M iterations)
+Benchmarking spmv_sell_c/C4/200: Analyzing
+spmv_sell_c/C4/200      time:   [1.6469 µs 1.6516 µs 1.6566 µs]
+Found 6 outliers among 100 measurements (6.00%)
+  3 (3.00%) high mild
+  3 (3.00%) high severe
+Benchmarking spmv_sell_c/C8/200
+Benchmarking spmv_sell_c/C8/200: Warming up for 3.0000 s
+Benchmarking spmv_sell_c/C8/200: Collecting 100 samples in estimated 5.0063 s (3.3M iterations)
+Benchmarking spmv_sell_c/C8/200: Analyzing
+spmv_sell_c/C8/200      time:   [1.5216 µs 1.5302 µs 1.5406 µs]
+Found 3 outliers among 100 measurements (3.00%)
+  1 (1.00%) high mild
+  2 (2.00%) high severe
+Benchmarking spmv_sell_c/C4/2000
+Benchmarking spmv_sell_c/C4/2000: Warming up for 3.0000 s
+Benchmarking spmv_sell_c/C4/2000: Collecting 100 samples in estimated 5.0560 s (308k iterations)
+Benchmarking spmv_sell_c/C4/2000: Analyzing
+spmv_sell_c/C4/2000     time:   [15.872 µs 15.964 µs 16.073 µs]
+Found 6 outliers among 100 measurements (6.00%)
+  3 (3.00%) high mild
+  3 (3.00%) high severe
+Benchmarking spmv_sell_c/C8/2000
+Benchmarking spmv_sell_c/C8/2000: Warming up for 3.0000 s
+Benchmarking spmv_sell_c/C8/2000: Collecting 100 samples in estimated 5.0573 s (343k iterations)
+Benchmarking spmv_sell_c/C8/2000: Analyzing
+spmv_sell_c/C8/2000     time:   [14.798 µs 14.880 µs 14.973 µs]
+                        change: [-1.0034% -0.0228% +1.0010%] (p = 0.97 > 0.05)
+                        No change in performance detected.
+Found 7 outliers among 100 measurements (7.00%)
+  5 (5.00%) high mild
+  2 (2.00%) high severe
+Benchmarking spmv_sell_c/C4/5000
+Benchmarking spmv_sell_c/C4/5000: Warming up for 3.0000 s
+Benchmarking spmv_sell_c/C4/5000: Collecting 100 samples in estimated 5.0125 s (121k iterations)
+Benchmarking spmv_sell_c/C4/5000: Analyzing
+spmv_sell_c/C4/5000     time:   [40.868 µs 40.978 µs 41.104 µs]
+Found 9 outliers among 100 measurements (9.00%)
+  3 (3.00%) high mild
+  6 (6.00%) high severe
+Benchmarking spmv_sell_c/C8/5000
+Benchmarking spmv_sell_c/C8/5000: Warming up for 3.0000 s
+Benchmarking spmv_sell_c/C8/5000: Collecting 100 samples in estimated 5.1541 s (136k iterations)
+Benchmarking spmv_sell_c/C8/5000: Analyzing
+spmv_sell_c/C8/5000     time:   [36.791 µs 37.070 µs 37.395 µs]
+Found 18 outliers among 100 measurements (18.00%)
+  10 (10.00%) low mild
+  2 (2.00%) high mild
+  6 (6.00%) high severe
+Benchmarking spmv_sell_c/C4/10000
+Benchmarking spmv_sell_c/C4/10000: Warming up for 3.0000 s
+Benchmarking spmv_sell_c/C4/10000: Collecting 100 samples in estimated 5.3211 s (66k iterations)
+Benchmarking spmv_sell_c/C4/10000: Analyzing
+spmv_sell_c/C4/10000    time:   [81.119 µs 81.410 µs 81.774 µs]
+Found 10 outliers among 100 measurements (10.00%)
+  4 (4.00%) low mild
+  2 (2.00%) high mild
+  4 (4.00%) high severe
+Benchmarking spmv_sell_c/C8/10000
+Benchmarking spmv_sell_c/C8/10000: Warming up for 3.0000 s
+Benchmarking spmv_sell_c/C8/10000: Collecting 100 samples in estimated 5.0074 s (66k iterations)
+Benchmarking spmv_sell_c/C8/10000: Analyzing
+spmv_sell_c/C8/10000    time:   [75.339 µs 75.699 µs 76.161 µs]
+Found 10 outliers among 100 measurements (10.00%)
+  7 (7.00%) high mild
+  3 (3.00%) high severe
+Benchmarking spmv_sell_c/C4/50000
+Benchmarking spmv_sell_c/C4/50000: Warming up for 3.0000 s
+Benchmarking spmv_sell_c/C4/50000: Collecting 100 samples in estimated 6.3066 s (15k iterations)
+Benchmarking spmv_sell_c/C4/50000: Analyzing
+spmv_sell_c/C4/50000    time:   [411.06 µs 413.10 µs 415.40 µs]
+Found 8 outliers among 100 measurements (8.00%)
+  6 (6.00%) high mild
+  2 (2.00%) high severe
+Benchmarking spmv_sell_c/C8/50000
+Benchmarking spmv_sell_c/C8/50000: Warming up for 3.0000 s
+Benchmarking spmv_sell_c/C8/50000: Collecting 100 samples in estimated 5.6724 s (15k iterations)
+Benchmarking spmv_sell_c/C8/50000: Analyzing
+spmv_sell_c/C8/50000    time:   [375.98 µs 378.30 µs 380.62 µs]
+Found 4 outliers among 100 measurements (4.00%)
+  4 (4.00%) high severe
+
+Benchmarking spmv_sell_c_conversion/200
+Benchmarking spmv_sell_c_conversion/200: Warming up for 3.0000 s
+Benchmarking spmv_sell_c_conversion/200: Collecting 100 samples in estimated 5.0128 s (1.0M iterations)
+Benchmarking spmv_sell_c_conversion/200: Analyzing
+spmv_sell_c_conversion/200
+                        time:   [4.7933 µs 4.8235 µs 4.8570 µs]
+Found 9 outliers among 100 measurements (9.00%)
+  5 (5.00%) high mild
+  4 (4.00%) high severe
+Benchmarking spmv_sell_c_conversion/2000
+Benchmarking spmv_sell_c_conversion/2000: Warming up for 3.0000 s
+Benchmarking spmv_sell_c_conversion/2000: Collecting 100 samples in estimated 5.1414 s (116k iterations)
+Benchmarking spmv_sell_c_conversion/2000: Analyzing
+spmv_sell_c_conversion/2000
+                        time:   [44.192 µs 44.402 µs 44.626 µs]
+Found 5 outliers among 100 measurements (5.00%)
+  5 (5.00%) high mild
+Benchmarking spmv_sell_c_conversion/5000
+Benchmarking spmv_sell_c_conversion/5000: Warming up for 3.0000 s
+Benchmarking spmv_sell_c_conversion/5000: Collecting 100 samples in estimated 5.5028 s (45k iterations)
+Benchmarking spmv_sell_c_conversion/5000: Analyzing
+spmv_sell_c_conversion/5000
+                        time:   [120.03 µs 120.62 µs 121.27 µs]
+Found 7 outliers among 100 measurements (7.00%)
+  4 (4.00%) high mild
+  3 (3.00%) high severe
+Benchmarking spmv_sell_c_conversion/10000
+Benchmarking spmv_sell_c_conversion/10000: Warming up for 3.0000 s
+Benchmarking spmv_sell_c_conversion/10000: Collecting 100 samples in estimated 6.2218 s (25k iterations)
+Benchmarking spmv_sell_c_conversion/10000: Analyzing
+spmv_sell_c_conversion/10000
+                        time:   [248.52 µs 250.31 µs 252.25 µs]
+Found 9 outliers among 100 measurements (9.00%)
+  6 (6.00%) high mild
+  3 (3.00%) high severe
+Benchmarking spmv_sell_c_conversion/50000
+Benchmarking spmv_sell_c_conversion/50000: Warming up for 3.0000 s
+Benchmarking spmv_sell_c_conversion/50000: Collecting 100 samples in estimated 5.3494 s (1100 iterations)
+Benchmarking spmv_sell_c_conversion/50000: Analyzing
+spmv_sell_c_conversion/50000
+                        time:   [4.7248 ms 4.8138 ms 4.9116 ms]
+Found 16 outliers among 100 measurements (16.00%)
+  3 (3.00%) high mild
+  13 (13.00%) high severe
+
+[timing:level_1] 352892µs
+[timing:level_total] 353153µs

@@ -1,0 +1,6 @@
+error: no such command: `asm`
+
+help: a command with a similar name exists: `add`
+
+help: view all installed commands with `cargo --list`
+help: find a package to install `asm` with `cargo search cargo-asm`

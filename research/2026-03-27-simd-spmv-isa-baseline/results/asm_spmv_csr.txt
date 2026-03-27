@@ -1,0 +1,157 @@
+_RNvNtCs2DtN5zryPeS_13spectral_init8operator8spmv_csr:
+	.cfi_startproc
+	pushq	%rbp
+	.cfi_def_cfa_offset 16
+	pushq	%r15
+	.cfi_def_cfa_offset 24
+	pushq	%r14
+	.cfi_def_cfa_offset 32
+	pushq	%r13
+	.cfi_def_cfa_offset 40
+	pushq	%r12
+	.cfi_def_cfa_offset 48
+	pushq	%rbx
+	.cfi_def_cfa_offset 56
+	subq	$56, %rsp
+	.cfi_def_cfa_offset 112
+	.cfi_offset %rbx, -56
+	.cfi_offset %r12, -48
+	.cfi_offset %r13, -40
+	.cfi_offset %r14, -32
+	.cfi_offset %r15, -24
+	.cfi_offset %rbp, -16
+	movq	136(%rsp), %rbx
+	movq	%rsi, %rax
+	leaq	1(%rbx), %rsi
+	cmpq	%rsi, %rax
+	jne	.LBB285_21
+	movq	120(%rsp), %rsi
+	movq	112(%rsp), %r15
+	leaq	(,%rcx,8), %r10
+	xorl	%r11d, %r11d
+	.p2align	4
+.LBB285_2:
+	cmpq	%r11, %r10
+	je	.LBB285_5
+	cmpq	%rsi, (%rdx,%r11)
+	leaq	8(%r11), %r11
+	jb	.LBB285_2
+	movq	_ZN4core3fmt3num3imp54_$LT$impl$u20$core..fmt..Display$u20$for$u20$usize$GT$3fmt17h5b7f0f92953b8c0dE@GOTPCREL(%rip), %rcx
+	movq	%rsi, 8(%rsp)
+	leaq	8(%rsp), %rax
+	leaq	.Lanon.0481be2455fdcc3fa5e85284092fca29.1363(%rip), %rdi
+	leaq	.Lanon.0481be2455fdcc3fa5e85284092fca29.1364(%rip), %rdx
+	leaq	24(%rsp), %rsi
+	movq	%rax, 24(%rsp)
+	movq	%rcx, 32(%rsp)
+	callq	*_ZN4core9panicking9panic_fmt17h61e306559ea7c820E@GOTPCREL(%rip)
+.LBB285_5:
+	leaq	(%rdi,%rax,8), %rax
+	addq	$-8, %rax
+	je	.LBB285_6
+	movq	(%rax), %rax
+	cmpq	%rax, %r9
+	jb	.LBB285_17
+.LBB285_6:
+	testq	%rbx, %rbx
+	je	.LBB285_15
+	movl	$1, %eax
+	xorl	%r12d, %r12d
+	jmp	.LBB285_8
+	.p2align	4
+.LBB285_14:
+	movq	128(%rsp), %rax
+	vmovsd	%xmm0, (%rax,%r12,8)
+	leaq	1(%r13), %rax
+	movq	%r13, %r12
+	cmpq	%rbx, %r13
+	jae	.LBB285_15
+.LBB285_8:
+	movq	(%rdi,%r12,8), %rbp
+	movq	(%rdi,%rax,8), %r14
+	movq	%rax, %r13
+	vxorpd	%xmm0, %xmm0, %xmm0
+	cmpq	%r14, %rbp
+	jae	.LBB285_14
+	cmpq	%r9, %rbp
+	movq	%r9, %rax
+	movq	%rcx, %r10
+	cmovaq	%rbp, %rax
+	cmpq	%rcx, %rbp
+	cmovaq	%rbp, %r10
+	.p2align	4
+.LBB285_10:
+	cmpq	%rbp, %rax
+	je	.LBB285_18
+	cmpq	%rbp, %r10
+	je	.LBB285_19
+	movq	(%rdx,%rbp,8), %r11
+	cmpq	%rsi, %r11
+	jae	.LBB285_20
+	vmovsd	(%r8,%rbp,8), %xmm1
+	incq	%rbp
+	vmulsd	(%r15,%r11,8), %xmm1, %xmm1
+	vaddsd	%xmm1, %xmm0, %xmm0
+	cmpq	%rbp, %r14
+	jne	.LBB285_10
+	jmp	.LBB285_14
+.LBB285_15:
+	addq	$56, %rsp
+	.cfi_def_cfa_offset 56
+	popq	%rbx
+	.cfi_def_cfa_offset 48
+	popq	%r12
+	.cfi_def_cfa_offset 40
+	popq	%r13
+	.cfi_def_cfa_offset 32
+	popq	%r14
+	.cfi_def_cfa_offset 24
+	popq	%r15
+	.cfi_def_cfa_offset 16
+	popq	%rbp
+	.cfi_def_cfa_offset 8
+	retq
+.LBB285_21:
+	.cfi_def_cfa_offset 112
+	movq	_ZN4core3fmt3num3imp54_$LT$impl$u20$core..fmt..Display$u20$for$u20$usize$GT$3fmt17h5b7f0f92953b8c0dE@GOTPCREL(%rip), %rdx
+	leaq	16(%rsp), %rcx
+	movq	%rsi, 8(%rsp)
+	leaq	.Lanon.0481be2455fdcc3fa5e85284092fca29.1360(%rip), %rdi
+	leaq	24(%rsp), %rsi
+	movq	%rax, 16(%rsp)
+	movq	%rcx, 24(%rsp)
+	leaq	8(%rsp), %rcx
+	movq	%rdx, 32(%rsp)
+	movq	%rcx, 40(%rsp)
+	movq	%rdx, 48(%rsp)
+	leaq	.Lanon.0481be2455fdcc3fa5e85284092fca29.1362(%rip), %rdx
+	callq	*_ZN4core9panicking9panic_fmt17h61e306559ea7c820E@GOTPCREL(%rip)
+.LBB285_17:
+	movq	_ZN4core3fmt3num3imp54_$LT$impl$u20$core..fmt..Display$u20$for$u20$usize$GT$3fmt17h5b7f0f92953b8c0dE@GOTPCREL(%rip), %rdx
+	leaq	16(%rsp), %rcx
+	leaq	.Lanon.0481be2455fdcc3fa5e85284092fca29.1365(%rip), %rdi
+	leaq	24(%rsp), %rsi
+	movq	%r9, 16(%rsp)
+	movq	%rax, 8(%rsp)
+	movq	%rcx, 24(%rsp)
+	leaq	8(%rsp), %rcx
+	movq	%rdx, 32(%rsp)
+	movq	%rcx, 40(%rsp)
+	movq	%rdx, 48(%rsp)
+	leaq	.Lanon.0481be2455fdcc3fa5e85284092fca29.1366(%rip), %rdx
+	callq	*_ZN4core9panicking9panic_fmt17h61e306559ea7c820E@GOTPCREL(%rip)
+.LBB285_19:
+	leaq	.Lanon.0481be2455fdcc3fa5e85284092fca29.1368(%rip), %rdx
+	movq	%r10, %rdi
+	movq	%rcx, %rsi
+	callq	*_ZN4core9panicking18panic_bounds_check17h422822576f587b57E@GOTPCREL(%rip)
+.LBB285_18:
+	leaq	.Lanon.0481be2455fdcc3fa5e85284092fca29.1367(%rip), %rdx
+	movq	%rax, %rdi
+	movq	%r9, %rsi
+	callq	*_ZN4core9panicking18panic_bounds_check17h422822576f587b57E@GOTPCREL(%rip)
+.LBB285_20:
+	leaq	.Lanon.0481be2455fdcc3fa5e85284092fca29.1369(%rip), %rdx
+	movq	%r11, %rdi
+	callq	*_ZN4core9panicking18panic_bounds_check17h422822576f587b57E@GOTPCREL(%rip)
+.Lfunc_end285:

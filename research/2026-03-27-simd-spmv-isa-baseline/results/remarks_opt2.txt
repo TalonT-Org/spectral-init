@@ -1,0 +1,145 @@
+   Compiling libc v0.2.183
+   Compiling autocfg v1.5.0
+   Compiling libm v0.2.16
+   Compiling cfg-if v1.0.4
+   Compiling zerocopy v0.8.47
+   Compiling proc-macro2 v1.0.106
+   Compiling quote v1.0.45
+   Compiling unicode-ident v1.0.24
+   Compiling bytemuck v1.25.0
+   Compiling crossbeam-utils v0.8.21
+   Compiling nano-gemm-codegen v0.2.1
+   Compiling rayon-core v1.13.0
+   Compiling paste v1.0.15
+   Compiling bitflags v2.11.0
+   Compiling version_check v0.9.5
+   Compiling either v1.15.0
+warning: -C remark requires "-C debuginfo=n" to show source locations
+
+   Compiling reborrow v0.5.5
+warning: `unicode-ident` (lib) generated 1 warning (1 duplicate)
+   Compiling pulp-wasm-simd-flag v0.1.0
+   Compiling raw-cpuid v11.6.0
+   Compiling dyn-stack-macros v0.1.3
+   Compiling seq-macro v0.3.6
+warning: `rayon-core` (build script) generated 1 warning (1 duplicate)
+   Compiling syn v1.0.109
+   Compiling once_cell v1.21.4
+   Compiling getrandom v0.3.4
+warning: `quote` (build script) generated 1 warning (1 duplicate)
+   Compiling ucd-trie v0.1.7
+warning: `crossbeam-utils` (build script) generated 1 warning (1 duplicate)
+warning: `paste` (build script) generated 1 warning (1 duplicate)
+   Compiling memchr v2.8.0
+warning: `proc-macro2` (build script) generated 1 warning (1 duplicate)
+warning: `libm` (build script) generated 1 warning (1 duplicate)
+warning: `syn` (build script) generated 1 warning (1 duplicate)
+warning: `dyn-stack-macros` (lib) generated 1 warning (1 duplicate)
+   Compiling dyn-stack v0.13.2
+warning: `libc` (build script) generated 1 warning (1 duplicate)
+   Compiling crossbeam-epoch v0.9.18
+warning: `getrandom` (build script) generated 1 warning (1 duplicate)
+warning: `version_check` (lib) generated 1 warning (1 duplicate)
+   Compiling pulp v0.22.2
+warning: `zerocopy` (build script) generated 1 warning (1 duplicate)
+   Compiling pest v2.8.6
+   Compiling nano-gemm-core v0.2.1
+   Compiling syn v2.0.117
+warning: `autocfg` (lib) generated 1 warning
+   Compiling num-traits v0.2.19
+   Compiling crossbeam-deque v0.8.6
+warning: `seq-macro` (lib) generated 1 warning (1 duplicate)
+   Compiling matrixmultiply v0.3.10
+warning: `pulp` (build script) generated 1 warning (1 duplicate)
+   Compiling rawpointer v0.2.1
+   Compiling num-complex v0.2.4
+warning: `nano-gemm-codegen` (lib) generated 1 warning (1 duplicate)
+   Compiling nano-gemm-f32 v0.2.1
+warning: `num-traits` (build script) generated 1 warning (1 duplicate)
+warning: `quote` (lib) generated 1 warning (1 duplicate)
+   Compiling nano-gemm-c64 v0.2.1
+warning: `matrixmultiply` (build script) generated 1 warning (1 duplicate)
+warning: `paste` (lib) generated 1 warning (1 duplicate)
+   Compiling nano-gemm-f64 v0.2.1
+warning: `num-complex` (build script) generated 1 warning (1 duplicate)
+   Compiling nano-gemm-c32 v0.2.1
+warning: `nano-gemm-f32` (build script) generated 1 warning (1 duplicate)
+   Compiling getrandom v0.2.17
+   Compiling rayon v1.11.0
+warning: `nano-gemm-c64` (build script) generated 1 warning (1 duplicate)
+   Compiling pest_meta v2.8.6
+warning: `nano-gemm-c32` (build script) generated 1 warning (1 duplicate)
+   Compiling rand_core v0.6.4
+   Compiling rand_core v0.9.5
+   Compiling crossbeam-queue v0.3.12
+warning: `nano-gemm-f64` (build script) generated 1 warning (1 duplicate)
+   Compiling crossbeam-channel v0.5.15
+   Compiling num-integer v0.1.46
+   Compiling defer v0.2.1
+warning: `defer` (lib) generated 1 warning (1 duplicate)
+   Compiling atomic-wait v1.1.0
+   Compiling num_cpus v1.17.0
+   Compiling thiserror v1.0.69
+warning: `proc-macro2` (lib) generated 1 warning (1 duplicate)
+   Compiling num-bigint v0.4.6
+   Compiling crossbeam v0.8.4
+   Compiling approx v0.5.1
+   Compiling approx v0.3.2
+   Compiling byteorder v1.5.0
+warning: `thiserror` (build script) generated 1 warning (1 duplicate)
+   Compiling equator-macro v0.6.0
+   Compiling generativity v1.1.0
+   Compiling thiserror v2.0.18
+   Compiling alga v0.9.3
+   Compiling smallvec v1.15.1
+   Compiling log v0.4.29
+   Compiling pest_generator v2.8.6
+warning: `thiserror` (build script) generated 1 warning (1 duplicate)
+warning: `equator-macro` (lib) generated 1 warning (1 duplicate)
+   Compiling equator v0.6.0
+   Compiling ppv-lite86 v0.2.21
+   Compiling rand_chacha v0.3.1
+   Compiling rand v0.8.5
+   Compiling rand_chacha v0.9.0
+warning: `pest_meta` (lib) generated 1 warning (1 duplicate)
+   Compiling num-complex v0.4.6
+   Compiling rand v0.9.2
+warning: `pest_generator` (lib) generated 1 warning (1 duplicate)
+   Compiling rand_distr v0.5.1
+   Compiling ndarray v0.16.1
+   Compiling ndarray v0.17.2
+warning: `syn` (lib) generated 1 warning (1 duplicate)
+   Compiling equator-macro v0.4.2
+   Compiling equator-macro v0.2.1
+   Compiling pest_derive v2.8.6
+   Compiling thiserror-impl v1.0.69
+   Compiling thiserror-impl v2.0.18
+warning: `syn` (lib) generated 1 warning (1 duplicate)
+   Compiling interpol v0.2.1
+warning: `pest_derive` (lib) generated 1 warning (1 duplicate)
+   Compiling py_literal v0.4.0
+   Compiling gemm-common v0.19.0
+   Compiling qd v0.8.0
+   Compiling gemm-c64 v0.19.0
+   Compiling gemm-f64 v0.19.0
+   Compiling gemm-c32 v0.19.0
+   Compiling gemm-f32 v0.19.0
+warning: `equator-macro` (lib) generated 1 warning (1 duplicate)
+   Compiling equator v0.2.2
+   Compiling faer-traits v0.24.0
+warning: `equator-macro` (lib) generated 1 warning (1 duplicate)
+   Compiling equator v0.4.2
+   Compiling nano-gemm v0.2.2
+   Compiling spindle v0.2.6
+   Compiling gemm v0.19.0
+   Compiling npyz v0.8.4
+warning: `interpol` (lib) generated 1 warning (1 duplicate)
+   Compiling private-gemm-x86 v0.1.20
+   Compiling sprs v0.11.4
+warning: `thiserror-impl` (lib) generated 1 warning (1 duplicate)
+   Compiling linfa-linalg v0.2.1
+warning: `thiserror-impl` (lib) generated 1 warning (1 duplicate)
+warning: `private-gemm-x86` (build script) generated 1 warning (1 duplicate)
+   Compiling faer v0.24.0
+   Compiling spectral-init v0.1.0 (/home/talon/projects/worktrees/research-20260327-082923)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 07s
