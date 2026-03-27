@@ -226,6 +226,89 @@ fn spmv_avx2_dispatch(
     }
 }
 
+// ─── AVX-512 gather kernel ───────────────────────────────────────────────────
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[target_feature(enable = "avx512f")]
+unsafe fn spmv_avx512_gather(
+    indptr: &[usize],
+    indices: &[usize],
+    data: &[f64],
+    x: &[f64],
+    y: &mut [f64],
+) {
+    use std::arch::x86_64::*;
+
+    let n = y.len();
+    for i in 0..n {
+        let start = indptr[i];
+        let end   = indptr[i + 1];
+
+        // SAFETY: avx512f guaranteed by #[target_feature(enable = "avx512f")].
+        let (mut result, mut base) = unsafe {
+            let mut acc = _mm512_setzero_pd();
+            let mut base = start;
+
+            while base + 8 <= end {
+                // Pack 8 column indices as i32 into a __m256i.
+                // _mm256_set_epi32 stores e7..e0 in lanes 7..0.
+                let vi = _mm256_set_epi32(
+                    indices[base + 7] as i32,
+                    indices[base + 6] as i32,
+                    indices[base + 5] as i32,
+                    indices[base + 4] as i32,
+                    indices[base + 3] as i32,
+                    indices[base + 2] as i32,
+                    indices[base + 1] as i32,
+                    indices[base    ] as i32,
+                );
+                // Gather 8 f64 values; scale=8 because sizeof(f64)==8.
+                let xv = _mm512_i32gather_pd::<8>(vi, x.as_ptr());
+                let dv = _mm512_loadu_pd(data.as_ptr().add(base));
+                acc = _mm512_fmadd_pd(dv, xv, acc);
+                base += 8;
+            }
+
+            // Horizontal reduction: sum 8 f64 lanes of __m512d.
+            // Split into two __m256d halves, add, then reduce __m256d -> scalar.
+            let lo4    = _mm512_castpd512_pd256(acc);
+            let hi4    = _mm512_extractf64x4_pd::<1>(acc);
+            let sum4   = _mm256_add_pd(lo4, hi4);
+            let lo2    = _mm256_castpd256_pd128(sum4);
+            let hi2    = _mm256_extractf128_pd(sum4, 1);
+            let sum2   = _mm_add_pd(lo2, hi2);
+            let halved = _mm_hadd_pd(sum2, sum2);
+            let result = _mm_cvtsd_f64(halved);
+
+            (result, base)
+        };
+
+        // Scalar tail for nnz % 8 != 0.
+        while base < end {
+            result += data[base] * x[indices[base]];
+            base += 1;
+        }
+
+        y[i] = result;
+    }
+}
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+fn spmv_avx512_dispatch(
+    indptr: &[usize],
+    indices: &[usize],
+    data: &[f64],
+    x: &[f64],
+    y: &mut [f64],
+) {
+    if is_x86_feature_detected!("avx512f") {
+        // SAFETY: feature detection above guarantees avx512f is available.
+        unsafe { spmv_avx512_gather(indptr, indices, data, x, y) }
+    } else {
+        spmv_csr(indptr, indices, data, x, y)
+    }
+}
+
 // ─── Correctness verification ─────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -247,6 +330,29 @@ fn verify_sell_c(n: usize, c: usize) {
             "verify_sell_c(n={n}, c={c}): mismatch at row {i}: csr={} sell={}",
             y_csr[i],
             y_sell[i],
+        );
+    }
+}
+
+fn verify_avx512(n: usize) {
+    let (indptr, indices, data) = make_ring_lap(n, 7);
+    let x: Vec<f64> = (0..n).map(|i| i as f64 * 0.001).collect();
+
+    let mut y_csr = vec![0.0_f64; n];
+    spmv_csr(&indptr, &indices, &data, &x, &mut y_csr);
+
+    let mut y_avx512 = vec![0.0_f64; n];
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    spmv_avx512_dispatch(&indptr, &indices, &data, &x, &mut y_avx512);
+    #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+    spmv_csr(&indptr, &indices, &data, &x, &mut y_avx512);
+
+    for i in 0..n {
+        assert!(
+            (y_csr[i] - y_avx512[i]).abs() < 1e-12,
+            "verify_avx512(n={n}): mismatch at row {i}: csr={} avx512={}",
+            y_csr[i],
+            y_avx512[i],
         );
     }
 }
@@ -287,6 +393,12 @@ mod tests {
     fn verify_avx2_correctness() {
         verify_avx2(200);
         verify_avx2(2000);
+    }
+
+    #[test]
+    fn verify_avx512_correctness() {
+        verify_avx512(200);
+        verify_avx512(2000);
     }
 }
 
@@ -353,6 +465,10 @@ fn bench_spmv_sell_c_conversion(c: &mut Criterion) {
 }
 
 fn bench_spmv_avx2(c: &mut Criterion) {
+    // ISA detection: emits "[isa] avx512f=true/false" so results files can confirm
+    // the hardware context that produced the benchmark data.
+    eprintln!("[isa] avx512f={}", is_x86_feature_detected!("avx512f"));
+    verify_avx512(200);
     let mut group = c.benchmark_group("spmv_avx2");
     for &n in &[200_usize, 2000, 5000, 10000, 50000] {
         let (indptr, indices, data) = make_ring_lap(n, 7);
@@ -383,6 +499,21 @@ fn bench_spmv_avx2(c: &mut Criterion) {
                 )
             });
         });
+
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        if is_x86_feature_detected!("avx512f") {
+            group.bench_with_input(BenchmarkId::new("avx512_gather", n), &n, |b, _| {
+                b.iter(|| {
+                    spmv_avx512_dispatch(
+                        black_box(&indptr),
+                        black_box(&indices),
+                        black_box(&data),
+                        black_box(&x),
+                        black_box(&mut y),
+                    )
+                });
+            });
+        }
     }
     group.finish();
 }
