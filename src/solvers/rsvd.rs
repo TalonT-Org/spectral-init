@@ -28,15 +28,13 @@ fn two_i_minus_laplacian(laplacian: &CsMatI<f64, usize>) -> CsMatI<f64, usize> {
 }
 
 /// Compute Y = M * X where M is sparse [n, n] and X is dense [n, ncols].
-/// Performs column-wise sparse matrix-vector products using `sprs`.
+/// Uses `sprs::prod::csr_mulacc_dense_rowmaj` for a single row-major SpMM call
+/// with zero per-column heap allocations.
 fn sparse_dense_mult(m: &CsMatI<f64, usize>, x: &Array2<f64>) -> Array2<f64> {
+    debug_assert!(m.is_csr(), "sparse_dense_mult: m must be in CSR format; csr_mulacc_dense_rowmaj requires CSR storage");
     let (n, ncols) = x.dim();
     let mut y = Array2::<f64>::zeros((n, ncols));
-    for j in 0..ncols {
-        let col = x.column(j).to_owned();
-        let result = m * &col;          // sprs SpMV: CsMat * Array1 → Array1
-        y.column_mut(j).assign(&result);
-    }
+    sprs::prod::csr_mulacc_dense_rowmaj(m.view(), x.view(), y.view_mut());
     y
 }
 

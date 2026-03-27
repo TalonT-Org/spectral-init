@@ -108,32 +108,46 @@ const LOBPCG_RESTART_MAXITER_CAP: usize = 1000;
 /// amplifies components with eigenvalues in `[0, a)` and suppresses those
 /// in `[a, b]`, accelerating LOBPCG convergence for low-eigenvalue problems.
 ///
-/// - `l_op`: closure applying the Laplacian L (ndarray 0.17 types)
+/// - `l_op`: in-place closure applying the Laplacian L, filling the provided `&mut Array2`
 /// - `r`: residual block of shape `[n, k]`
 /// - `a`: lower bound of unwanted interval (e.g. 0.1)
 /// - `b`: upper bound of unwanted interval (e.g. 2.0 for normalized Laplacian)
 /// - `degree`: polynomial degree; must be >= 1
 fn chebyshev_precond(
-    l_op: &impl Fn(ndarray::ArrayView2<f64>) -> Array2<f64>,
+    l_op: &impl Fn(ndarray::ArrayView2<f64>, &mut Array2<f64>),
     r: ndarray::ArrayView2<f64>,
     a: f64,
     b: f64,
     degree: usize,
 ) -> Array2<f64> {
+    let (n, k) = r.dim();
     let c = (a + b) / 2.0; // center of [a, b]
     let e = (b - a) / 2.0; // half-width of [a, b]
+    let scale = 2.0 / e;
+    let shift = scale * c; // = (a+b)/e, precomputed
 
-    // T_0 applied to r
+    // T_0: y_prev = r
     let mut y_prev = r.to_owned();
-    // T_1 applied to r: (L·r - c·r) / e
-    let lr = l_op(r);
-    let mut y = (&lr - c * &r) / e;
+
+    // T_1: y = (L·r - c·r) / e  — one-time allocation before the loop
+    let mut ly_scratch = Array2::<f64>::zeros((n, k));
+    l_op(r, &mut ly_scratch);
+    let mut y = (&ly_scratch - c * &r) / e;
+
+    // Pre-allocate recurrence output buffer — reused every iteration
+    let mut y_new = Array2::<f64>::zeros((n, k));
 
     for _ in 2..=degree {
-        let ly = l_op(y.view());
-        let y_new = (2.0 / e) * (&ly - c * &y) - &y_prev;
-        y_prev = y;
-        y = y_new;
+        // In-place: ly_scratch = L·y
+        l_op(y.view(), &mut ly_scratch);
+
+        // y_new = scale * ly_scratch - shift * y - y_prev  (no temporaries)
+        y_new.zip_mut_with(&ly_scratch, |yn, &ly| *yn = scale * ly);
+        y_new.zip_mut_with(&y, |yn, &yi| *yn -= shift * yi);
+        y_new.zip_mut_with(&y_prev, |yn, &yp| *yn -= yp);
+
+        std::mem::swap(&mut y_prev, &mut y);
+        std::mem::swap(&mut y, &mut y_new);
     }
     y
 }
@@ -192,15 +206,18 @@ fn per_vector_residuals<O: LinearOperator>(
         .iter()
         .enumerate()
         .map(|(i, &lambda)| {
-            let col_norm = eigenvectors
-                .column(i)
+            let ev_col = eigenvectors.column(i);
+            let ax_col = ax.column(i);
+            let col_norm = ev_col
                 .iter()
                 .map(|&x| x * x)
                 .sum::<f64>()
                 .sqrt()
                 .max(f64::EPSILON);
-            let diff_norm = (0..n)
-                .map(|r| (ax[[r, i]] - lambda * eigenvectors[[r, i]]).powi(2))
+            let diff_norm = ax_col
+                .iter()
+                .zip(ev_col.iter())
+                .map(|(&a, &e)| (a - lambda * e).powi(2))
                 .sum::<f64>()
                 .sqrt();
             diff_norm / col_norm
@@ -238,10 +255,9 @@ pub fn lobpcg_solve<O: LinearOperator>(
     }
 
     // l_op_nd17 wraps op.apply() in ndarray 0.17 types for use by chebyshev_precond.
-    let l_op_nd17 = |x: ndarray::ArrayView2<f64>| -> Array2<f64> {
-        let mut y = Array2::zeros((n, x.ncols()));
-        op.apply(x, &mut y);
-        y
+    let l_op_nd17 = |x: ndarray::ArrayView2<f64>, out: &mut Array2<f64>| {
+        out.fill(0.0);
+        op.apply(x, out);
     };
 
     // Chebyshev-Filtered Subspace Iteration (ChFSI): for large graphs, apply a single
@@ -607,10 +623,9 @@ mod tests {
         let diag = [0.02_f64, 0.02, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
         let mat = diagonal_csr(&diag);
         let op = CsrOperator(&mat);
-        let l_op = |x: ndarray::ArrayView2<f64>| -> Array2<f64> {
-            let mut y = Array2::zeros((mat.rows(), x.ncols()));
-            op.apply(x, &mut y);
-            y
+        let l_op = |x: ndarray::ArrayView2<f64>, out: &mut Array2<f64>| {
+            out.fill(0.0);
+            op.apply(x, out);
         };
 
         // column 0 = e_0 (eigenvalue 0.02 direction), column 1 = e_2 (eigenvalue 1.0 direction)
@@ -638,10 +653,9 @@ mod tests {
         let diag = [0.5_f64, 1.5, 0.5, 1.5];
         let mat = diagonal_csr(&diag);
         let op = CsrOperator(&mat);
-        let l_op = |x: ndarray::ArrayView2<f64>| -> Array2<f64> {
-            let mut y = Array2::zeros((mat.rows(), x.ncols()));
-            op.apply(x, &mut y);
-            y
+        let l_op = |x: ndarray::ArrayView2<f64>, out: &mut Array2<f64>| {
+            out.fill(0.0);
+            op.apply(x, out);
         };
 
         let r = Array2::ones((4, 1));
