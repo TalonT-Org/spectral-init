@@ -120,6 +120,11 @@ name = "export_rust_init"
 path = "tests/visual_eval/export_rust_init.rs"
 required-features = ["testing"]
 
+[[test]]
+name = "test_simd_parity"
+path = "tests/integration/test_simd_parity.rs"
+required-features = ["testing"]
+
 [[bench]]
 name = "spectral_bench"
 harness = false
