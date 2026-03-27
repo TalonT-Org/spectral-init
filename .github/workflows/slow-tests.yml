@@ -1,0 +1,33 @@
+name: Slow Tests
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Run weekly on Monday at 03:00 UTC
+    - cron: '0 3 * * 1'
+
+permissions:
+  checks: write
+  contents: read
+
+jobs:
+  slow-tests:
+    name: cargo nextest (slow profile)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      - name: Run slow tests
+        run: cargo nextest run --profile slow --features testing

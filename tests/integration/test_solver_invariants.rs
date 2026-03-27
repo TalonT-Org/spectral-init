@@ -12,6 +12,46 @@ use spectral_init::rsvd_solve;
 use spectral_init::solve_eigenproblem_pub;
 use spectral_init::{spectral_init, SpectralInitConfig};
 
+/// Two-component graph: disjoint paths P_{n1} (nodes 0..n1) and P_{n2} (nodes n1..n1+n2).
+/// No edges cross the component boundary. Adjacency is weight 1.0 for each path edge.
+fn make_two_component_graph(n1: u32, n2: u32) -> sprs::CsMatI<f32, u32, usize> {
+    let total = (n1 + n2) as usize;
+    let n1 = n1 as usize;
+    let n2 = n2 as usize;
+    let mut indptr = vec![0usize; total + 1];
+    let mut indices: Vec<u32> = Vec::new();
+    let mut data: Vec<f32> = Vec::new();
+
+    // Component 1: path P_{n1}, nodes 0..n1 (already sorted by column)
+    for i in 0..n1 {
+        if i > 0 {
+            indices.push((i - 1) as u32);
+            data.push(1.0f32);
+        }
+        if i + 1 < n1 {
+            indices.push((i + 1) as u32);
+            data.push(1.0f32);
+        }
+        indptr[i + 1] = indices.len();
+    }
+
+    // Component 2: path P_{n2}, nodes n1..(n1+n2) (already sorted by column)
+    let offset = n1 as u32;
+    for i in 0..n2 {
+        if i > 0 {
+            indices.push(offset + (i - 1) as u32);
+            data.push(1.0f32);
+        }
+        if i + 1 < n2 {
+            indices.push(offset + (i + 1) as u32);
+            data.push(1.0f32);
+        }
+        indptr[n1 + i + 1] = indices.len();
+    }
+
+    sprs::CsMatI::<f32, u32, usize>::new((total, total), indptr, indices, data)
+}
+
 // ─── Test 1: eigenvalue ascending order (targets B1) ─────────────────────────
 
 #[test]
@@ -91,22 +131,49 @@ fn test_inv_sign_convention() {
 
 #[test]
 fn test_inv_multi_component_completeness() {
-    let graph_path = common::fixture_path("disconnected_200", "step5a_pruned.npz");
-    let graph = common::load_sparse_csr_f32_u32(&graph_path);
+    // B4 detection: use a synthetically-constructed 2-component graph rather than the
+    // disconnected_200 fixture, which may be connected after UMAP pruning and therefore
+    // never reach the multi-component code path.
+    //
+    // Component 1: nodes 0..100 (path P_100).
+    // Component 2: nodes 100..200 (path P_100, offset by 100).
+    // No edges cross the boundary — spectral_init must process both components.
+    const N1: u32 = 100;
+    const N2: u32 = 100;
+    let graph = make_two_component_graph(N1, N2);
+    let total = (N1 + N2) as usize;
+
     let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
-        .unwrap_or_else(|e| panic!("spectral_init failed on disconnected_200: {e}"));
-    assert_eq!(result.shape()[0], 200, "expected 200 rows");
-    for row in 0..200 {
-        let row_norm: f64 = result
+        .unwrap_or_else(|e| panic!("spectral_init failed on synthetic 2-component graph: {e}"));
+
+    assert_eq!(result.shape()[0], total, "expected {total} rows in output");
+
+    // Both components must contribute non-zero rows.
+    // Under the B4 mutation, one component's rows are left zero (component skipped).
+    for row in 0..(N1 as usize) {
+        let norm: f64 = result
             .row(row)
             .iter()
             .map(|&v| (v as f64).powi(2))
             .sum::<f64>()
             .sqrt();
         assert!(
-            row_norm > 1e-9,
-            "row {row} is effectively zero (norm={row_norm:.2e}); \
-             component likely skipped"
+            norm > 1e-9,
+            "component 1 row {row} is near-zero (norm={norm:.2e}); \
+             component 1 likely skipped under B4"
+        );
+    }
+    for row in (N1 as usize)..total {
+        let norm: f64 = result
+            .row(row)
+            .iter()
+            .map(|&v| (v as f64).powi(2))
+            .sum::<f64>()
+            .sqrt();
+        assert!(
+            norm > 1e-9,
+            "component 2 row {row} is near-zero (norm={norm:.2e}); \
+             component 2 likely skipped under B4"
         );
     }
 }
@@ -131,12 +198,15 @@ fn test_inv_eigenvalue_non_negative() {
 
 // ─── Test 6: LOBPCG warm restarts fire (targets B6) ──────────────────────────
 
+// B6 GAP (known, accepted): B6 truncates the warm-restart loop from
+// `for restart in 0..=MAX_WARM_RESTARTS` to a smaller bound (e.g., 0..=1).
+// This test detects B6 only if ring C_2000 requires ≥2 restart cycles; if it
+// converges in exactly 1 restart cycle, both clean code and B6 produce
+// restart_count=1, and the `restart_count > 0` assertion passes under B6.
+// Constructing a graph that reliably requires ≥2 cycles is complex and deferred.
+// The gap is accepted: B6 is a subtle performance regression, not a correctness bug.
 #[test]
 fn test_inv_lobpcg_convergence_ill_conditioned() {
-    // ring C_2000 seed=42: 300 initial iterations are insufficient for the tiny Fiedler
-    // eigenvalue; warm restarts fire on clean code (restart_count > 0).
-    // B6 changes `for restart in 0..=MAX_WARM_RESTARTS` to `for restart in 0..=0`,
-    // forcing restart_count=0 → this assertion fails.
     let lap = common::ring_laplacian(2000);
     let sqrt_deg = common::ring_sqrt_deg(2000);
     let op = CsrOperator(&lap);
@@ -144,6 +214,13 @@ fn test_inv_lobpcg_convergence_ill_conditioned() {
     let (_, restart_count) = result.expect(
         "lobpcg_solve returned None for ring C_2000 seed=42"
     );
+    if restart_count == 1 {
+        eprintln!(
+            "[NOTE] B6 gap: restart_count=1 — ring C_2000 converged in exactly 1 restart \
+             cycle; both clean code and B6 (limit=1) pass this assertion. \
+             The gap is accepted (see comment above)."
+        );
+    }
     assert!(
         restart_count > 0,
         "ring C_2000 seed=42 must trigger at least one warm restart on clean code; \
