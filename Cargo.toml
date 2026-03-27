@@ -124,3 +124,8 @@ required-features = ["testing"]
 name = "spectral_bench"
 harness = false
 required-features = ["testing"]
+
+[[bench]]
+name = "simd_spmv_exp"
+harness = false
+required-features = ["testing"]
