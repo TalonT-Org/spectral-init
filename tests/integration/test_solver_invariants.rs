@@ -214,6 +214,13 @@ fn test_inv_lobpcg_convergence_ill_conditioned() {
     let (_, restart_count) = result.expect(
         "lobpcg_solve returned None for ring C_2000 seed=42"
     );
+    if restart_count == 1 {
+        eprintln!(
+            "[NOTE] B6 gap: restart_count=1 — ring C_2000 converged in exactly 1 restart \
+             cycle; both clean code and B6 (limit=1) pass this assertion. \
+             The gap is accepted (see comment above)."
+        );
+    }
     assert!(
         restart_count > 0,
         "ring C_2000 seed=42 must trigger at least one warm restart on clean code; \
