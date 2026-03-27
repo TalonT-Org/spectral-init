@@ -10,10 +10,19 @@ status-level = "fail"
 final-status-level = "fail"
 success-output = "never"
 failure-output = "immediate-final"
+default-filter = 'not (test(comp_d_rsvd_blobs_connected_2000) or test(test_level_3_rsvd_valid_on_large_path))'
 
 [profile.ci.junit]
 path = "junit.xml"
 report-name = "spectral-init-tests"
+
+[profile.slow]
+retries = 0
+slow-timeout = { period = "300s" }
+fail-fast = false
+status-level = "all"
+final-status-level = "all"
+default-filter = 'test(comp_d_rsvd_blobs_connected_2000) or test(test_level_3_rsvd_valid_on_large_path)'
 
 [profile.with-fixtures]
 retries = 0
@@ -28,13 +37,3 @@ status-level = "fail"
 final-status-level = "fail"
 success-output = "never"
 failure-output = "immediate-final"
-
-[profile.ci-fast]
-retries = 0
-slow-timeout = { period = "30s" }
-fail-fast = false
-status-level = "fail"
-final-status-level = "fail"
-success-output = "never"
-failure-output = "immediate-final"
-default-filter = 'not test(/warm_restart/) and not test(/accuracy_report/)'

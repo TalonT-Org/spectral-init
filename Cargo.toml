@@ -111,8 +111,8 @@ path = "tests/integration/test_exp_rsvd_sweep.rs"
 required-features = ["testing"]
 
 [[test]]
-name = "test_exp_solver_invariants"
-path = "tests/integration/test_exp_solver_invariants.rs"
+name = "test_solver_invariants"
+path = "tests/integration/test_solver_invariants.rs"
 required-features = ["testing"]
 
 [[test]]
