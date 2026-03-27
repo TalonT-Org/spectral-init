@@ -71,6 +71,23 @@ pub fn solve_eigenproblem_pub(
     crate::solvers::solve_eigenproblem(laplacian, n_components, seed, &sqrt_deg)
 }
 
+#[cfg(all(feature = "testing", any(target_arch = "x86", target_arch = "x86_64")))]
+#[doc(hidden)]
+/// SIMD variant of `solve_eigenproblem_pub`: routes LOBPCG levels through
+/// `CsrOperatorSimd` (AVX2 gather kernel) instead of `CsrOperator`.
+///
+/// **Test-only seam — not part of the stable public API.**  Solver-level encoding
+/// is identical to `solve_eigenproblem_pub`.
+pub fn solve_eigenproblem_simd_pub(
+    laplacian: &sprs::CsMatI<f64, usize>,
+    n_components: usize,
+    seed: u64,
+) -> ((ndarray::Array1<f64>, ndarray::Array2<f64>), u8) {
+    let n = laplacian.rows();
+    let sqrt_deg = ndarray::Array1::ones(n);
+    crate::solvers::solve_eigenproblem_simd(laplacian, n_components, seed, &sqrt_deg)
+}
+
 #[cfg(feature = "testing")]
 #[doc(hidden)]
 pub use crate::solvers::lobpcg::lobpcg_solve;
@@ -100,6 +117,15 @@ pub fn embed_disconnected(
 #[cfg(feature = "testing")]
 #[doc(hidden)]
 pub use crate::solvers::sinv::lobpcg_sinv_solve;
+
+#[cfg(feature = "testing")]
+#[doc(hidden)]
+pub fn scale_and_add_noise_pub(
+    coords: ndarray::Array2<f64>,
+    seed: u64,
+) -> Result<ndarray::Array2<f32>, SpectralError> {
+    crate::scaling::scale_and_add_noise(coords, seed)
+}
 
 use ndarray::{Array2, ArrayView2};
 use sprs::CsMatI;
@@ -200,6 +226,37 @@ pub fn spectral_init(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(all(feature = "testing", any(target_arch = "x86", target_arch = "x86_64"), test))]
+    #[test]
+    fn solve_eigenproblem_simd_pub_returns_correct_shape() {
+        if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
+            return;
+        }
+        // 6-node path Laplacian (n=6 < dense threshold → Level 0; SIMD not exercised
+        // but symbol reachability and return type are confirmed)
+        let lap = sprs::CsMatI::<f64, usize>::new(
+            (6, 6),
+            vec![0usize, 2, 5, 8, 11, 14, 16],
+            vec![0usize,1, 0,1,2, 1,2,3, 2,3,4, 3,4,5, 4,5],
+            vec![1.,-1., -1.,2.,-1., -1.,2.,-1., -1.,2.,-1., -1.,2.,-1., -1.,1.],
+        );
+        let ((eigs, vecs), _level) = solve_eigenproblem_simd_pub(&lap, 2, 42);
+        assert_eq!(eigs.len(), 3);
+        assert_eq!(vecs.shape(), &[6, 3]);
+    }
+
+    #[cfg(all(feature = "testing", test))]
+    #[test]
+    fn scale_and_add_noise_pub_is_accessible() {
+        let coords = ndarray::Array2::<f64>::from_shape_vec(
+            (2, 2),
+            vec![1.0, 2.0, 3.0, 4.0],
+        ).unwrap();
+        let result = scale_and_add_noise_pub(coords, 42);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().shape(), &[2, 2]);
+    }
 
     #[test]
     fn spectral_error_is_std_error() {
