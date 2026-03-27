@@ -28,6 +28,7 @@ Designed to integrate with `umap-rs` (wilsonzlin) via its public `graph()` acces
   * **Avoid Redundancy**: Do not duplicate logic or utilities.
   * **Use Current Package Versions**: Web search for current stable versions when adding dependencies.
   * **Numerical Precision**: Build the Laplacian in f64 for numerical stability; only downcast to f32 for the final output. Validate eigenvector quality via residual checks (`||L·v - λ·v|| / ||v||`).
+  * **ComputeMode Parity**: Any optimization or algorithm change that could cause divergence from Python UMAP's behavior must be gated behind `ComputeMode::RustNative`, preserving the `PythonCompat` path as the reference-matching implementation.
 
 ### **3.2. File System**
 
