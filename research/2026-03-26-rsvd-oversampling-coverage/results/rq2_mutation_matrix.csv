@@ -1,0 +1,9 @@
+bug_id,test_name,detected,suite_wall_time_s
+B1,test_exp_solver_invariants,true,7.050
+B2,test_exp_solver_invariants,true,7.790
+B3,test_exp_solver_invariants,true,6.750
+B4,test_exp_solver_invariants,false,7.450
+B5,test_exp_solver_invariants,true,7.494
+B6,test_exp_solver_invariants,false,6.604
+B7,test_exp_solver_invariants,true,7.965
+B8,test_exp_solver_invariants,true,7.550

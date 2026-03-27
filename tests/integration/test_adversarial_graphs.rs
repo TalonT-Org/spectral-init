@@ -633,7 +633,7 @@ fn test_level_3_rsvd_valid_on_large_path() {
     let laplacian = large_path_laplacian(2001);
     let (eigs, vecs): (ndarray::Array1<f64>, ndarray::Array2<f64>) =
         spectral_init::rsvd_solve(&laplacian, 2, 42);
-    assert_eq!(eigs.len(), 2, "rsvd_solve must return n_components=2 non-trivial eigenvalues (trivial stripped)");
+    assert_eq!(eigs.len(), 3, "rsvd_solve must return n_components+1=3 eigenpairs (trivial at index 0, non-trivial at 1..=n_components)");
     assert!(
         eigs.iter().all(|&v| v >= -1e-3),
         "rSVD eigenvalues must be non-negative"
