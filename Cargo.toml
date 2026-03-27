@@ -106,6 +106,16 @@ path = "tests/integration/test_rq4_property_tests.rs"
 required-features = ["testing"]
 
 [[test]]
+name = "test_exp_rsvd_sweep"
+path = "tests/integration/test_exp_rsvd_sweep.rs"
+required-features = ["testing"]
+
+[[test]]
+name = "test_exp_solver_invariants"
+path = "tests/integration/test_exp_solver_invariants.rs"
+required-features = ["testing"]
+
+[[test]]
 name = "export_rust_init"
 path = "tests/visual_eval/export_rust_init.rs"
 required-features = ["testing"]

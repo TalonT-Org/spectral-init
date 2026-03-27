@@ -76,6 +76,36 @@ fn sym_eig(b: &Array2<f64>) -> (Vec<f64>, Array2<f64>) {
     (eigenvalues, eigenvectors)
 }
 
+/// Returns the subspace size k for randomized SVD.
+///
+/// Oversampling scales with n/10 so large graphs get a subspace large enough to
+/// produce residuals below `RSVD_QUALITY_THRESHOLD`, avoiding fallthrough to the
+/// O(n³) Level 5 dense EVD.
+fn rsvd_k_sub(n: usize, rank: usize) -> usize {
+    let oversampling = (n / 10).max(rank.max(5)).min(n.saturating_sub(rank));
+    (rank + oversampling).min(n)
+}
+
+/// Returns the effective subspace size k for randomized SVD.
+///
+/// In test builds (`--features testing`), reads the `SPECTRAL_RSVD_OVERSAMPLING`
+/// environment variable as the oversampling count, falling back to `rsvd_k_sub`
+/// on absence or parse error. In release builds the function is a trivial delegate
+/// that the compiler inlines away entirely.
+#[cfg(feature = "testing")]
+fn rsvd_k_sub_effective(n: usize, rank: usize) -> usize {
+    std::env::var("SPECTRAL_RSVD_OVERSAMPLING")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .map(|oversampling| (rank + oversampling).min(n))
+        .unwrap_or_else(|| rsvd_k_sub(n, rank))
+}
+
+#[cfg(not(feature = "testing"))]
+fn rsvd_k_sub_effective(n: usize, rank: usize) -> usize {
+    rsvd_k_sub(n, rank)
+}
+
 /// Randomized SVD eigensolver via the 2I − L trick (Level 3).
 ///
 /// Implements Algorithm 5.1 (Halko-Tropp) with power iteration:
@@ -96,12 +126,8 @@ pub(crate) fn rsvd_solve(
     );
     // rank = n_components + 1: request one extra so we can discard the trivial vector
     let rank = n_components + 1;
-    // k = total random vectors (rank + oversampling for accuracy).
-    // Scale oversampling with n/10 so large graphs (e.g. n=5000 → oversampling=500)
-    // get a subspace large enough to produce residuals below RSVD_QUALITY_THRESHOLD,
-    // avoiding fallthrough to the O(n³) Level 4 dense EVD.
-    let oversampling = (n / 10).max(rank.max(5)).min(n.saturating_sub(rank));
-    let k = (rank + oversampling).min(n);
+    // k = total random vectors; see rsvd_k_sub for the oversampling formula.
+    let k = rsvd_k_sub_effective(n, rank);
     let nbiter = 2;  // QR-stabilized subspace iterations (Halko-Tropp Algorithm 4.4)
 
     // ── Step A: Form M = 2I - L ──────────────────────────────────────────────
@@ -396,5 +422,41 @@ mod tests {
                 "residual[{i}] = {residual:.2e} exceeds 1e-4 (lambda={lambda:.6})"
             );
         }
+    }
+
+    // T1 — formula preserved when env var is absent
+    #[test]
+    fn rsvd_k_sub_returns_default_when_env_unset() {
+        // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
+        unsafe { std::env::remove_var("SPECTRAL_RSVD_OVERSAMPLING"); }
+        let n = 200_usize;
+        let rank = 3_usize;
+        let oversampling = (n / 10).max(rank.max(5)).min(n.saturating_sub(rank));
+        let expected = (rank + oversampling).min(n);
+        assert_eq!(rsvd_k_sub_effective(n, rank), expected);
+    }
+
+    // T2 — env override is respected
+    #[test]
+    fn rsvd_k_sub_reads_env_override() {
+        // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
+        unsafe { std::env::set_var("SPECTRAL_RSVD_OVERSAMPLING", "10"); }
+        let n = 200_usize;
+        let rank = 3_usize;
+        assert_eq!(rsvd_k_sub_effective(n, rank), rank + 10);
+        unsafe { std::env::remove_var("SPECTRAL_RSVD_OVERSAMPLING"); }
+    }
+
+    // T3 — unparseable value falls back to formula
+    #[test]
+    fn rsvd_k_sub_falls_back_on_parse_error() {
+        // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
+        unsafe { std::env::set_var("SPECTRAL_RSVD_OVERSAMPLING", "abc"); }
+        let n = 200_usize;
+        let rank = 3_usize;
+        let oversampling = (n / 10).max(rank.max(5)).min(n.saturating_sub(rank));
+        let expected = (rank + oversampling).min(n);
+        assert_eq!(rsvd_k_sub_effective(n, rank), expected);
+        unsafe { std::env::remove_var("SPECTRAL_RSVD_OVERSAMPLING"); }
     }
 }
