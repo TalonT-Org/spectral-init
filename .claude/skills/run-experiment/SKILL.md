@@ -43,11 +43,11 @@ plan, executes what the plan describes, and reports what happened.
 - Merge the worktree — leave it intact for the orchestrator
 - Skip result collection — every run must produce structured output
 - Assume what kind of experiment this is — read the plan and follow it
+- Commit files under `.autoskillit/temp/` — this directory is gitignored working space, NOT for version control. Do not use `git add -f` or `git add --force` to bypass the gitignore.
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
-- Write results to `.autoskillit/temp/run-experiment/` in the worktree
-- Commit experiment results to the worktree before returning
+- Write results to `.autoskillit/temp/run-experiment/` in the worktree (disk only, never committed)
 - Report failures with enough detail for the `--adjust` retry to fix them
 
 ## Workflow
@@ -120,17 +120,16 @@ the final conclusions.}
 {Brief justification for the status}
 ```
 
-### Step 5 — Commit and Save
+### Step 5 — Save Results
 
 1. Save results to:
    `.autoskillit/temp/run-experiment/results_{topic}_{YYYY-MM-DD_HHMMSS}.md`
    within the worktree.
 2. Also save any raw data files (CSV, JSON, logs) to the same directory.
-3. Commit all results to the worktree:
-   ```
-   git add .autoskillit/temp/run-experiment/
-   git commit -m "Add experiment results: {brief description}"
-   ```
+3. Do NOT `git add` or commit files under `.autoskillit/temp/`. This directory
+   is gitignored working space. The files persist on the worktree filesystem
+   for `write-report` to read. Final results are published to `research/` by
+   the `write-report` skill.
 
 After saving, emit the structured output token as the very last line of your
 text output:
