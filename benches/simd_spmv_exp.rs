@@ -152,8 +152,81 @@ impl SellCsigma {
     }
 }
 
+// ─── AVX2 gather kernel ───────────────────────────────────────────────────────
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[target_feature(enable = "avx2,fma")]
+unsafe fn spmv_avx2_gather(
+    indptr: &[usize],
+    indices: &[usize],
+    data: &[f64],
+    x: &[f64],
+    y: &mut [f64],
+) {
+    use std::arch::x86_64::*;
+
+    let n = y.len();
+    for i in 0..n {
+        let start = indptr[i];
+        let end   = indptr[i + 1];
+
+        // SAFETY: avx2+fma guaranteed by #[target_feature(enable = "avx2,fma")].
+        let (mut result, mut base) = unsafe {
+            let mut acc = _mm256_setzero_pd();
+            let mut base = start;
+
+            while base + 4 <= end {
+                let vi = _mm_set_epi32(
+                    indices[base + 3] as i32,
+                    indices[base + 2] as i32,
+                    indices[base + 1] as i32,
+                    indices[base]     as i32,
+                );
+                let xv = _mm256_i32gather_pd(x.as_ptr(), vi, 8);
+                let dv = _mm256_loadu_pd(data.as_ptr().add(base));
+                acc = _mm256_fmadd_pd(dv, xv, acc);
+                base += 4;
+            }
+
+            // Horizontal reduction: acc[0]+acc[1]+acc[2]+acc[3]
+            let lo     = _mm256_castpd256_pd128(acc);
+            let hi     = _mm256_extractf128_pd(acc, 1);
+            let sum128 = _mm_add_pd(lo, hi);
+            let halved = _mm_hadd_pd(sum128, sum128);
+            let result = _mm_cvtsd_f64(halved);
+
+            (result, base)
+        };
+
+        // Scalar tail for nnz % 4 != 0
+        while base < end {
+            result += data[base] * x[indices[base]];
+            base += 1;
+        }
+
+        y[i] = result;
+    }
+}
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+fn spmv_avx2_dispatch(
+    indptr: &[usize],
+    indices: &[usize],
+    data: &[f64],
+    x: &[f64],
+    y: &mut [f64],
+) {
+    if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
+        // SAFETY: feature detection above guarantees avx2+fma are available.
+        unsafe { spmv_avx2_gather(indptr, indices, data, x, y) }
+    } else {
+        spmv_csr(indptr, indices, data, x, y)
+    }
+}
+
 // ─── Correctness verification ─────────────────────────────────────────────────
 
+#[cfg(test)]
 fn verify_sell_c(n: usize, c: usize) {
     let (indptr, indices, data) = make_ring_lap(n, 7);
     // Non-uniform x to catch permutation bugs
@@ -177,13 +250,41 @@ fn verify_sell_c(n: usize, c: usize) {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
+fn verify_avx2(n: usize) {
+    let (indptr, indices, data) = make_ring_lap(n, 7);
+    let x: Vec<f64> = (0..n).map(|i| i as f64 * 0.001).collect();
 
+    let mut y_csr = vec![0.0_f64; n];
+    spmv_csr(&indptr, &indices, &data, &x, &mut y_csr);
+
+    let mut y_avx2 = vec![0.0_f64; n];
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    spmv_avx2_dispatch(&indptr, &indices, &data, &x, &mut y_avx2);
+    #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+    spmv_csr(&indptr, &indices, &data, &x, &mut y_avx2);
+
+    for i in 0..n {
+        assert!(
+            (y_csr[i] - y_avx2[i]).abs() < 1e-12,
+            "verify_avx2(n={n}): mismatch at row {i}: csr={} avx2={}",
+            y_csr[i],
+            y_avx2[i],
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
     #[test]
     fn verify_sell_c_correctness() {
         verify_sell_c(200, 4);
         verify_sell_c(2000, 8);
+    }
+
+    #[test]
+    fn verify_avx2_correctness() {
+        verify_avx2(200);
+        verify_avx2(2000);
     }
 }
 
@@ -249,7 +350,42 @@ fn bench_spmv_sell_c_conversion(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_spmv_avx2(c: &mut Criterion) {
+    let mut group = c.benchmark_group("spmv_avx2");
+    for &n in &[200_usize, 2000, 5000, 10000, 50000] {
+        let (indptr, indices, data) = make_ring_lap(n, 7);
+        let x = vec![1.0_f64 / (n as f64).sqrt(); n];
+        let mut y = vec![0.0_f64; n];
+
+        group.bench_with_input(BenchmarkId::new("scalar", n), &n, |b, _| {
+            b.iter(|| {
+                spmv_csr(
+                    black_box(&indptr),
+                    black_box(&indices),
+                    black_box(&data),
+                    black_box(&x),
+                    black_box(&mut y),
+                )
+            });
+        });
+
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        group.bench_with_input(BenchmarkId::new("avx2_gather", n), &n, |b, _| {
+            b.iter(|| {
+                spmv_avx2_dispatch(
+                    black_box(&indptr),
+                    black_box(&indices),
+                    black_box(&data),
+                    black_box(&x),
+                    black_box(&mut y),
+                )
+            });
+        });
+    }
+    group.finish();
+}
+
 // ─── Registration ─────────────────────────────────────────────────────────────
 
-criterion_group!(benches, bench_spmv_csr_scaling, bench_spmv_sell_c, bench_spmv_sell_c_conversion);
+criterion_group!(benches, bench_spmv_csr_scaling, bench_spmv_sell_c, bench_spmv_sell_c_conversion, bench_spmv_avx2);
 criterion_main!(benches);
