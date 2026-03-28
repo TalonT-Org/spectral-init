@@ -1,0 +1,92 @@
+[
+  {
+    "eigenvectors_saved": false,
+    "f32_bitwise_identical": 150,
+    "f32_max_abs_diff": 0.0,
+    "f32_total_elements": 150,
+    "fixture": "blobs_50",
+    "n": 50,
+    "solver_level_avx2": 0,
+    "solver_level_scalar": 0
+  },
+  {
+    "eigenvectors_saved": false,
+    "f32_bitwise_identical": 300,
+    "f32_max_abs_diff": 0.0,
+    "f32_total_elements": 300,
+    "fixture": "near_dupes_100",
+    "n": 100,
+    "solver_level_avx2": 0,
+    "solver_level_scalar": 0
+  },
+  {
+    "eigenvectors_saved": false,
+    "f32_bitwise_identical": 600,
+    "f32_max_abs_diff": 0.0,
+    "f32_total_elements": 600,
+    "fixture": "moons_200",
+    "n": 200,
+    "solver_level_avx2": 0,
+    "solver_level_scalar": 0
+  },
+  {
+    "eigenvectors_saved": false,
+    "f32_bitwise_identical": 600,
+    "f32_max_abs_diff": 0.0,
+    "f32_total_elements": 600,
+    "fixture": "blobs_connected_200",
+    "n": 200,
+    "solver_level_avx2": 0,
+    "solver_level_scalar": 0
+  },
+  {
+    "eigenvectors_saved": false,
+    "f32_bitwise_identical": 600,
+    "f32_max_abs_diff": 0.0,
+    "f32_total_elements": 600,
+    "fixture": "disconnected_200",
+    "n": 200,
+    "solver_level_avx2": 0,
+    "solver_level_scalar": 0
+  },
+  {
+    "eigenvectors_saved": false,
+    "f32_bitwise_identical": 900,
+    "f32_max_abs_diff": 0.0,
+    "f32_total_elements": 900,
+    "fixture": "circles_300",
+    "n": 300,
+    "solver_level_avx2": 0,
+    "solver_level_scalar": 0
+  },
+  {
+    "eigenvectors_saved": false,
+    "f32_bitwise_identical": 1500,
+    "f32_max_abs_diff": 0.0,
+    "f32_total_elements": 1500,
+    "fixture": "blobs_500",
+    "n": 500,
+    "solver_level_avx2": 0,
+    "solver_level_scalar": 0
+  },
+  {
+    "eigenvectors_saved": true,
+    "f32_bitwise_identical": 4000,
+    "f32_max_abs_diff": 20.0,
+    "f32_total_elements": 6000,
+    "fixture": "blobs_connected_2000",
+    "n": 2000,
+    "solver_level_avx2": 1,
+    "solver_level_scalar": 1
+  },
+  {
+    "eigenvectors_saved": true,
+    "f32_bitwise_identical": 14963,
+    "f32_max_abs_diff": 4.76837158203125e-7,
+    "f32_total_elements": 15000,
+    "fixture": "blobs_5000",
+    "n": 5000,
+    "solver_level_avx2": 1,
+    "solver_level_scalar": 1
+  }
+]
