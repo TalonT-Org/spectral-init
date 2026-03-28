@@ -1,0 +1,87 @@
+warning: field `perm` is never read
+  --> benches/simd_spmv_exp.rs:58:5
+   |
+52 | struct SellCsigma {
+   |        ---------- field in this struct
+...
+58 |     perm: Vec<usize>,       // perm[orig_row] = sorted_pos (σ-sort permutation)
+   |     ^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `verify_sell_c` is never used
+   --> benches/simd_spmv_exp.rs:315:4
+    |
+315 | fn verify_sell_c(n: usize, c: usize) {
+    |    ^^^^^^^^^^^^^
+
+warning: function `verify_avx2` is never used
+   --> benches/simd_spmv_exp.rs:361:4
+    |
+361 | fn verify_avx2(n: usize) {
+    |    ^^^^^^^^^^^
+
+warning: `spectral-init` (bench "simd_spmv_exp") generated 3 warnings
+    Finished `bench` profile [optimized] target(s) in 0.05s
+     Running benches/simd_spmv_exp.rs (target/release/deps/simd_spmv_exp-dcb8ff54e3cf0e52)
+Gnuplot not found, using plotters backend
+[isa] avx512f=true
+Benchmarking spmv_avx2/avx512_gather/200
+Benchmarking spmv_avx2/avx512_gather/200: Warming up for 3.0000 s
+Benchmarking spmv_avx2/avx512_gather/200: Collecting 100 samples in estimated 5.0023 s (4.2M iterations)
+Benchmarking spmv_avx2/avx512_gather/200: Analyzing
+spmv_avx2/avx512_gather/200
+                        time:   [1.1741 µs 1.1846 µs 1.1989 µs]
+                        change: [-1.2951% -0.2750% +0.7669%] (p = 0.60 > 0.05)
+                        No change in performance detected.
+Found 5 outliers among 100 measurements (5.00%)
+  2 (2.00%) high mild
+  3 (3.00%) high severe
+Benchmarking spmv_avx2/avx512_gather/2000
+Benchmarking spmv_avx2/avx512_gather/2000: Warming up for 3.0000 s
+Benchmarking spmv_avx2/avx512_gather/2000: Collecting 100 samples in estimated 5.0132 s (429k iterations)
+Benchmarking spmv_avx2/avx512_gather/2000: Analyzing
+spmv_avx2/avx512_gather/2000
+                        time:   [12.035 µs 12.237 µs 12.463 µs]
+                        change: [+2.7334% +4.2622% +6.0076%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 7 outliers among 100 measurements (7.00%)
+  6 (6.00%) high mild
+  1 (1.00%) high severe
+Benchmarking spmv_avx2/avx512_gather/5000
+Benchmarking spmv_avx2/avx512_gather/5000: Warming up for 3.0000 s
+Benchmarking spmv_avx2/avx512_gather/5000: Collecting 100 samples in estimated 5.0777 s (172k iterations)
+Benchmarking spmv_avx2/avx512_gather/5000: Analyzing
+spmv_avx2/avx512_gather/5000
+                        time:   [29.443 µs 29.586 µs 29.766 µs]
+                        change: [-1.0166% +0.1657% +1.6746%] (p = 0.79 > 0.05)
+                        No change in performance detected.
+Found 10 outliers among 100 measurements (10.00%)
+  1 (1.00%) high mild
+  9 (9.00%) high severe
+Benchmarking spmv_avx2/avx512_gather/10000
+Benchmarking spmv_avx2/avx512_gather/10000: Warming up for 3.0000 s
+Benchmarking spmv_avx2/avx512_gather/10000: Collecting 100 samples in estimated 5.1947 s (86k iterations)
+Benchmarking spmv_avx2/avx512_gather/10000: Analyzing
+spmv_avx2/avx512_gather/10000
+                        time:   [59.714 µs 60.120 µs 60.633 µs]
+                        change: [-1.9076% -0.9549% -0.0367%] (p = 0.04 < 0.05)
+                        Change within noise threshold.
+Found 6 outliers among 100 measurements (6.00%)
+  2 (2.00%) high mild
+  4 (4.00%) high severe
+Benchmarking spmv_avx2/avx512_gather/50000
+Benchmarking spmv_avx2/avx512_gather/50000: Warming up for 3.0000 s
+Benchmarking spmv_avx2/avx512_gather/50000: Collecting 100 samples in estimated 6.1549 s (20k iterations)
+Benchmarking spmv_avx2/avx512_gather/50000: Analyzing
+spmv_avx2/avx512_gather/50000
+                        time:   [302.21 µs 304.17 µs 306.25 µs]
+                        change: [-1.1122% +0.0788% +1.0929%] (p = 0.89 > 0.05)
+                        No change in performance detected.
+Found 4 outliers among 100 measurements (4.00%)
+  1 (1.00%) low mild
+  2 (2.00%) high mild
+  1 (1.00%) high severe
+
+[timing:level_1] 338726µs
+[timing:level_total] 338987µs
