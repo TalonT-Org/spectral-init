@@ -115,10 +115,6 @@ best represents the measurements. Include raw data when feasible.}
 experimenter's interpretation — the write-report skill will synthesize
 the final conclusions.}
 
-## Standardized Metrics
-{Inline summary from accuracy_metrics.md and parity_metrics.md (if applicable).
-List any metrics that failed their thresholds.}
-
 ## Status
 {One of: CONCLUSIVE_POSITIVE | CONCLUSIVE_NEGATIVE | INCONCLUSIVE | FAILED}
 {Brief justification for the status}
