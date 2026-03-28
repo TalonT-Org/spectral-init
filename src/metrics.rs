@@ -278,7 +278,7 @@ pub fn subspace_gram_det_kd(computed: ArrayView2<f64>, reference: ArrayView2<f64
     let eigen = SelfAdjointEigen::new(gtg_faer.as_ref(), Side::Lower)
         .expect("subspace_gram_det_kd: SelfAdjointEigen failed on G^T G");
 
-    // Product of sqrt(eigenvalues) = product of singular values = |det(G)|
+    // sqrt(product of eigenvalues of G^T G) = product of singular values = |det(G)|
     let mut det_sq = 1.0f64;
     eigen.S().for_each(|&x| det_sq *= x.max(0.0));
     det_sq.sqrt()
