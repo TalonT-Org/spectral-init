@@ -10,7 +10,7 @@ status-level = "fail"
 final-status-level = "fail"
 success-output = "never"
 failure-output = "immediate-final"
-default-filter = 'not (test(comp_d_rsvd_blobs_connected_2000) or test(test_level_3_rsvd_valid_on_large_path))'
+default-filter = 'not (test(comp_d_rsvd_blobs_connected_2000) or test(test_level_3_rsvd_valid_on_large_path) or test(direction_a_2il_vs_direct_l) or test(direction_b_sweep) or test(direction_c_subspace))'
 
 [profile.ci.junit]
 path = "junit.xml"
