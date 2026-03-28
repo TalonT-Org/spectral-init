@@ -127,6 +127,12 @@ pub fn scale_and_add_noise_pub(
     crate::scaling::scale_and_add_noise(coords, seed)
 }
 
+#[cfg(feature = "testing")]
+#[doc(hidden)]
+pub fn normalize_signs_pub(coords: &mut ndarray::Array2<f64>) {
+    crate::scaling::normalize_signs(coords)
+}
+
 use ndarray::{Array2, ArrayView2};
 use sprs::CsMatI;
 

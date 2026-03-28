@@ -6,7 +6,7 @@ use rand::SeedableRng;
 use rand::rngs::StdRng;
 use rand_distr::{Distribution, StandardNormal};
 use serde_json::json;
-use spectral_init::{scale_and_add_noise_pub, solve_eigenproblem_pub};
+use spectral_init::{normalize_signs_pub, scale_and_add_noise_pub, solve_eigenproblem_pub};
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 use spectral_init::operator::spmv_avx2_gather_pub;
@@ -141,8 +141,12 @@ fn test_solver_divergence() {
         // x86_64 path: run SIMD solver and compare.
         #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
         let record = {
-            let ((_, eigvec_avx2), solver_level_avx2) =
+            let mut eigvec_scalar = eigvec_scalar; // rebind as mut — normalize_signs_pub needs &mut
+            let ((_, mut eigvec_avx2), solver_level_avx2) =
                 solve_eigenproblem_simd_pub(&laplacian, 2, 42);
+
+            normalize_signs_pub(&mut eigvec_scalar); // match production E.5
+            normalize_signs_pub(&mut eigvec_avx2); // match production E.5
 
             let scaled_scalar = scale_and_add_noise_pub(eigvec_scalar, 42)
                 .expect("scale_and_add_noise_pub failed");
@@ -160,6 +164,14 @@ fn test_solver_divergence() {
                 .zip(scaled_avx2.iter())
                 .map(|(a, b)| (a - b).abs())
                 .fold(0.0f32, f32::max);
+
+            // 4 * f32::EPSILON ≈ 4.77e-7; allows one rounding-budget above zero for
+            // any residual scalar/SIMD divergence that survives normalize_signs.
+            assert!(
+                f32_max_abs_diff <= 4.77e-7,
+                "fixture {fixture}: max_abs_diff={f32_max_abs_diff:.3e} > 4.77e-7 after normalize_signs — \
+                 sign flip not resolved; SIMD kernel must be gated behind ComputeMode::RustNative"
+            );
 
             let eigenvectors_saved = if solver_level_scalar >= 1 {
                 let scalar_path = results_dir

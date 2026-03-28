@@ -91,9 +91,9 @@ pub(crate) fn spmv_csr(
     }
 }
 
-// ─── AVX2 gather kernel (testing + x86 only) ─────────────────────────────────
+// ─── AVX2 gather kernel (x86 only) ───────────────────────────────────────────
 
-#[cfg(all(feature = "testing", any(target_arch = "x86", target_arch = "x86_64")))]
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "avx2,fma")]
 unsafe fn spmv_avx2_gather_inner(
     indptr: &[usize],
