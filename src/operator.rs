@@ -655,20 +655,9 @@ mod tests {
         // These are Python reference eigenvectors computed by numpy.linalg.eigh,
         // so near-exact residuals are expected.
         for j in 0..k {
-            let v = eigenvectors.column(j);
+            let v = eigenvectors.column(j).to_owned();
             let lambda = eigenvalues[j];
-            let mut lv = vec![0.0f64; n];
-            for (val, (row, col)) in laplacian.iter() {
-                lv[row] += val * v[col];
-            }
-            let diff_norm: f64 = lv
-                .iter()
-                .zip(v.iter())
-                .map(|(&lvi, &vi)| (lvi - lambda * vi).powi(2))
-                .sum::<f64>()
-                .sqrt();
-            let v_norm: f64 = v.iter().map(|&vi| vi.powi(2)).sum::<f64>().sqrt();
-            let residual = diff_norm / v_norm.max(1e-300);
+            let residual = crate::metrics::eigenpair_residual(&laplacian, &v, lambda);
             assert!(
                 residual < 1e-10,
                 "eigenpair {j}: residual={residual:.3e} >= 1e-10 (lambda={lambda:.6e})"

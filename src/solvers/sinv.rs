@@ -202,19 +202,6 @@ mod tests {
         CsMatI::new((n, n), indptr, indices, values.to_vec())
     }
 
-    /// Compute residual ||L·v − λ·v|| / ||v|| for a single eigenpair.
-    fn eigenpair_residual(
-        laplacian: &CsMatI<f64, usize>,
-        eigvec: ndarray::ArrayView1<f64>,
-        eigval: f64,
-    ) -> f64 {
-        let v = eigvec.to_owned();
-        let lv: Array1<f64> = laplacian * &v;
-        let diff = &lv - &v.mapv(|x| eigval * x);
-        let v_norm = v.dot(&v).sqrt().max(f64::EPSILON);
-        diff.dot(&diff).sqrt() / v_norm
-    }
-
     // T1 — sprs_csc_to_faer_identity_roundtrip
     #[test]
     fn sprs_csc_to_faer_identity_roundtrip() {
@@ -265,7 +252,7 @@ mod tests {
 
         // All residuals < 1e-8.
         for i in 0..eigvals.len() {
-            let r = eigenpair_residual(&mat, eigvecs.column(i), eigvals[i]);
+            let r = crate::metrics::eigenpair_residual(&mat, &eigvecs.column(i).to_owned(), eigvals[i]);
             assert!(r < 1e-8, "residual for eigenpair {i}: {r} >= 1e-8");
         }
     }
