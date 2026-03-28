@@ -165,6 +165,8 @@ fn test_solver_divergence() {
                 .map(|(a, b)| (a - b).abs())
                 .fold(0.0f32, f32::max);
 
+            // 4 * f32::EPSILON ≈ 4.77e-7; allows one rounding-budget above zero for
+            // any residual scalar/SIMD divergence that survives normalize_signs.
             assert!(
                 f32_max_abs_diff <= 4.77e-7,
                 "fixture {fixture}: max_abs_diff={f32_max_abs_diff:.3e} > 4.77e-7 after normalize_signs — \
