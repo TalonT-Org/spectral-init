@@ -119,10 +119,11 @@ fn diag_entry(value: f64) -> serde_json::Value {
     json!({ "value": value })
 }
 
-/// Serialize an ExperimentMetrics (accuracy dimension) to Section 4.5 JSON.
-fn accuracy_to_json(
+/// Serialize an ExperimentMetrics to Section 4.5 JSON for the given dimension string.
+fn experiment_to_json(
     experiment: &ExperimentMetrics,
     solver_levels: &[Option<u8>],
+    dimension: &str,
 ) -> String {
     let datasets: Vec<serde_json::Value> = experiment
         .datasets
@@ -142,7 +143,7 @@ fn accuracy_to_json(
                 })
                 .collect();
             json!({
-                "dimension": "accuracy",
+                "dimension": dimension,
                 "dataset": report.dataset,
                 "n": report.n,
                 "solver_level": solver_level,
@@ -159,41 +160,12 @@ fn accuracy_to_json(
     .expect("JSON serialization failed")
 }
 
-/// Serialize an ExperimentMetrics (parity dimension) to Section 4.5 JSON.
-fn parity_to_json(experiment: &ExperimentMetrics, solver_levels: &[Option<u8>]) -> String {
-    let datasets: Vec<serde_json::Value> = experiment
-        .datasets
-        .iter()
-        .zip(solver_levels.iter())
-        .map(|(report, &solver_level)| {
-            let metrics_obj: serde_json::Map<String, serde_json::Value> = report
-                .metrics
-                .iter()
-                .map(|m| {
-                    let entry = if m.threshold == 0.0 {
-                        diag_entry(m.value)
-                    } else {
-                        gated_entry(m.value, m.threshold, m.passed)
-                    };
-                    (m.name.clone(), entry)
-                })
-                .collect();
-            json!({
-                "dimension": "parity",
-                "dataset": report.dataset,
-                "n": report.n,
-                "solver_level": solver_level,
-                "solver_name": solver_level.map(solver_name),
-                "metrics": metrics_obj,
-            })
-        })
-        .collect();
+fn accuracy_to_json(experiment: &ExperimentMetrics, solver_levels: &[Option<u8>]) -> String {
+    experiment_to_json(experiment, solver_levels, "accuracy")
+}
 
-    serde_json::to_string_pretty(&json!({
-        "generated_at": experiment.generated_at,
-        "datasets": datasets,
-    }))
-    .expect("JSON serialization failed")
+fn parity_to_json(experiment: &ExperimentMetrics, solver_levels: &[Option<u8>]) -> String {
+    experiment_to_json(experiment, solver_levels, "parity")
 }
 
 /// Markdown table for accuracy assessment.
