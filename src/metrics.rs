@@ -39,8 +39,11 @@ pub const SINV_LOBPCG_QUALITY_THRESHOLD: f64 = 1e-6;
 /// with ChFSI-filtered starting subspace for well-conditioned graphs.
 pub const LOBPCG_ACCEPT_TOL: f64 = 1e-5;
 
-/// Shift-invert LOBPCG internal convergence tolerance.
-pub const SINV_ACCEPT_TOL: f64 = 1e-6;
+/// Linfa-linalg internal convergence tolerance for shift-invert LOBPCG.
+/// Tighter than SINV_LOBPCG_QUALITY_THRESHOLD (1e-6) because this controls the iterative
+/// solver's per-step residual; the outer acceptance guard (SINV_LOBPCG_QUALITY_THRESHOLD)
+/// then decides whether the converged result is good enough to use.
+pub const SINV_LINFA_TOL: f64 = 1e-8;
 
 /// Minimum eigenvalue gap to treat eigenpairs as distinct; below this use subspace comparison.
 pub const DEGENERATE_GAP_THRESHOLD: f64 = 1e-6;
@@ -407,13 +410,12 @@ mod tests {
     // ── Threshold constants ───────────────────────────────────────────────────
 
     #[test]
-    fn t_const_01_all_8_constants_have_required_values() {
+    fn t_const_01_all_7_constants_have_required_values() {
         assert_eq!(DENSE_EVD_QUALITY_THRESHOLD, 1e-6_f64);
         assert_eq!(LOBPCG_QUALITY_THRESHOLD, 1e-5_f64);
         assert_eq!(SINV_LOBPCG_QUALITY_THRESHOLD, 1e-6_f64);
         assert_eq!(RSVD_QUALITY_THRESHOLD, 1e-2_f64);
         assert_eq!(LOBPCG_ACCEPT_TOL, 1e-5_f64);
-        assert_eq!(SINV_ACCEPT_TOL, 1e-6_f64);
         assert_eq!(DEGENERATE_GAP_THRESHOLD, 1e-6_f64);
         assert_eq!(SUBSPACE_GRAM_DET_THRESHOLD, 0.95_f64);
     }

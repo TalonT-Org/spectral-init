@@ -12,6 +12,7 @@ use rand_distr::{Distribution, StandardNormal};
 use faer::prelude::Solve;
 
 use super::EigenResult;
+use crate::metrics::{SINV_LINFA_TOL, SINV_LOBPCG_QUALITY_THRESHOLD};
 
 /// Diagonal shift ε making M = L + εI strictly SPD (REQ-SINV-002).
 pub(crate) const SINV_SHIFT: f64 = 1e-4;
@@ -146,7 +147,7 @@ pub fn lobpcg_sinv_solve(
         x_init,
         |_: nd16::ArrayViewMut2<f64>| {},
         None,
-        1e-8_f32,
+        SINV_LINFA_TOL as f32,
         (n * 5).min(300),
         Order::Largest,
     );
@@ -158,7 +159,7 @@ pub fn lobpcg_sinv_solve(
 
     let result_opt = match result {
         Ok(r) => Some(extract(r)),
-        Err((_, Some(r))) if r.rnorm.iter().all(|&norm| norm < 1e-6) => Some(extract(r)),
+        Err((_, Some(r))) if r.rnorm.iter().all(|&norm| norm < SINV_LOBPCG_QUALITY_THRESHOLD) => Some(extract(r)),
         _ => None,
     };
 

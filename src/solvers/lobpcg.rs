@@ -304,7 +304,7 @@ pub fn lobpcg_solve<O: LinearOperator>(
     // (REQ-PERF-001). The iteration budget (maxiter) is now per-pass: initial pass
     // uses LOBPCG_INITIAL_MAXITER_CAP (300), warm-restart passes use
     // LOBPCG_RESTART_MAXITER_CAP (1000). See Issue #123.
-    let tol: f32 = 1e-5;
+    let tol: f32 = LOBPCG_ACCEPT_TOL as f32;
 
     // Defined outside the loop: captures nothing from the environment, so no need to
     // re-create it on every iteration.
