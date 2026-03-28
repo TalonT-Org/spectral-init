@@ -76,7 +76,11 @@ information gaps and produce the best possible experiment plan.
 **Subagent A — Measurement Feasibility:**
 > Read `src/metrics.rs` to inventory all canonical metric names, quality
 > dimensions (Accuracy, Parity, Performance), and threshold constants.
-> Cross-reference against the scope report's Metric Context section.
+> If `src/metrics.rs` does not exist or is unreadable, treat all dependent
+> variables as "NEW" and flag the missing file in your report.
+> Cross-reference against the scope report's Metric Context section if present;
+> if the scope report lacks a Metric Context section (e.g., scope ran before
+> this tooling was added), proceed without it and note the gap.
 > For each dependent variable in the research question: verify it has a
 > canonical name in `src/metrics.rs`, or flag it as "NEW" requiring formula,
 > unit, and threshold definition. Report what measurement infrastructure
