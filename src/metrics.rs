@@ -107,6 +107,7 @@ pub fn orthogonality_error(eigenvectors: &Array2<f64>) -> f64 {
 /// - `in_range`: all `λ ∈ [−tol, 2+tol]`
 /// - `sorted_ascending`: `λ[i] ≤ λ[i+1] + tol` for all `i`
 pub fn check_eigenvalue_bounds(eigenvalues: &Array1<f64>, tol: f64) -> (bool, bool) {
+    assert!(tol >= 0.0, "check_eigenvalue_bounds: tol must be non-negative, got {}", tol);
     let in_range = eigenvalues.iter().all(|&v| v >= -tol && v <= 2.0 + tol);
     let sorted = eigenvalues
         .windows(2)
