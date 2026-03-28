@@ -47,12 +47,25 @@ pub fn spmv_csr(
         data.len(),
         indptr.last().copied().unwrap_or(0)
     );
-    for i in 0..y.len() {
-        let mut acc = 0.0_f64;
-        for k in indptr[i]..indptr[i + 1] {
-            acc += data[k] * x[indices[k]];
+    // ── Compile-time dispatch to AVX2 kernel when available ──────────────────
+    #[cfg(all(any(target_arch = "x86", target_arch = "x86_64"), target_feature = "avx2"))]
+    {
+        // SAFETY: `#[cfg(target_feature = "avx2")]` guarantees this binary was
+        // compiled with AVX2 enabled, so the CPU supports the feature.
+        // spmv_avx2_gather_inner requires avx2+fma; FMA is universally present
+        // on AVX2 microarchitectures (Haswell+, Zen+).
+        unsafe { spmv_avx2_gather_inner(indptr, indices, data, x, y) }
+        return;
+    }
+    #[cfg(not(all(any(target_arch = "x86", target_arch = "x86_64"), target_feature = "avx2")))]
+    {
+        for i in 0..y.len() {
+            let mut acc = 0.0_f64;
+            for k in indptr[i]..indptr[i + 1] {
+                acc += data[k] * x[indices[k]];
+            }
+            y[i] = acc;
         }
-        y[i] = acc;
     }
 }
 
@@ -82,18 +95,31 @@ pub(crate) fn spmv_csr(
         data.len(),
         indptr.last().copied().unwrap_or(0)
     );
-    for i in 0..y.len() {
-        let mut acc = 0.0_f64;
-        for k in indptr[i]..indptr[i + 1] {
-            acc += data[k] * x[indices[k]];
+    // ── Compile-time dispatch to AVX2 kernel when available ──────────────────
+    #[cfg(all(any(target_arch = "x86", target_arch = "x86_64"), target_feature = "avx2"))]
+    {
+        // SAFETY: `#[cfg(target_feature = "avx2")]` guarantees this binary was
+        // compiled with AVX2 enabled, so the CPU supports the feature.
+        // spmv_avx2_gather_inner requires avx2+fma; FMA is universally present
+        // on AVX2 microarchitectures (Haswell+, Zen+).
+        unsafe { spmv_avx2_gather_inner(indptr, indices, data, x, y) }
+        return;
+    }
+    #[cfg(not(all(any(target_arch = "x86", target_arch = "x86_64"), target_feature = "avx2")))]
+    {
+        for i in 0..y.len() {
+            let mut acc = 0.0_f64;
+            for k in indptr[i]..indptr[i + 1] {
+                acc += data[k] * x[indices[k]];
+            }
+            y[i] = acc;
         }
-        y[i] = acc;
     }
 }
 
-// ─── AVX2 gather kernel (testing + x86 only) ─────────────────────────────────
+// ─── AVX2 gather kernel (x86 only) ───────────────────────────────────────────
 
-#[cfg(all(feature = "testing", any(target_arch = "x86", target_arch = "x86_64")))]
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "avx2,fma")]
 unsafe fn spmv_avx2_gather_inner(
     indptr: &[usize],
