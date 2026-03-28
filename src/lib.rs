@@ -1,6 +1,6 @@
 // spectral-init: Spectral initialization for UMAP embeddings
 
-pub mod metrics;
+pub(crate) mod metrics;
 mod components;
 mod config;
 mod laplacian;
