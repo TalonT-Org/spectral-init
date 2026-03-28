@@ -134,7 +134,7 @@ enough detail for independent reproduction.}
 format best represents the measurements. No interpretation in this
 section — just facts.}
 
-### Standardized Metrics Assessment
+### Standardized Metrics
 
 {Include this section when `*_metrics.json` files are present in
 `.autoskillit/temp/run-experiment/`. Omit entirely if no metrics JSON was produced.}
