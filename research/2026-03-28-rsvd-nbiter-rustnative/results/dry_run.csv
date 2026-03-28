@@ -1,0 +1,13 @@
+fixture,method,nbiter,p,residual,wall_time_us
+blobs_connected_2000,2il,2,30,2.750086e-1,186955
+blobs_connected_2000,2il,2,100,2.049233e-1,741845
+blobs_connected_2000,2il,4,30,1.149399e-1,555740
+blobs_connected_2000,2il,4,100,5.221820e-2,1240605
+blobs_connected_2000,2il,6,30,4.531838e-2,520836
+blobs_connected_2000,2il,6,100,1.256013e-2,2673655
+blobs_connected_2000,direct_l,2,30,2.750086e-1,530294
+blobs_connected_2000,direct_l,2,100,2.049233e-1,5121774
+blobs_connected_2000,direct_l,4,30,1.149399e-1,2186221
+blobs_connected_2000,direct_l,4,100,5.221820e-2,4156335
+blobs_connected_2000,direct_l,6,30,4.531838e-2,803049
+blobs_connected_2000,direct_l,6,100,1.256013e-2,4360578
