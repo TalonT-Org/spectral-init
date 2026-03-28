@@ -3,11 +3,10 @@ mod common;
 
 use ndarray::{Array1, Array2};
 use sprs::CsMatI;
-use spectral_init::metrics::sign_agnostic_max_error;
+use spectral_init::metrics::{sign_agnostic_max_error, subspace_gram_det_kd, max_eigenpair_residual};
 use serde_json::json;
 use spectral_init::{
     normalize_signs_pub,
-    scale_and_add_noise_pub,
     solve_eigenproblem_pub,
     DEGENERATE_GAP_THRESHOLD,
 };
@@ -20,6 +19,18 @@ const SIMD_PARITY_F32_THRESHOLD: f64 = 4.0 * f32::EPSILON as f64;
 const SUBSPACE_ANGLE_SENSITIVITY_RAD: f64 = 1e-6;
 const SUBSPACE_ANGLE_FAILURE_RAD: f64 = 0.01;
 const BRIDGE_WEIGHTS: [f64; 7] = [1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8];
+const DISCRETE_WEIGHTS: [f64; 3] = [0.25, 2.5e-4, 2.5e-7];
+const SEEDS: [u64; 5] = [42, 123, 777, 1337, 9999];
+
+/// Returns the cluster size for each barbell clique.
+/// Override at runtime with the `CLUSTER_SIZE` environment variable for
+/// dry-run validation (e.g. `CLUSTER_SIZE=50 cargo test …`).
+fn cluster_size() -> usize {
+    std::env::var("CLUSTER_SIZE")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(1000)
+}
 
 fn results_dir() -> std::path::PathBuf {
     let p = match std::env::var("RESULTS_DIR") {
@@ -128,17 +139,149 @@ fn dk_bound_predicted(gap: f64, n_iterations: u32, avg_nnz_per_row: usize) -> f6
     n_iterations as f64 * avg_nnz_per_row as f64 * f64::EPSILON / gap
 }
 
+/// Runs both solvers on `laplacian`, computes all 8 experiment metrics,
+/// and returns a `serde_json::Value` record with the 12 required fields.
+///
+/// `bridge_weight` is recorded verbatim; `n` is the per-clique cluster size
+/// used to estimate `avg_nnz_per_row` for the DK bound.
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+fn measure_solver_pair(
+    laplacian: &CsMatI<f64, usize>,
+    n: usize,
+    bridge_weight: f64,
+    seed: u64,
+) -> serde_json::Value {
+    const N_LOBPCG_ITER: u32 = 300;
+
+    // --- Solver invocations ---
+    let ((eigenvalues_s, eigvecs_s_raw), level_s) =
+        solve_eigenproblem_pub(laplacian, 2, seed);
+    let ((eigenvalues_x, eigvecs_x_raw), level_x) =
+        solve_eigenproblem_simd_pub(laplacian, 2, seed);
+
+    // --- Residuals (pre-normalization, per Davis-Kahan definition) ---
+    let residual_scalar = max_eigenpair_residual(laplacian, &eigenvalues_s, &eigvecs_s_raw);
+    let residual_simd   = max_eigenpair_residual(laplacian, &eigenvalues_x, &eigvecs_x_raw);
+
+    // --- Sign normalization ---
+    let mut eigvecs_s = eigvecs_s_raw;
+    normalize_signs_pub(&mut eigvecs_s);
+    let mut eigvecs_x = eigvecs_x_raw;
+    normalize_signs_pub(&mut eigvecs_x);
+
+    // --- Subspace comparison ---
+    let max_subspace_angle_rad = max_subspace_angle(&eigvecs_s, &eigvecs_x);
+    // Cross-Gram det: SIMD as "computed", scalar as "reference"
+    let subspace_gram_det = subspace_gram_det_kd(eigvecs_x.view(), eigvecs_s.view());
+
+    // --- f32 parity ---
+    let f32_s = eigvecs_s.mapv(|v| v as f32);
+    let f32_x = eigvecs_x.mapv(|v| v as f32);
+    let f32_max_abs_diff = sign_agnostic_max_error(&f32_x, &f32_s);
+
+    // --- DK bound (use approx_gap from scalar solver eigenvalues) ---
+    let approx_gap = (eigenvalues_s[1] - eigenvalues_s[0]).max(0.0);
+    // avg nnz per row ≈ cluster_size (complete clique of n nodes, +1 diag)
+    let avg_nnz: usize = n;
+    let dk_bound = dk_bound_predicted(approx_gap, N_LOBPCG_ITER, avg_nnz);
+    let dk_amplification_factor = if approx_gap > 0.0 {
+        1.0 / approx_gap
+    } else {
+        f64::INFINITY
+    };
+
+    let level_match = level_s == level_x;
+
+    json!({
+        "bridge_weight":           bridge_weight,
+        "approx_gap":              approx_gap,
+        "level_scalar":            level_s,
+        "level_simd":              level_x,
+        "level_match":             level_match,
+        "max_subspace_angle_rad":  max_subspace_angle_rad,
+        "subspace_gram_det":       subspace_gram_det,
+        "f32_max_abs_diff":        f32_max_abs_diff,
+        "residual_scalar":         residual_scalar,
+        "residual_simd":           residual_simd,
+        "dk_bound_predicted":      dk_bound,
+        "dk_amplification_factor": dk_amplification_factor,
+    })
+}
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[test]
 fn test_gap_sweep() {
-    todo!()
+    let n = cluster_size();
+    let results_dir = results_dir();
+    let mut records: Vec<serde_json::Value> = Vec::with_capacity(BRIDGE_WEIGHTS.len());
+
+    for &w in BRIDGE_WEIGHTS.iter() {
+        let laplacian = large_epsilon_bridge_laplacian(n, w);
+        let rec = measure_solver_pair(&laplacian, n, w, 42);
+
+        // Stdout annotation for noteworthy entries
+        let angle = rec["max_subspace_angle_rad"].as_f64().unwrap_or(f64::NAN);
+        let level_s = rec["level_scalar"].as_u64().unwrap_or(99);
+        let level_x = rec["level_simd"].as_u64().unwrap_or(99);
+        if level_s != level_x || angle > SUBSPACE_ANGLE_SENSITIVITY_RAD {
+            println!(
+                "NOTEWORTHY: w={:.2e}  level_scalar={}  level_simd={}  \
+                 max_subspace_angle_rad={:.4e}",
+                w, level_s, level_x, angle
+            );
+        }
+
+        records.push(rec);
+    }
+
+    let json_str = serde_json::to_string_pretty(&records).expect("serialization failed");
+    std::fs::write(results_dir.join("gap_sweep.json"), json_str)
+        .expect("cannot write gap_sweep.json");
+    println!("Wrote gap_sweep.json ({} entries)", records.len());
 }
 
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[test]
 fn test_discrete_multi_seed() {
-    todo!()
+    let n = cluster_size();
+    let results_dir = results_dir();
+    let mut records: Vec<serde_json::Value> =
+        Vec::with_capacity(DISCRETE_WEIGHTS.len() * SEEDS.len());
+
+    for &w in DISCRETE_WEIGHTS.iter() {
+        for &seed in SEEDS.iter() {
+            let laplacian = large_epsilon_bridge_laplacian(n, w);
+            let mut rec = measure_solver_pair(&laplacian, n, w, seed);
+            // Add the seed field required by REQ-P3-005
+            rec["seed"] = serde_json::json!(seed);
+            records.push(rec);
+        }
+    }
+
+    let json_str = serde_json::to_string_pretty(&records).expect("serialization failed");
+    std::fs::write(results_dir.join("discrete_gaps.json"), json_str)
+        .expect("cannot write discrete_gaps.json");
+    println!("Wrote discrete_gaps.json ({} entries)", records.len());
 }
 
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[test]
 fn test_solver_level_parity() {
-    todo!()
+    let n = cluster_size();
+    for &w in BRIDGE_WEIGHTS.iter() {
+        let laplacian = large_epsilon_bridge_laplacian(n, w);
+        let ((eigenvalues_s, _), level_s) = solve_eigenproblem_pub(&laplacian, 2, 42);
+        let (_, level_x) = solve_eigenproblem_simd_pub(&laplacian, 2, 42);
+
+        let approx_gap = (eigenvalues_s[1] - eigenvalues_s[0]).max(0.0);
+        let is_degenerate = approx_gap < DEGENERATE_GAP_THRESHOLD;
+
+        if level_s != level_x && level_s <= 3 && level_x <= 3 {
+            panic!(
+                "Solver level parity violation at bridge_weight={:.2e}: \
+                 approx_gap={:.6e} (degenerate={}), level_scalar={}, level_simd={}",
+                w, approx_gap, is_degenerate, level_s, level_x
+            );
+        }
+    }
 }
