@@ -387,14 +387,6 @@ fn assess_accuracy() {
     let md_str = accuracy_to_markdown(&experiment, &solver_levels);
     std::fs::write(dir.join("accuracy_metrics.json"), &json_str).expect("write accuracy json");
     std::fs::write(dir.join("accuracy_metrics.md"), &md_str).expect("write accuracy md");
-    println!(
-        "accuracy_metrics.json written to {}",
-        dir.join("accuracy_metrics.json").display()
-    );
-    println!(
-        "accuracy_metrics.md   written to {}",
-        dir.join("accuracy_metrics.md").display()
-    );
 
     for report in &experiment.datasets {
         for m in &report.metrics {
@@ -404,11 +396,24 @@ fn assess_accuracy() {
                 report.dataset,
                 m.name
             );
+            if m.threshold > 0.0 {
+                assert!(
+                    m.passed,
+                    "dataset {}: metric {} failed threshold (value={:.3e}, threshold={:.3e})",
+                    report.dataset, m.name, m.value, m.threshold
+                );
+            }
         }
     }
     let json_parsed: serde_json::Value = serde_json::from_str(&json_str).expect("json not valid");
     let run_count = datasets_to_run().len();
-    assert_eq!(json_parsed["datasets"].as_array().unwrap().len(), run_count);
+    assert_eq!(
+        json_parsed["datasets"]
+            .as_array()
+            .expect("json missing expected datasets array")
+            .len(),
+        run_count
+    );
 }
 
 #[test]
@@ -518,14 +523,6 @@ fn assess_parity() {
     let md_str = parity_to_markdown(&experiment, &solver_levels);
     std::fs::write(dir.join("parity_metrics.json"), &json_str).expect("write parity json");
     std::fs::write(dir.join("parity_metrics.md"), &md_str).expect("write parity md");
-    println!(
-        "parity_metrics.json written to {}",
-        dir.join("parity_metrics.json").display()
-    );
-    println!(
-        "parity_metrics.md   written to {}",
-        dir.join("parity_metrics.md").display()
-    );
 
     for report in &experiment.datasets {
         for m in &report.metrics {
@@ -535,6 +532,13 @@ fn assess_parity() {
                 report.dataset,
                 m.name
             );
+            if m.threshold > 0.0 {
+                assert!(
+                    m.passed,
+                    "dataset {}: parity metric {} failed threshold (value={:.3e}, threshold={:.3e})",
+                    report.dataset, m.name, m.value, m.threshold
+                );
+            }
         }
     }
     let json_parsed: serde_json::Value = serde_json::from_str(&json_str).expect("json not valid");
@@ -543,7 +547,10 @@ fn assess_parity() {
         .filter(|(_, _, is_conn, _)| *is_conn)
         .count();
     assert_eq!(
-        json_parsed["datasets"].as_array().unwrap().len(),
+        json_parsed["datasets"]
+            .as_array()
+            .expect("json missing expected datasets array")
+            .len(),
         connected_count
     );
 }
