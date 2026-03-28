@@ -42,6 +42,12 @@ pub const LOBPCG_ACCEPT_TOL: f64 = 1e-5;
 /// Shift-invert LOBPCG internal convergence tolerance.
 pub const SINV_ACCEPT_TOL: f64 = 1e-6;
 
+/// Linfa-linalg internal convergence tolerance for shift-invert LOBPCG.
+/// Tighter than SINV_ACCEPT_TOL (1e-6) because this controls the iterative
+/// solver's per-step residual; the outer acceptance guard (SINV_LOBPCG_QUALITY_THRESHOLD)
+/// then decides whether the converged result is good enough to use.
+pub const SINV_LINFA_TOL: f64 = 1e-8;
+
 /// Minimum eigenvalue gap to treat eigenpairs as distinct; below this use subspace comparison.
 pub const DEGENERATE_GAP_THRESHOLD: f64 = 1e-6;
 
