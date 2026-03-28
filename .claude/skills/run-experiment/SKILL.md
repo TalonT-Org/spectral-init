@@ -120,7 +120,7 @@ the final conclusions.}
 {Brief justification for the status}
 ```
 
-### Step 4b — Standardized Metrics Assessment
+### Step 5 — Standardized Metrics Assessment
 
 After collecting experiment-specific results, run the canonical metrics assessment
 CLI to produce standardized JSON and markdown artifacts:
@@ -161,7 +161,7 @@ If `cargo test` fails (e.g., fixtures not generated), note the failure in the
 `## Standardized Metrics` section and continue — a metrics CLI failure does not
 block result collection.
 
-### Step 5 — Save Results
+### Step 6 — Save Results
 
 1. Save results to:
    `.autoskillit/temp/run-experiment/results_{topic}_{YYYY-MM-DD_HHMMSS}.md`
