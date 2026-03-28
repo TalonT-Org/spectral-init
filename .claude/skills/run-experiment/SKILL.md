@@ -115,10 +115,55 @@ best represents the measurements. Include raw data when feasible.}
 experimenter's interpretation — the write-report skill will synthesize
 the final conclusions.}
 
+## Standardized Metrics
+{Inline summary from accuracy_metrics.md and parity_metrics.md (if applicable).
+List any metrics that failed their thresholds.}
+
 ## Status
 {One of: CONCLUSIVE_POSITIVE | CONCLUSIVE_NEGATIVE | INCONCLUSIVE | FAILED}
 {Brief justification for the status}
 ```
+
+### Step 4b — Standardized Metrics Assessment
+
+After collecting experiment-specific results, run the canonical metrics assessment
+CLI to produce standardized JSON and markdown artifacts:
+
+```bash
+cd "$WORKTREE_PATH"
+cargo test --features testing --test test_metrics_assess -- assess_accuracy --include-ignored --nocapture
+```
+
+This writes two files to `.autoskillit/temp/run-experiment/` (relative to the worktree):
+- `accuracy_metrics.json` — machine-readable metrics with per-metric pass/fail status
+- `accuracy_metrics.md` — human-readable summary table
+
+**If the experiment affects parity** (i.e., it involves `ComputeMode`, SIMD paths,
+scaling behavior, or eigenvector sign normalization), also run:
+
+```bash
+cargo test --features testing --test test_metrics_assess -- assess_parity --include-ignored --nocapture
+```
+
+This writes:
+- `parity_metrics.json`
+- `parity_metrics.md`
+
+**Add a `## Standardized Metrics` section** to the results markdown file (in Step 4's
+template, after `## Recommendation`):
+
+```markdown
+## Standardized Metrics
+
+Accuracy assessment: see `accuracy_metrics.md`
+{If parity run: Parity assessment: see `parity_metrics.md`}
+
+{Inline the summary table from the .md file, or note any failed metrics here.}
+```
+
+If `cargo test` fails (e.g., fixtures not generated), note the failure in the
+`## Standardized Metrics` section and continue — a metrics CLI failure does not
+block result collection.
 
 ### Step 5 — Save Results
 

@@ -74,9 +74,13 @@ information gaps and produce the best possible experiment plan.
 **Minimum subagents:**
 
 **Subagent A — Measurement Feasibility:**
-> Given the research question and codebase, identify what metrics can be
-> collected and how. Check for existing measurement infrastructure. Report
-> what exists vs. what needs to be built.
+> Read `src/metrics.rs` to inventory all canonical metric names, quality
+> dimensions (Accuracy, Parity, Performance), and threshold constants.
+> Cross-reference against the scope report's Metric Context section.
+> For each dependent variable in the research question: verify it has a
+> canonical name in `src/metrics.rs`, or flag it as "NEW" requiring formula,
+> unit, and threshold definition. Report what measurement infrastructure
+> already exists vs. what needs to be built.
 
 **Subagent B — Data & Input Feasibility:**
 > Assess what data the experiment needs to operate on. Can it be generated
@@ -129,9 +133,13 @@ measurable outcome}
 ## Dependent Variables (Metrics)
 {What is being measured}
 
-| Metric | Unit | Collection Method |
-|--------|------|-------------------|
-| {metric1} | {unit} | {how collected} |
+| Metric | Unit | Collection Method | Canonical Name |
+|--------|------|-------------------|----------------|
+| {metric1} | {unit} | {how collected} | {name in src/metrics.rs, or "NEW"} |
+
+Canonical names must match entries in `src/metrics.rs`. For any metric marked
+"NEW", include: formula, unit, threshold value, and a note that it must be added
+to the catalog before the experiment is finalized.
 
 ## Controlled Variables
 {What is held constant and how}
