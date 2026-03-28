@@ -134,6 +134,31 @@ pub fn normalize_signs_pub(coords: &mut ndarray::Array2<f64>) {
     crate::scaling::normalize_signs(coords)
 }
 
+#[cfg(feature = "testing")]
+#[doc(hidden)]
+pub use crate::metrics::{
+    eigenpair_residual,
+    max_eigenpair_residual,
+    orthogonality_error,
+    check_eigenvalue_bounds,
+    separation_ratio,
+    eigenvalue_abs_errors,
+    subspace_gram_det_kd,
+    sign_agnostic_max_error,
+    tolerance_margin,
+    spectral_gap,
+    eigenvalue_condition_number,
+    DENSE_EVD_QUALITY_THRESHOLD,
+    LOBPCG_QUALITY_THRESHOLD,
+    SINV_LOBPCG_QUALITY_THRESHOLD,
+    RSVD_QUALITY_THRESHOLD,
+    DEGENERATE_GAP_THRESHOLD,
+    SUBSPACE_GRAM_DET_THRESHOLD,
+    AssessmentReport,
+    ExperimentMetrics,
+    MetricResult,
+};
+
 use ndarray::{Array2, ArrayView2};
 use sprs::CsMatI;
 
