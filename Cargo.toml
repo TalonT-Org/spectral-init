@@ -126,6 +126,11 @@ name = "test_simd_parity"
 path = "tests/integration/test_simd_parity.rs"
 required-features = ["testing"]
 
+[[test]]
+name = "test_metrics_assess"
+path = "tests/integration/test_metrics_assess.rs"
+required-features = ["testing"]
+
 [[bench]]
 name = "spectral_bench"
 harness = false
