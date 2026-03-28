@@ -50,6 +50,9 @@ const ORTHO_THRESHOLD: f64 = 1e-8;
 /// Eigenvalue bounds tolerance (λ ∈ [-tol, 2+tol]).
 const BOUNDS_TOL: f64 = 1e-12;
 
+/// Sign-agnostic max error threshold for parity assessment.
+const SIGN_ERROR_THRESHOLD: f64 = 5e-3;
+
 /// Output directory: RESULTS_DIR env var or default.
 fn results_dir() -> std::path::PathBuf {
     match std::env::var("RESULTS_DIR") {
@@ -488,7 +491,6 @@ fn assess_parity() {
             f64::NAN
         };
 
-        let sign_err_thr = 5e-3f64;
         let eigenvalue_err_thr = residual_threshold(solver_level);
 
         let mut metrics = vec![
@@ -503,8 +505,8 @@ fn assess_parity() {
                 name: "sign_agnostic_max_error".into(),
                 dimension: 0,
                 value: sign_err,
-                threshold: sign_err_thr,
-                passed: sign_err <= sign_err_thr,
+                threshold: SIGN_ERROR_THRESHOLD,
+                passed: sign_err <= SIGN_ERROR_THRESHOLD,
             },
         ];
 
