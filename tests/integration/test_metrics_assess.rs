@@ -264,6 +264,10 @@ fn assess_accuracy() {
 
         let ref_eigenvalues: Array1<f64> =
             common::load_dense(&base.join("comp_d_eigensolver.npz"), "eigenvalues");
+        assert!(
+            !ref_eigenvalues.is_empty(),
+            "{dataset}: ref eigenvalues array is empty — fixture may be corrupt"
+        );
         let n_components_dim = ref_eigenvalues.len() - 1;
 
         if !is_connected {
@@ -450,6 +454,10 @@ fn assess_parity() {
         let ref_pre_noise: Array2<f32> =
             common::load_dense(&base.join("comp_f_scaling.npz"), "pre_noise");
 
+        assert!(
+            !ref_eigenvalues.is_empty(),
+            "{dataset}: ref eigenvalues array is empty — fixture may be corrupt"
+        );
         let n_components_dim = ref_eigenvalues.len() - 1;
 
         let ((eigenvalues, eigenvectors), solver_level) =
