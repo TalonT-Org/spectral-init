@@ -8,7 +8,7 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use spectral_init::{
     build_normalized_laplacian, compute_degrees, dense_evd, find_components, lobpcg_solve,
-    rsvd_solve, spectral_init, ComputeMode,
+    rsvd_solve, spectral_init, ComputeMode, SpectralInitConfig,
 };
 use spectral_init::operator::{spmv_csr, CsrOperator};
 use std::hint::black_box;
@@ -66,7 +66,7 @@ fn make_laplacian(n: usize, half: usize) -> sprs::CsMatI<f64, usize> {
 /// This is the Phase 3 SIMD replacement target.
 fn bench_spmv(c: &mut Criterion) {
     let mut group = c.benchmark_group("spmv_csr");
-    for &n in &[200_usize, 2000] {
+    for &n in &[200_usize, 2000, 5000] {
         let lap = make_laplacian(n, 2); // 4 neighbours per node
         let indptr: Vec<usize> = lap.indptr().raw_storage().to_vec();
         let indices: Vec<usize> = lap.indices().to_vec();
@@ -159,6 +159,7 @@ fn bench_full_pipeline(c: &mut Criterion) {
                         black_box(2),
                         black_box(42_u64),
                         black_box(None),
+                        SpectralInitConfig::default(),
                     )
                     .expect("bench: spectral_init failed on synthetic ring graph"),
                 )
