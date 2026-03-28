@@ -17,6 +17,13 @@ pub use dense::dense_evd;
 use ndarray::{Array1, Array2};
 use sprs::CsMatI;
 use crate::operator::CsrOperator;
+use crate::metrics::{
+    max_eigenpair_residual,
+    DENSE_EVD_QUALITY_THRESHOLD,
+    LOBPCG_QUALITY_THRESHOLD,
+    SINV_LOBPCG_QUALITY_THRESHOLD,
+    RSVD_QUALITY_THRESHOLD,
+};
 
 /// Eigendecomposition result: (eigenvalues shape [k], eigenvectors shape [n, k]).
 pub type EigenResult = (Array1<f64>, Array2<f64>);
@@ -43,46 +50,6 @@ fn dense_n_threshold() -> usize {
     DENSE_N_THRESHOLD
 }
 
-/// Maximum acceptable max-residual from rSVD before falling to Level 4.
-/// rSVD with 2 power iterations typically achieves 1e-4 to 1e-6 on well-conditioned
-/// graphs; 1e-2 accepts all such results while correctly escalating pathological cases.
-const RSVD_QUALITY_THRESHOLD: f64 = 1e-2;
-
-/// Maximum acceptable max-residual from dense EVD before escalating.
-/// Dense EVD via faer is numerically exact (machine precision); 1e-6 leaves
-/// a generous margin while catching any pathological faer regression.
-const DENSE_EVD_QUALITY_THRESHOLD: f64 = 1e-6;
-
-/// Maximum acceptable max-residual from LOBPCG before escalating.
-/// Set to 1e-5 (Issue #92 REQ-TOL-002): matches the solver's `tol = 1e-5` and is
-/// consistently achievable with ChFSI preconditioning, while being tighter than rSVD (1e-2).
-const LOBPCG_QUALITY_THRESHOLD: f64 = 1e-5;
-
-/// Maximum acceptable max-residual from shift-and-invert LOBPCG.
-/// Sinv achieves near-exact results (like dense EVD); 1e-6 accepts all
-/// well-converged results while correctly escalating pathological graphs.
-const SINV_LOBPCG_QUALITY_THRESHOLD: f64 = 1e-6;
-
-/// Returns the maximum relative residual ||L·v - λ·v|| / ||v|| over all
-/// eigenpairs (i, λ_i, v_i) in the result.
-fn max_eigenpair_residual(
-    laplacian: &CsMatI<f64, usize>,
-    eigenvalues: &Array1<f64>,
-    eigenvectors: &Array2<f64>,
-) -> f64 {
-    eigenvalues
-        .iter()
-        .enumerate()
-        .map(|(i, &lambda)| {
-            let v = eigenvectors.column(i).to_owned();
-            let lv = laplacian * &v;
-            let lambda_v = v.mapv(|x| lambda * x);
-            let diff = &lv - &lambda_v;
-            let v_norm = v.dot(&v).sqrt().max(f64::EPSILON);
-            diff.dot(&diff).sqrt() / v_norm
-        })
-        .fold(0.0_f64, |a, b| if a.is_nan() || b.is_nan() { f64::NAN } else { a.max(b) })
-}
 
 /// Solver escalation chain. Tries six levels in order, advancing only on failure.
 ///
@@ -374,6 +341,7 @@ pub(crate) fn solve_eigenproblem_simd(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::metrics::{max_eigenpair_residual, DENSE_EVD_QUALITY_THRESHOLD, LOBPCG_QUALITY_THRESHOLD};
 
     /// Build a 6-node path-graph Laplacian in CSR format.
     ///
@@ -408,13 +376,6 @@ mod tests {
     }
 
     #[test]
-    fn lobpcg_quality_threshold_is_1e5() {
-        // REQ-TOL-002: LOBPCG quality gate in escalation chain must be 1e-5.
-        assert_eq!(LOBPCG_QUALITY_THRESHOLD, 1e-5_f64,
-            "LOBPCG_QUALITY_THRESHOLD must be 1e-5 per Issue #92 REQ-TOL-002");
-    }
-
-    #[test]
     fn solve_eigenproblem_eigenvalues_nonneg_and_sorted() {
         let laplacian = path_graph_laplacian_6();
         let ((eigvals, _), _) = solve_eigenproblem(&laplacian, 2, 42, &ndarray::Array1::ones(6));
@@ -440,25 +401,6 @@ mod tests {
         let ((eigs, vecs), _) = solve_eigenproblem(&path_graph_laplacian_6(), 2, 42, &ndarray::Array1::ones(6));
         assert_eq!(eigs.len(), 3, "expected n_components+1=3 eigenvalues");
         assert_eq!(vecs.shape(), &[6, 3], "expected [n, n_components+1] = [6, 3] eigenvectors");
-    }
-
-    #[test]
-    fn max_eigenpair_residual_trivial_near_zero() {
-        // 3-node path graph unnormalized Laplacian:
-        //   L = [[1,-1,0],[-1,2,-1],[0,-1,1]]
-        // Trivial eigenvector: [1/√3, 1/√3, 1/√3], eigenvalue = 0
-        let laplacian = CsMatI::new(
-            (3, 3),
-            vec![0usize, 2, 5, 7],
-            vec![0usize, 1, 0, 1, 2, 1, 2],
-            vec![1.0_f64, -1.0, -1.0, 2.0, -1.0, -1.0, 1.0],
-        );
-        let s = 1.0_f64 / 3.0_f64.sqrt();
-        let eigenvalues = Array1::from_vec(vec![0.0_f64]);
-        let eigenvectors = Array2::from_shape_vec((3, 1), vec![s, s, s]).unwrap();
-
-        let residual = max_eigenpair_residual(&laplacian, &eigenvalues, &eigenvectors);
-        assert!(residual < 1e-10, "trivial residual={residual:.2e}, expected < 1e-10");
     }
 
     /// Build a sparse diagonal n×n CSR Laplacian with eigenvalues [0, 1/(n-1), ..., 1].
@@ -490,56 +432,6 @@ mod tests {
         for &v in eigvals.iter() {
             assert!(v >= -1e-6, "eigenvalue is negative: {v:.2e}");
         }
-    }
-
-    /// Verify max_eigenpair_residual returns a large value for a non-eigenvector,
-    /// confirming the Level 3 → Level 4 quality gate correctly identifies poor results.
-    #[test]
-    fn max_eigenpair_residual_large_for_non_eigenvector() {
-        // 3-node path graph Laplacian (same as in max_eigenpair_residual_trivial_near_zero)
-        let laplacian = CsMatI::new(
-            (3, 3),
-            vec![0usize, 2, 5, 7],
-            vec![0usize, 1, 0, 1, 2, 1, 2],
-            vec![1.0_f64, -1.0, -1.0, 2.0, -1.0, -1.0, 1.0],
-        );
-        // Use a random non-eigenvector with wrong claimed eigenvalue — residual must be large.
-        let eigenvalues = Array1::from_vec(vec![0.0_f64]);
-        let eigenvectors = Array2::from_shape_vec((3, 1), vec![1.0_f64, 0.0, 0.0]).unwrap();
-
-        let residual = max_eigenpair_residual(&laplacian, &eigenvalues, &eigenvectors);
-        assert!(
-            residual >= RSVD_QUALITY_THRESHOLD,
-            "non-eigenvector residual={residual:.2e} should be >= RSVD_QUALITY_THRESHOLD={RSVD_QUALITY_THRESHOLD:.2e}"
-        );
-    }
-
-    #[test]
-    fn threshold_ordering_is_strict() {
-        // Dense EVD is exact: 1e-6 must be tighter than LOBPCG (1e-3) and rSVD (1e-2).
-        assert!(
-            DENSE_EVD_QUALITY_THRESHOLD < LOBPCG_QUALITY_THRESHOLD,
-            "Dense EVD threshold must be stricter than LOBPCG threshold"
-        );
-        assert!(
-            LOBPCG_QUALITY_THRESHOLD < RSVD_QUALITY_THRESHOLD,
-            "LOBPCG threshold must be stricter than rSVD threshold"
-        );
-        // Dense EVD and sinv LOBPCG target the same 1e-6 accuracy tier (REQ-ESC-002).
-        assert!(
-            DENSE_EVD_QUALITY_THRESHOLD <= SINV_LOBPCG_QUALITY_THRESHOLD,
-            "Dense EVD threshold must be <= sinv LOBPCG threshold"
-        );
-    }
-
-    // T8 — sinv_quality_threshold_ordering
-    #[test]
-    fn sinv_quality_threshold_ordering() {
-        assert!(
-            SINV_LOBPCG_QUALITY_THRESHOLD < LOBPCG_QUALITY_THRESHOLD,
-            "sinv LOBPCG threshold ({SINV_LOBPCG_QUALITY_THRESHOLD:.2e}) must be \
-             stricter than plain LOBPCG threshold ({LOBPCG_QUALITY_THRESHOLD:.2e})"
-        );
     }
 
     // T10 — solve_eigenproblem_level_numbering

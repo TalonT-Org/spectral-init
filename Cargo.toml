@@ -8,9 +8,10 @@ license = "MIT"
 [features]
 # Expose internal solver functions for integration tests.
 # Not part of the stable public API.
-testing = []
+testing = ["dep:serde"]
 
 [dependencies]
+serde = { version = "1", features = ["derive"], optional = true }
 sprs = "0.11"
 ndarray = "0.17"
 faer = "0.24"
