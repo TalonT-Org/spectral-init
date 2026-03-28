@@ -1,0 +1,65 @@
+[
+  {
+    "fixture": "blobs_50",
+    "scipy_version": "1.15.2",
+    "numpy_version": "2.2.6",
+    "python_version": "3.13.2",
+    "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39"
+  },
+  {
+    "fixture": "blobs_500",
+    "scipy_version": "1.15.2",
+    "numpy_version": "2.2.6",
+    "python_version": "3.13.2",
+    "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39"
+  },
+  {
+    "fixture": "blobs_5000",
+    "scipy_version": "1.15.2",
+    "numpy_version": "2.2.6",
+    "python_version": "3.13.2",
+    "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39"
+  },
+  {
+    "fixture": "blobs_connected_200",
+    "scipy_version": "1.15.2",
+    "numpy_version": "2.2.6",
+    "python_version": "3.13.2",
+    "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39"
+  },
+  {
+    "fixture": "blobs_connected_2000",
+    "scipy_version": "1.15.2",
+    "numpy_version": "2.2.6",
+    "python_version": "3.13.2",
+    "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39"
+  },
+  {
+    "fixture": "circles_300",
+    "scipy_version": "1.15.2",
+    "numpy_version": "2.2.6",
+    "python_version": "3.13.2",
+    "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39"
+  },
+  {
+    "fixture": "disconnected_200",
+    "scipy_version": "1.15.2",
+    "numpy_version": "2.2.6",
+    "python_version": "3.13.2",
+    "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39"
+  },
+  {
+    "fixture": "moons_200",
+    "scipy_version": "1.15.2",
+    "numpy_version": "2.2.6",
+    "python_version": "3.13.2",
+    "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39"
+  },
+  {
+    "fixture": "near_dupes_100",
+    "scipy_version": "1.15.2",
+    "numpy_version": "2.2.6",
+    "python_version": "3.13.2",
+    "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39"
+  }
+]

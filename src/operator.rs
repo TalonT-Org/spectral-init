@@ -91,6 +91,81 @@ pub(crate) fn spmv_csr(
     }
 }
 
+// ─── AVX2 gather kernel (testing + x86 only) ─────────────────────────────────
+
+#[cfg(all(feature = "testing", any(target_arch = "x86", target_arch = "x86_64")))]
+#[target_feature(enable = "avx2,fma")]
+unsafe fn spmv_avx2_gather_inner(
+    indptr: &[usize],
+    indices: &[usize],
+    data: &[f64],
+    x: &[f64],
+    y: &mut [f64],
+) {
+    use std::arch::x86_64::*;
+
+    let n = y.len();
+    for i in 0..n {
+        let start = indptr[i];
+        let end   = indptr[i + 1];
+
+        let (mut result, mut base) = unsafe {
+            let mut acc = _mm256_setzero_pd();
+            let mut base = start;
+
+            while base + 4 <= end {
+                let vi = _mm_set_epi32(
+                    indices[base + 3] as i32,
+                    indices[base + 2] as i32,
+                    indices[base + 1] as i32,
+                    indices[base]     as i32,
+                );
+                let xv = _mm256_i32gather_pd(x.as_ptr(), vi, 8);
+                let dv = _mm256_loadu_pd(data.as_ptr().add(base));
+                acc = _mm256_fmadd_pd(dv, xv, acc);
+                base += 4;
+            }
+
+            let lo     = _mm256_castpd256_pd128(acc);
+            let hi     = _mm256_extractf128_pd(acc, 1);
+            let sum128 = _mm_add_pd(lo, hi);
+            let halved = _mm_hadd_pd(sum128, sum128);
+            let result = _mm_cvtsd_f64(halved);
+
+            (result, base)
+        };
+
+        while base < end {
+            result += data[base] * x[indices[base]];
+            base += 1;
+        }
+
+        y[i] = result;
+    }
+}
+
+/// Safe public wrapper around the AVX2+FMA gather SpMV kernel.
+///
+/// Panics if AVX2 or FMA is not available on the current CPU.
+/// Under `#[cfg(all(feature = "testing", any(target_arch = "x86", target_arch = "x86_64")))]`
+/// only — not part of the stable public API.
+#[cfg(all(feature = "testing", any(target_arch = "x86", target_arch = "x86_64")))]
+#[doc(hidden)]
+pub fn spmv_avx2_gather_pub(
+    indptr: &[usize],
+    indices: &[usize],
+    data: &[f64],
+    x: &[f64],
+    y: &mut [f64],
+) {
+    assert!(
+        is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma"),
+        "spmv_avx2_gather_pub: AVX2+FMA not available on this CPU"
+    );
+    // SAFETY: feature detection above guarantees avx2+fma are present.
+    unsafe { spmv_avx2_gather_inner(indptr, indices, data, x, y) }
+}
+
 // ─── CsrOperator ─────────────────────────────────────────────────────────────
 
 /// Wraps a borrowed CSR Laplacian and implements `LinearOperator` via sprs
@@ -143,6 +218,77 @@ impl<'a> LinearOperator for CsrOperator<'a> {
         } else {
             // Block-vector path: csr_mulacc_dense_rowmaj handles k>1 efficiently
             // (no per-column allocations, single row-major pass over the matrix).
+            sprs::prod::csr_mulacc_dense_rowmaj(self.0.view(), x, y.view_mut());
+        }
+    }
+
+    fn size(&self) -> usize {
+        self.0.rows()
+    }
+}
+
+// ─── CsrOperatorSimd ─────────────────────────────────────────────────────────
+
+/// SIMD-accelerated variant of `CsrOperator`. Routes k=1 through
+/// `spmv_avx2_gather_pub`; k>1 falls back to `csr_mulacc_dense_rowmaj`.
+///
+/// Under `#[cfg(all(feature = "testing", any(target_arch = "x86", target_arch = "x86_64")))]`
+/// only — not part of the stable public API.
+#[cfg(all(feature = "testing", any(target_arch = "x86", target_arch = "x86_64")))]
+#[doc(hidden)]
+pub struct CsrOperatorSimd<'a>(pub &'a CsMatI<f64, usize>);
+
+#[cfg(all(feature = "testing", any(target_arch = "x86", target_arch = "x86_64")))]
+impl<'a> LinearOperator for CsrOperatorSimd<'a> {
+    fn apply(&self, x: ArrayView2<f64>, y: &mut Array2<f64>) {
+        debug_assert_eq!(
+            x.shape()[0], self.0.rows(),
+            "CsrOperatorSimd::apply: x row count {} != matrix rows {}",
+            x.shape()[0], self.0.rows()
+        );
+        debug_assert_eq!(
+            y.shape()[0], self.0.rows(),
+            "CsrOperatorSimd::apply: y row count {} != matrix rows {}",
+            y.shape()[0], self.0.rows()
+        );
+        y.fill(0.0);
+        let k = x.shape()[1];
+        if k == 1 {
+            let mat = self.0;
+            let x_col0 = x.column(0);
+            let x_col_vec: Vec<f64>;
+            let x_col: &[f64] = match x_col0.as_slice() {
+                Some(s) => s,
+                None => {
+                    x_col_vec = x_col0.iter().copied().collect();
+                    &x_col_vec
+                }
+            };
+            match y.column_mut(0).as_slice_mut() {
+                Some(y_col) => {
+                    spmv_avx2_gather_pub(
+                        mat.indptr().raw_storage(),
+                        mat.indices(),
+                        mat.data(),
+                        x_col,
+                        y_col,
+                    );
+                }
+                None => {
+                    let mut y_col = vec![0.0_f64; mat.rows()];
+                    spmv_avx2_gather_pub(
+                        mat.indptr().raw_storage(),
+                        mat.indices(),
+                        mat.data(),
+                        x_col,
+                        &mut y_col,
+                    );
+                    for (i, v) in y_col.into_iter().enumerate() {
+                        y[[i, 0]] = v;
+                    }
+                }
+            }
+        } else {
             sprs::prod::csr_mulacc_dense_rowmaj(self.0.view(), x, y.view_mut());
         }
     }
@@ -372,6 +518,79 @@ mod tests {
                 (ys - yd).abs() < 1e-14,
                 "spmv vs dense mismatch at index {i}: sparse={ys}, dense={yd}"
             );
+        }
+    }
+
+    // ─── AVX2/SIMD operator tests ────────────────────────────────────────────
+
+    #[cfg(all(feature = "testing", any(target_arch = "x86", target_arch = "x86_64")))]
+    #[test]
+    fn test_spmv_avx2_gather_pub_matches_scalar() {
+        if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
+            return; // skip on non-AVX2 machines
+        }
+        let indptr = vec![0usize, 2, 5, 7];
+        let indices = vec![0usize, 1, 0, 1, 2, 1, 2];
+        let data = vec![2.0_f64, -1.0, -1.0, 2.0, -1.0, -1.0, 2.0];
+        let x = vec![1.0_f64, 2.0, 3.0];
+        let mut y_scalar = vec![0.0_f64; 3];
+        let mut y_avx2 = vec![0.0_f64; 3];
+        spmv_csr(&indptr, &indices, &data, &x, &mut y_scalar);
+        spmv_avx2_gather_pub(&indptr, &indices, &data, &x, &mut y_avx2);
+        for i in 0..3 {
+            assert!(
+                (y_avx2[i] - y_scalar[i]).abs() < 1e-13,
+                "avx2 vs scalar mismatch at row {i}: avx2={}, scalar={}",
+                y_avx2[i], y_scalar[i]
+            );
+        }
+    }
+
+    #[cfg(all(feature = "testing", any(target_arch = "x86", target_arch = "x86_64")))]
+    #[test]
+    fn test_csr_operator_simd_single_vector_matches_scalar() {
+        if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
+            return;
+        }
+        let mat = laplacian_3x3();
+        let op_scalar = CsrOperator(&mat);
+        let op_simd   = CsrOperatorSimd(&mat);
+        let x: ndarray::Array2<f64> = ndarray::array![[1.0], [2.0], [3.0]];
+        let mut y_scalar = ndarray::Array2::zeros((3, 1));
+        let mut y_simd   = ndarray::Array2::zeros((3, 1));
+        op_scalar.apply(x.view(), &mut y_scalar);
+        op_simd.apply(x.view(), &mut y_simd);
+        for i in 0..3 {
+            assert!(
+                (y_simd[[i, 0]] - y_scalar[[i, 0]]).abs() < 1e-13,
+                "CsrOperatorSimd vs CsrOperator mismatch at row {i}: simd={}, scalar={}",
+                y_simd[[i, 0]], y_scalar[[i, 0]]
+            );
+        }
+    }
+
+    #[cfg(all(feature = "testing", any(target_arch = "x86", target_arch = "x86_64")))]
+    #[test]
+    fn test_csr_operator_simd_block_matches_sequential() {
+        if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
+            return;
+        }
+        let mat = laplacian_3x3();
+        let op = CsrOperatorSimd(&mat);
+        let x_block: ndarray::Array2<f64> = ndarray::array![[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]];
+        let mut y_block = ndarray::Array2::zeros((3, 2));
+        op.apply(x_block.view(), &mut y_block);
+        // Verify each column independently
+        for col in 0..2usize {
+            let x_col = x_block.column(col).to_owned().insert_axis(ndarray::Axis(1));
+            let mut y_col = ndarray::Array2::zeros((3, 1));
+            op.apply(x_col.view(), &mut y_col);
+            for i in 0..3 {
+                assert!(
+                    (y_block[[i, col]] - y_col[[i, 0]]).abs() < 1e-13,
+                    "simd block vs sequential mismatch at row={i} col={col}"
+                );
+            }
         }
     }
 

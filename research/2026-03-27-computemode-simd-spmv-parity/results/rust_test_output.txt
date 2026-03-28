@@ -1,0 +1,46 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.06s
+     Running tests/integration/test_simd_parity.rs (target/debug/deps/test_simd_parity-b3bf848a1ccd18ac)
+
+running 3 tests
+[timing:level_0] 4251µs
+[timing:level_total] 4321µs
+[timing:simd:level_0] 205µs
+[timing:simd:level_total] 236µs
+test test_spectral_gaps ... ok
+[timing:level_0] 4024µs
+[timing:level_total] 4060µs
+test test_spmv_divergence ... ok
+[timing:simd:level_0] 3502µs
+[timing:simd:level_total] 3535µs
+[timing:level_0] 10989µs
+[timing:level_total] 11030µs
+[timing:simd:level_0] 9764µs
+[timing:simd:level_total] 9804µs
+[timing:level_0] 10138µs
+[timing:level_total] 10181µs
+[timing:simd:level_0] 9908µs
+[timing:simd:level_total] 9951µs
+[timing:level_0] 8250µs
+[timing:level_total] 8292µs
+[timing:simd:level_0] 9529µs
+[timing:simd:level_total] 9571µs
+[timing:level_0] 24482µs
+[timing:level_total] 24531µs
+[timing:simd:level_0] 23168µs
+[timing:simd:level_total] 23219µs
+[timing:level_0] 200288µs
+[timing:level_total] 200362µs
+[timing:simd:level_0] 199443µs
+[timing:simd:level_total] 199518µs
+[timing:level_1] 48864µs
+[timing:level_total] 49110µs
+[timing:simd:level_1] 54563µs
+[timing:simd:level_total] 54808µs
+[timing:level_1] 995827µs
+[timing:level_total] 996311µs
+[timing:simd:level_1] 1026467µs
+[timing:simd:level_total] 1026950µs
+test test_solver_divergence ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.65s
+
