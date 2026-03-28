@@ -698,7 +698,7 @@ mod tests {
 
     #[cfg(feature = "testing")]
     #[test]
-    fn t_serde_01_round_trip_assessment_report() {
+    fn t_serde_02_round_trip_assessment_report() {
         let r = AssessmentReport {
             dataset: "test_dataset".to_string(),
             n: 100,
@@ -721,7 +721,7 @@ mod tests {
 
     #[cfg(feature = "testing")]
     #[test]
-    fn t_serde_01_round_trip_experiment_metrics() {
+    fn t_serde_03_round_trip_experiment_metrics() {
         let e = ExperimentMetrics {
             generated_at: "2026-01-01T00:00:00Z".to_string(),
             datasets: vec![AssessmentReport {
