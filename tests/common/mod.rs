@@ -101,25 +101,24 @@ pub fn load_sparse_csr(path: &Path) -> CsMat<f64> {
 }
 
 /// Compute the relative residual ||L·v - λ·v|| / ||v|| for an eigenpair.
+///
+/// Delegates to `spectral_init::metrics::eigenpair_residual`.
 pub fn residual_spmv(
     laplacian: &sprs::CsMat<f64>,
     eigvec: ndarray::ArrayView1<f64>,
     eigval: f64,
 ) -> f64 {
-    let n = laplacian.rows();
-    let mut lv = vec![0.0f64; n];
-    for (val, (row, col)) in laplacian.iter() {
-        lv[row] += val * eigvec[col];
-    }
-    let diff_norm: f64 = lv.iter().zip(eigvec.iter())
-        .map(|(&lvi, &vi)| (lvi - eigval * vi).powi(2))
-        .sum::<f64>()
-        .sqrt();
-    let v_norm: f64 = eigvec.iter().map(|&vi| vi.powi(2)).sum::<f64>().sqrt();
-    diff_norm / v_norm
+    spectral_init::metrics::eigenpair_residual(laplacian, &eigvec.to_owned(), eigval)
 }
 
 /// Compute the residual norm ||A*v - λ*v|| / ||v|| for one eigenpair.
+///
+/// # Justified Exception
+/// This function operates over the [`spectral_init::operator::LinearOperator`] trait rather
+/// than a concrete sparse matrix. It is needed by operator-generic tests
+/// (e.g., warm-restart and SIMD-operator tests) that exercise `CsrOperatorSimd` and other
+/// `LinearOperator` implementations. No equivalent exists in `src/metrics.rs`, which takes
+/// a concrete `CsMatI<f64, usize>`. This variant is retained here intentionally.
 pub fn eigenpair_residual<O: spectral_init::operator::LinearOperator>(
     op: &O,
     eigvec: ndarray::ArrayView1<f64>,

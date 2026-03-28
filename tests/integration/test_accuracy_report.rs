@@ -1,7 +1,7 @@
 #[path = "../common/mod.rs"]
 mod common;
 
-use ndarray::{Array1, Array2, ArrayView1};
+use ndarray::{s, Array1, Array2};
 use spectral_init::{
     build_normalized_laplacian, compute_degrees, embed_disconnected, find_components,
     select_eigenvectors, solve_eigenproblem_pub, spectral_init, ComputeMode, SpectralInitConfig,
@@ -65,21 +65,6 @@ struct AccuracyReport {
     tolerance_margins: Vec<ToleranceMarginEntry>,
 }
 
-fn gram_det_2d(
-    v1: ArrayView1<f64>, v2: ArrayView1<f64>,
-    r1: ArrayView1<f64>, r2: ArrayView1<f64>,
-) -> f64 {
-    let norm = |v: ArrayView1<f64>| v.iter().map(|x| x * x).sum::<f64>().sqrt().max(1e-300);
-    let dot  = |a: ArrayView1<f64>, b: ArrayView1<f64>|
-        a.iter().zip(b.iter()).map(|(x, y)| x * y).sum::<f64>();
-    let n1 = norm(v1); let n2 = norm(v2); let nr1 = norm(r1); let nr2 = norm(r2);
-    let a = dot(r1, v1) / (nr1 * n1);
-    let b = dot(r1, v2) / (nr1 * n2);
-    let c = dot(r2, v1) / (nr2 * n1);
-    let d = dot(r2, v2) / (nr2 * n2);
-    (a * d - b * c).abs()
-}
-
 fn compute_rust_pre_noise(selected: &Array2<f64>) -> Array2<f32> {
     let max_abs = selected.iter().map(|x| x.abs()).fold(0.0f64, f64::max);
     if max_abs == 0.0 {
@@ -87,22 +72,6 @@ fn compute_rust_pre_noise(selected: &Array2<f64>) -> Array2<f32> {
     }
     let expansion = 10.0 / max_abs;
     selected.mapv(|v| (v * expansion) as f32)
-}
-
-fn pre_noise_max_err(rust: &Array2<f32>, reference: &Array2<f32>) -> f64 {
-    let mut worst = 0.0f64;
-    for col in 0..rust.ncols() {
-        let r = rust.column(col);
-        let rf = reference.column(col);
-        let err_pos: f64 = r.iter().zip(rf.iter())
-            .map(|(&a, &b)| (a as f64 - b as f64).abs())
-            .fold(0.0f64, f64::max);
-        let err_neg: f64 = r.iter().zip(rf.iter())
-            .map(|(&a, &b)| (a as f64 + b as f64).abs())
-            .fold(0.0f64, f64::max);
-        worst = worst.max(err_pos.min(err_neg));
-    }
-    worst
 }
 
 fn solver_name(level: u8) -> &'static str {
@@ -200,52 +169,10 @@ fn process_disconnected_path(dataset: &str, n_embedding_dims: usize) -> Disconne
         })
         .collect();
 
-    let centroids: Vec<Vec<f64>> = component_members
-        .iter()
-        .map(|members| {
-            let n_c = members.len() as f64;
-            let mut c = vec![0.0f64; n_embedding_dims];
-            for &orig_i in members {
-                for d in 0..n_embedding_dims {
-                    c[d] += embedding[[orig_i, d]];
-                }
-            }
-            c.iter_mut().for_each(|x| *x /= n_c);
-            c
-        })
-        .collect();
-
-    let min_inter = (0..n_conn_components)
-        .flat_map(|i| ((i + 1)..n_conn_components).map(move |j| (i, j)))
-        .map(|(i, j)| {
-            (0..n_embedding_dims)
-                .map(|d| (centroids[i][d] - centroids[j][d]).powi(2))
-                .sum::<f64>()
-                .sqrt()
-        })
-        .fold(f64::INFINITY, f64::min);
-
-    let max_intra = component_members
-        .iter()
-        .enumerate()
-        .map(|(c_idx, members)| {
-            members
-                .iter()
-                .map(|&orig_i| {
-                    (0..n_embedding_dims)
-                        .map(|d| (embedding[[orig_i, d]] - centroids[c_idx][d]).powi(2))
-                        .sum::<f64>()
-                        .sqrt()
-                })
-                .fold(0.0f64, f64::max)
-        })
-        .fold(0.0f64, f64::max);
-
-    let separation_ratio = if max_intra > 0.0 {
-        min_inter / max_intra
-    } else {
-        f64::INFINITY
-    };
+    let separation_ratio = spectral_init::metrics::separation_ratio(
+        embedding.view(),
+        &labels,
+    );
 
     let e2e_result =
         spectral_init(&graph, n_embedding_dims, 42, Some(raw_data.view()), SpectralInitConfig::default())
@@ -326,9 +253,9 @@ fn process_dataset(dataset: &str, n: usize, is_connected: bool, expected_n_compo
     let max_residual = per_eigenvec_residuals.iter().cloned().fold(0.0f64, f64::max);
 
     let subspace_gram_det = if k >= 3 && ref_eigenvectors.ncols() >= 3 {
-        Some(gram_det_2d(
-            eigenvectors.column(1), eigenvectors.column(2),
-            ref_eigenvectors.column(1), ref_eigenvectors.column(2),
+        Some(spectral_init::metrics::subspace_gram_det(
+            eigenvectors.slice(s![.., 1..3]),
+            ref_eigenvectors.slice(s![.., 1..3]),
         ))
     } else {
         None
@@ -340,13 +267,13 @@ fn process_dataset(dataset: &str, n: usize, is_connected: bool, expected_n_compo
         n_components_dim,
     );
     let rust_pre_noise = compute_rust_pre_noise(&selected);
-    let pn_max_err = pre_noise_max_err(&rust_pre_noise, &ref_pre_noise);
+    let pn_max_err = spectral_init::metrics::sign_agnostic_max_error(&rust_pre_noise, &ref_pre_noise);
 
     // Isolated scaling test: feed Python's comp_e embedding into Rust's scaler
     let ref_e_embedding: Array2<f64> =
         common::load_dense(&base.join("comp_e_selection.npz"), "embedding");
     let rust_pre_noise_isolated = compute_rust_pre_noise(&ref_e_embedding);
-    let pn_isolated_err = pre_noise_max_err(&rust_pre_noise_isolated, &ref_pre_noise);
+    let pn_isolated_err = spectral_init::metrics::sign_agnostic_max_error(&rust_pre_noise_isolated, &ref_pre_noise);
 
     let e2e_max_residual = if is_connected {
         let result = spectral_init(&graph, n_components_dim, 42, None, SpectralInitConfig::default())

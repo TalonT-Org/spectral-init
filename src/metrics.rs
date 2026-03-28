@@ -62,7 +62,7 @@ pub fn eigenpair_residual(
     let lv = laplacian * eigenvector;
     let lambda_v = eigenvector.mapv(|x| eigenvalue * x);
     let diff = &lv - &lambda_v;
-    let v_norm = eigenvector.dot(eigenvector).sqrt().max(f64::EPSILON);
+    let v_norm = eigenvector.dot(eigenvector).sqrt().max(1e-300);
     diff.dot(&diff).sqrt() / v_norm
 }
 
