@@ -61,7 +61,11 @@ Read all available artifacts from the worktree:
 2. Scope report: `.autoskillit/temp/scope/` (if available in worktree)
 3. Experiment results: `{results_path}`
 4. Any raw data files in `.autoskillit/temp/run-experiment/`
-5. Experiment code: scan the worktree for scripts, fixtures, and tools
+5. Standardized metrics: scan `.autoskillit/temp/run-experiment/` for
+   `*_metrics.json` files (e.g., `accuracy_metrics.json`, `parity_metrics.json`).
+   If present, read them — they will populate the Standardized Metrics Assessment
+   section of the report.
+6. Experiment code: scan the worktree for scripts, fixtures, and tools
    added during implementation
 
 ### Step 2 — Determine Report Type
@@ -129,6 +133,18 @@ enough detail for independent reproduction.}
 {Present data from the experiment. Use tables, code blocks, or whatever
 format best represents the measurements. No interpretation in this
 section — just facts.}
+
+### Standardized Metrics
+
+{Include this section when `*_metrics.json` files are present in
+`.autoskillit/temp/run-experiment/`. Omit entirely if no metrics JSON was produced.}
+
+| Metric | Dimension | Dataset | Value | Threshold | Status |
+|--------|-----------|---------|-------|-----------|--------|
+| {metric_name} | {Accuracy/Parity} | {dataset} | {value} | {threshold} | ✅ PASS / ❌ FAIL |
+
+{If any metrics failed: note which solver level or dataset showed the failure
+and whether it is within acceptable range for the experiment's scope.}
 
 ## Observations
 

@@ -84,6 +84,16 @@ additional exploration is necessary for the specific research question.
 > methodologies, known solutions, manual pages for relevant tools, and
 > community discussion of the topic. Report findings with source links.
 
+**Subagent D — Metric Context:**
+> Read `src/metrics.rs` to identify which quality dimensions (Accuracy, Parity,
+> Performance) the research question touches. If `src/metrics.rs` is absent or
+> empty, flag it explicitly in the output (do not silently emit an empty section).
+> Report the current threshold values for relevant metrics and any existing test
+> coverage in `tests/integration/test_metrics_assess.rs`. If that test file does
+> not exist, note it as missing rather than omitting coverage information.
+> Output a "Metric Context" section listing which canonical metrics apply to this
+> research question and their current thresholds.
+
 **Additional subagents (launch as many as needed):**
 - Web searches for specific tools, libraries, or methods relevant to the question
 - Deeper exploration of specific code areas identified by early subagents
@@ -128,6 +138,11 @@ must contain these sections:
 
 ## Success Criteria
 {What would constitute a conclusive answer to the research question}
+
+## Metric Context
+{Which canonical metrics from src/metrics.rs apply to this research question.
+List each metric name, quality dimension (Accuracy/Parity/Performance), and
+current threshold value. Note any gaps where no canonical metric exists.}
 ```
 
 ### Step 3 — Write Output
