@@ -86,8 +86,11 @@ additional exploration is necessary for the specific research question.
 
 **Subagent D — Metric Context:**
 > Read `src/metrics.rs` to identify which quality dimensions (Accuracy, Parity,
-> Performance) the research question touches. Report the current threshold values
-> for relevant metrics and any existing test coverage in `tests/integration/test_metrics_assess.rs`.
+> Performance) the research question touches. If `src/metrics.rs` is absent or
+> empty, flag it explicitly in the output (do not silently emit an empty section).
+> Report the current threshold values for relevant metrics and any existing test
+> coverage in `tests/integration/test_metrics_assess.rs`. If that test file does
+> not exist, note it as missing rather than omitting coverage information.
 > Output a "Metric Context" section listing which canonical metrics apply to this
 > research question and their current thresholds.
 
