@@ -125,9 +125,11 @@ the final conclusions.}
 After collecting experiment-specific results, run the canonical metrics assessment
 CLI to produce standardized JSON and markdown artifacts:
 
+> **Prerequisite:** If `.npz` fixture files have not been generated yet, run `python tests/generate_fixtures.py` first (matching the `#[ignore]` annotation on fixture-dependent tests).
+
 ```bash
 cd "$WORKTREE_PATH"
-cargo test --features testing --test test_metrics_assess -- assess_accuracy --include-ignored --nocapture
+cargo test --features testing --test test_metrics_assess -- assess_accuracy --include-ignored --no-capture
 ```
 
 This writes two files to `.autoskillit/temp/run-experiment/` (relative to the worktree):
@@ -138,7 +140,7 @@ This writes two files to `.autoskillit/temp/run-experiment/` (relative to the wo
 scaling behavior, or eigenvector sign normalization), also run:
 
 ```bash
-cargo test --features testing --test test_metrics_assess -- assess_parity --include-ignored --nocapture
+cargo test --features testing --test test_metrics_assess -- assess_parity --include-ignored --no-capture
 ```
 
 This writes:
