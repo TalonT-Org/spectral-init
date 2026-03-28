@@ -651,6 +651,15 @@ mod tests {
         );
     }
 
+    #[test]
+    fn t_tolmargin_02_zero_worst_value_returns_infinity() {
+        let margin = tolerance_margin(1e-5, 0.0);
+        assert!(
+            margin.is_infinite() && margin > 0.0,
+            "tolerance_margin with worst_value=0.0 should be +∞, got {margin:.6e}"
+        );
+    }
+
     // ── Diagnostic: spectral_gap ──────────────────────────────────────────────
 
     #[test]
