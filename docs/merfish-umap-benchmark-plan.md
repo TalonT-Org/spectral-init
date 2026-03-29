@@ -47,7 +47,7 @@ The study extends the existing `spectral-init` visual evaluation pipeline (Tier 
 ### Implementation Strategy
 
 1. **Start with 10K cells only.** Build the entire pipeline end-to-end, validate every metric, and commit the small subset to the repo. Larger subsets come later as separate work.
-2. **Answer pre-work research questions first** (Section 12) before writing implementation code. These determine fundamental choices (normalization, PCA dims, batch correction).
+2. **Answer pre-work research questions first** (Section 12) before writing implementation code. These determine fundamental choices (normalization, PCA dims, distance metric).
 3. **Break into GitHub issues.** Each phase maps to a set of concrete, independently-implementable issues (Section 15).
 4. **Manual evaluation, not CI.** This is a person-initiated evaluation with a dedicated nextest profile (`merfish-eval`), separate from automated test suites.
 5. **Set up `docs/metrics/`** as a permanent home for metric definitions and evaluation methodology.
@@ -192,7 +192,7 @@ The Zhuang lab's Nature 2023 paper directly establishes: *"Transcriptomically mo
 | No timing instrumentation at scale | `run_baseline()` doesn't separate kNN time from spectral init time |
 | No memory measurement | No RSS/heap tracking during pipeline stages |
 | No subset generation infrastructure | Need spatially-stratified subsets at 10K–4.2M |
-| No batch correction handling | 147 sections need Harmony or similar correction |
+| No per-run mean normalization | Imaging runs need per-run mean RNA count normalization (not Harmony — see Section 5.5) |
 | Solver never tested at >5K nodes | LOBPCG/rSVD scalability to 100K–4.2M is unvalidated |
 
 ### 3.3 Key Architecture Constraint
@@ -356,13 +356,13 @@ This script uses **Polars** for metadata CSV loading (5-30x faster than pandas f
 
 ### 5.1 Normalization
 
-**Recommended pipeline (standard for MERFISH):**
+**Recommended pipeline (matching Zhuang lab conventions, Zhang et al. 2021/2023):**
 
 ```python
 import scanpy as sc
 
-# 1. Library size normalization
-sc.pp.normalize_total(adata, target_sum=1e4)
+# 1. Library size normalization (Zhuang lab uses target_sum=1000 for integration)
+sc.pp.normalize_total(adata, target_sum=1e3)
 
 # 2. Log transform
 sc.pp.log1p(adata)
@@ -371,11 +371,11 @@ sc.pp.log1p(adata)
 adata.layers["log_normalized"] = adata.X.copy()
 ```
 
-**Why `target_sum=1e4`:** Standard for MERFISH. CPM (1e6) is used for scRNA-seq but 1e4 keeps values in a numerically manageable range for PCA.
+**Why `target_sum=1e3`:** The Zhuang lab integration scripts use `target_sum=1000` for MERFISH. This differs from scRNA-seq conventions (1e4 or 1e6) because MERFISH measures absolute RNA molecule counts per cell, not sequencing-depth-dependent read counts. The total counts per cell are much lower in MERFISH.
+
+**Note on the distributed log2 H5AD:** The `Zhuang-ABCA-1-log2.h5ad` file uses `log2(count + 1)` on raw counts directly (no library-size normalization). If using the pre-computed log2 file, you skip `normalize_total` and `log1p` — but the scanpy pipeline above (normalize_total → log1p) is what the Zhuang lab actually used for their integration and UMAP. RQ-1.1 should determine which starting point produces a better spectral gap.
 
 **Why NOT SCTransform:** It better handles mean-variance in smFISH but is computationally prohibitive at 4.2M cells in Python. Normalize_total + log1p is dramatically more tractable.
-
-**Alternative to evaluate:** SpaNorm (Genome Biology 2025) — the first spatially-aware normalization that models library size effects and spatial biology concurrently. Higher computational cost but may better preserve spatial signal.
 
 ### 5.2 Feature Selection (HVG Filtering)
 
@@ -409,22 +409,31 @@ sc.tl.pca(adata, n_comps=50, svd_solver='randomized')
 
 At 4.2M cells, use `svd_solver='randomized'` (Halko algorithm). ARPACK is memory-prohibitive at this scale.
 
-### 5.5 Batch Correction Across 147 Sections
+### 5.5 Batch Correction — NOT Recommended for This Dataset
 
-**This is critical.** Section-to-section technical variation will dominate the UMAP embedding if uncorrected.
+**Do NOT apply Harmony (or Scanorama, scVI, etc.) between brain sections.**
 
-**Recommended: Harmony**
-```python
-import scanpy.external as sce
-sce.pp.harmony_integrate(adata, key='brain_section_label', max_iter_harmony=20)
-# Result: adata.obsm['X_pca_harmony']
-```
+This was investigated thoroughly (see research findings below) and the conclusion is unanimous across the literature, the Zhuang lab's own pipeline, and the Allen Brain Cell Atlas:
 
-Harmony operates on the PCA embedding, handles large numbers of batches (147), and is computationally efficient.
+**Why not:**
+1. **Batch-biology confounding.** The 147 coronal sections span the entire mouse brain. Each section samples a distinct neuroanatomical region — cortex, hippocampus, hypothalamus, cerebellum, brainstem. Telling Harmony that `section_id` is a batch variable asks it to make cortical neurons and cerebellar neurons look more similar in PCA space. That destroys real biology, not technical noise.
+2. **The Zhuang lab doesn't do it.** The actual pipeline (Zhang et al. 2021, 2023) uses simple per-imaging-run mean normalization to handle the modest ~30% variation in mean RNA counts between imaging runs. No Harmony.
+3. **Technical variation is small.** MERFISH replicates from the same tissue block correlate at R ≥ 0.95-0.99. There is little technical noise to remove relative to the large biological differences between brain regions.
+4. **Overcorrection is silent.** A Harmony-corrected UMAP will still look clean and aesthetically pleasing — but it will show artificially homogenized cell populations with collapsed regional diversity. The damage is invisible without careful marker-gene validation.
 
-**Alternative:** Scanorama (more conservative for large batch counts).
+**What the Zhuang lab does instead (Zhang 2021):**
+- Normalize mean total RNA counts per cell to a common value per imaging run (each run = 4-6 sections). This addresses the main source of technical batch variation.
+- This is a simple scalar correction, not a PCA-space transformation.
 
-**All 147 sections must be processed together.** Separating them defeats the purpose of a whole-brain atlas. Harmony removes technical variation while preserving biological variation.
+**When Harmony IS appropriate for MERFISH:**
+- Sections from the **same narrow anatomical region** (e.g., 5 adjacent hypothalamus sections spanning 0.2mm, as in the Moffitt 2018 dataset). Cell-type composition is approximately constant across neighboring sections, so Harmony can safely target technical variation without confounding.
+- Cross-modal integration (MERFISH ↔ scRNA-seq). The Zhuang lab uses CCA-based integration for this purpose, not Harmony.
+
+**References:**
+- Zhang et al. 2021 (Nature, motor cortex): no Harmony, uses per-run mean normalization
+- Zhang/Yao et al. 2023 (Nature, whole brain): no Harmony, uses CCA for cross-modal integration
+- Crescendo 2025 (Genome Biology): documents overcorrection risk, batch effects "smaller in magnitude compared to cell-type variance"
+- GraphST 2023 (Nature Communications): "batch correction methods developed for scRNA-seq are not suitable for spatial transcriptomics"
 
 ### 5.6 kNN Graph Construction
 
@@ -433,12 +442,12 @@ sc.pp.neighbors(
     adata,
     n_neighbors=15,
     n_pcs=30,
-    use_rep='X_pca_harmony',
-    metric='cosine'
+    use_rep='X_pca',
+    metric='euclidean'
 )
 ```
 
-**Distance metric:** Cosine is preferred for log-normalized gene expression. It is scale-invariant and focuses on expression profile shape rather than magnitude. Euclidean is acceptable after scaling. Post-scaling, cosine and correlation are equivalent (Pearson on zero-mean data = cosine).
+**Distance metric:** The Zhuang lab uses euclidean (scanpy default) on scaled PCA coordinates. Cosine is an alternative for unscaled log-normalized data. Post-scaling, cosine and euclidean are approximately equivalent since scaling removes magnitude differences. We use euclidean to match the published pipeline; RQ-1.4 can compare both on the 10K subset.
 
 ### 5.7 Graph Export for Rust
 
@@ -462,7 +471,7 @@ Test on `merfish_10k` subset, validate on `merfish_100k`:
 |---|---|
 | Normalization | `normalize_total+log1p`, raw counts, Pearson residuals |
 | n_pcs | 10, 20, 30, 50 |
-| Batch correction | None, Harmony, Scanorama |
+| Batch correction | Per-run mean normalization (no Harmony) |
 | kNN metric | cosine, euclidean |
 | n_neighbors | 10, 15, 30 |
 
@@ -487,7 +496,7 @@ For full 4.2M cells:
 | Metadata joins | Polars (5-30x faster than pandas) |
 | Normalization | In-place sparse operations |
 | PCA | `svd_solver='randomized'`, `zero_center=False` to avoid dense |
-| Harmony | Operates on PCA embedding (~4.2M × 50 × 4B = 840 MB) |
+| Per-run normalization | Scalar correction per imaging run (~30 runs × 1 scalar) |
 | kNN | PyNNDescent (approximate, O(n log n)) |
 
 **GPU option:** `rapids-singlecell` provides drop-in GPU replacements for all scanpy preprocessing functions, achieving 10-350x speedups on million-cell datasets.
@@ -1045,7 +1054,7 @@ The report (`merfish_benchmark_report.md`) should contain:
 | `scikit-learn` | ≥1.8 | Metrics (trustworthiness, silhouette, ARI, NMI) |
 | `polars` | latest | Fast metadata loading (5-30x faster than pandas) |
 | `pynndescent` | 0.5.x | Approximate nearest neighbors (used by UMAP) |
-| `harmonypy` | latest | Batch correction across 147 sections |
+| ~~`harmonypy`~~ | ~~latest~~ | ~~Not needed — see Section 5.5~~ |
 | `datashader` | ≥0.18 | Visualization of 4.2M point embeddings |
 | `matplotlib` | ≥3.10 | Static plots |
 | `psutil` | latest | Process memory measurement |
@@ -1108,7 +1117,7 @@ These are actual research questions — things we need to investigate to make in
 |---|---|---|---|
 | RQ-1.1 | What normalization maximizes spectral gap of the kNN graph Laplacian? | 1 | Parameter sweep on 10K subset |
 | RQ-1.2 | How many PCA dimensions are needed for 1,122 MERFISH genes? | 1 | Elbow plot + spectral gap analysis |
-| RQ-1.3 | Does Harmony batch correction across 147 sections improve UMAP quality? | 1 | Compare with/without Harmony on 100K subset |
+| RQ-1.3 | Does per-imaging-run mean normalization visibly improve the 10K UMAP? | 1 | Compare with/without per-run normalization on 10K subset |
 | RQ-1.4 | Does cosine vs euclidean metric affect spatial preservation? | 1 | Side-by-side on 10K subset |
 | RQ-1.5 | Does the log2-normalized H5AD need additional normalization? | 1 | Check Allen Institute docs; inspect value distributions |
 
@@ -1150,7 +1159,7 @@ Answer these with small experiments or literature review **before** building the
 |---|---|---|---|
 | RQ-1.1 | Does the log2-normalized H5AD need additional normalization? | Read Allen Institute docs; inspect value distributions in the 10K subset | Yes — determines preprocessing pipeline |
 | RQ-1.2 | How many PCA dimensions for 1,122 MERFISH genes? | Compute PCA on 10K subset, plot explained variance (elbow plot), measure spectral gap at each n_pcs | Yes — determines kNN graph quality |
-| RQ-1.3 | Does batch correction matter for a 10K subset from ~4 sections? | Compare UMAP with/without Harmony on the 10K subset | Partially — may defer to larger subsets |
+| RQ-1.3 | Does per-run mean normalization matter for the 10K subset? | Compare UMAP with/without per-run normalization | Low — likely negligible at 10K from few runs |
 | RQ-1.4 | Does cosine vs euclidean metric affect spatial preservation? | Run both on 10K subset, compare trustworthiness | Low — can pick a default and revisit |
 
 **Recommended approach:** Create a Jupyter notebook or Python script that answers these once the 10K subset is staged. This is pure exploration — no permanent code changes.
@@ -1170,7 +1179,7 @@ Answer these with small experiments or literature review **before** building the
 - [ ] Python environment with `scanpy`, `anndata`, `umap-learn 0.5.11`
 - [ ] `polars` for metadata loading (replaces pandas for heavy CSV/Parquet work)
 - [ ] `pandas` for metric result tables (small DataFrames only)
-- [ ] `harmonypy` for batch correction (may not be needed at 10K scale)
+- [ ] ~~`harmonypy`~~ — not needed (see Section 5.5: batch correction not recommended for whole-brain sections)
 - [ ] `psutil` for memory measurement
 - [ ] Verify `anndata.read_h5ad(backed='r')` works with available HDF5 version
 - [ ] `datashader` — install but not needed until scaling beyond 10K
@@ -1213,7 +1222,7 @@ Answer these with small experiments or literature review **before** building the
 | Full 4.2M graph doesn't fit in RAM for Rust eigensolver | Blocks full-scale benchmark | Medium | Use 1M as max; monitor peak RSS carefully |
 | LOBPCG doesn't converge at >1M nodes | Escalates to rSVD/forced-dense (very slow) | Medium | rSVD is designed as fallback; record solver level |
 | Python kNN construction takes >4 hours at 4.2M | Blocks Phase 2 full-scale runs | High | Use checkpointing; consider rapids-singlecell GPU |
-| Harmony batch correction fails or produces artifacts | Poor preprocessing → poor UMAP → misleading metrics | Low | Validate on 100K subset first; compare with/without |
+| Per-run normalization constants unknown for 10K subset | May not have imaging-run metadata | Low | Check if `feature_matrix_label` encodes imaging run; if not, skip per-run normalization for 10K |
 | Eigenvector sign/rotation ambiguity masks real quality differences | Phase 3 spatial metrics show false equivalence | Medium | Procrustes alignment; use rotation-invariant metrics (ARI, SNA) |
 | Single biological sample limits statistical power | Cannot claim generalizability | High | Explicitly scope conclusions; suggest replication on Zhuang-ABCA-2/3/4 |
 | Out-of-memory when computing pairwise distances for metrics | Crashes during metric computation | High | Strict subsampling protocol; use O(n·k) metrics on full data |
@@ -1231,7 +1240,7 @@ Phase 0: Data Infrastructure
         │
         ▼
 Phase 1: Preprocessing Pipeline
-  ├── Parameter sweep on 10K (normalization, n_pcs, batch correction, metric)
+  ├── Parameter sweep on 10K (normalization, n_pcs, distance metric)
   ├── Validate winning config on 100K
   └── Export kNN graphs as .npz for all subsets
         │
