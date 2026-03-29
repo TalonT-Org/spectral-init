@@ -212,44 +212,40 @@ Everything before spectral_init and everything after it runs in Python regardles
 ### Objective
 Download, validate, and stage MERFISH data in formats consumable by both the Python visual eval pipeline and the Rust `spectral_init()` function.
 
-### 4.1 Data Download
+### 4.1 Local Data Location
 
-**Option A: AbcProjectCache (recommended for reproducibility)**
-```python
-from abc_atlas_access.abc_atlas_cache.abc_project_cache import AbcProjectCache
-from pathlib import Path
+**Data directory:** `data/merfish-abca1/` (gitignored via `/data/` in `.gitignore`)
 
-cache = AbcProjectCache.from_cache_dir(Path("data/abc_atlas"))
+| File | Local Path | Size | Status |
+|---|---|---|---|
+| Expression (log2) | `data/merfish-abca1/Zhuang-ABCA-1-log2.h5ad` | 2,128,478,610 bytes (2.0 GB) | Downloaded, validated |
+| Cell metadata | `data/merfish-abca1/cell_metadata.csv` | 631 MB | Downloaded, validated |
+| Gene list | `data/merfish-abca1/gene.csv` | 83 KB | Downloaded, validated |
+| CCF coordinates | `data/merfish-abca1/ccf_coordinates.csv` | 211 MB | Downloaded, validated |
 
-# Expression matrix (backed mode — near-zero open cost)
-expr_file = cache.get_file_path("Zhuang-ABCA-1", "Zhuang-ABCA-1/log2")
-adata = anndata.read_h5ad(expr_file, backed='r')
-
-# Cell metadata
-cell_meta = cache.get_metadata_dataframe("Zhuang-ABCA-1", "cell_metadata")
-
-# CCF coordinates
-ccf = cache.get_metadata_dataframe("Zhuang-ABCA-1-CCF", "ccf_coordinates")
+**Source URLs (public S3, no credentials):**
+```
+https://allen-brain-cell-atlas.s3.us-west-2.amazonaws.com/expression_matrices/Zhuang-ABCA-1/20230830/Zhuang-ABCA-1-log2.h5ad
+https://allen-brain-cell-atlas.s3.us-west-2.amazonaws.com/metadata/Zhuang-ABCA-1/20241115/cell_metadata.csv
+https://allen-brain-cell-atlas.s3.us-west-2.amazonaws.com/metadata/Zhuang-ABCA-1/20241115/gene.csv
+https://allen-brain-cell-atlas.s3.us-west-2.amazonaws.com/metadata/Zhuang-ABCA-1-CCF/20230830/ccf_coordinates.csv
 ```
 
-Install: `pip install git+https://github.com/alleninstitute/abc_atlas_access.git`
-Dependencies: `anndata`, `boto3`, `numpy`, `pandas`, `pydantic`, `tqdm`
+### 4.2 Data Validation (Completed)
 
-**Option B: Direct HTTP download**
-```bash
-wget https://allen-brain-cell-atlas.s3.us-west-2.amazonaws.com/expression_matrices/Zhuang-ABCA-1/20230830/Zhuang-ABCA-1-log2.h5ad
-wget https://allen-brain-cell-atlas.s3.us-west-2.amazonaws.com/metadata/Zhuang-ABCA-1/20241115/cell_metadata.csv
-wget https://allen-brain-cell-atlas.s3.us-west-2.amazonaws.com/metadata/Zhuang-ABCA-1-CCF/20230830/ccf_coordinates.csv
-```
+| Check | Result |
+|---|---|
+| H5AD byte count matches S3 listing | 2,128,478,610 bytes — exact match |
+| Cell metadata row count | 2,846,908 cells |
+| Unique brain sections | 147 |
+| CCF coordinate row count | 2,616,328 cells |
+| Gene list row count | 1,122 genes |
+| Metadata columns | `cell_label`, `brain_section_label`, `feature_matrix_label`, `donor_label`, `donor_genotype`, `donor_sex`, `cluster_alias`, `x`, `y`, `z`, `subclass_confidence_score`, `cluster_confidence_score`, `high_quality_transfer`, `abc_sample_id` |
+| Spatial coordinates present | x, y, z columns in cell_metadata.csv (section coordinates in mm) |
+| CCF coordinates columns | `cell_label`, `x`, `y`, `z`, `parcellation_index` |
+| cluster_alias available | Yes — integer cell-type cluster IDs |
 
-### 4.2 Data Validation
-
-After download, verify:
-- H5AD loads without corruption: `adata.shape == (expected_cells, 1122)`
-- Cell metadata joins cleanly on `cell_label`
-- Spatial coordinates (x, y) are non-NaN for all cells in metadata
-- CCF coordinates available for ~2.6M cells
-- `cluster_alias` provides integer cell-type labels
+**Note:** H5AD loading requires `anndata` + `h5py`, which are not yet in the `spectral-test` conda environment. These need to be added (see issue 1.4 below). The metadata CSVs are readable with Python stdlib or Polars immediately.
 
 ### 4.3 Subset Generation (10K First)
 
