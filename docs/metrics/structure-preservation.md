@@ -34,7 +34,7 @@ where V_k(i) is the set of k-NN in high-dimensional space that are _not_ in the 
 
 **Implementation:** `pyDRMetrics.DRMetrics(X, embedding).C` or `zadu.ZADU([{"id": "c_metric", ...}], X).fit(embedding)`
 
-**Thresholds:** No explicit PASS/FAIL gate in the benchmark table. Report delta between Python and Rust; flag if delta > 0.01 (same tolerance as Trustworthiness).
+**Thresholds:** No explicit benchmark gate. Report Continuity for Python and Rust; flag if delta > 0.01 (same tolerance as Trustworthiness).
 
 ---
 
