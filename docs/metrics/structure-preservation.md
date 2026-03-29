@@ -58,8 +58,8 @@ Overall score = mean s(i) over all points.
 
 ### Procrustes Disparity
 
-**Definition:** `d = ||X_std - Y_std||²_F / n`
-after optimal rotation, reflection, and scaling alignment. Computed as the third return value of `scipy.spatial.procrustes`.
+**Definition:** `d = ||X_std - Y_std||²_F`
+after optimal rotation, reflection, and scaling alignment (each matrix normalized to unit Frobenius norm). Computed as the third return value of `scipy.spatial.procrustes`.
 
 **What it measures:** Geometric shape similarity between two embeddings — measures how different the overall embedding "shape" is after accounting for arbitrary rotation, reflection, and scale.
 
