@@ -34,7 +34,7 @@ fn accurate_sweep() {
             let k_sub = N_COMPONENTS + 1 + p; // rank=3, so k_sub = 3 + p
             let t0 = std::time::Instant::now();
             let (eigs, vecs) =
-                spectral_init::rsvd_solve_accurate(&laplacian, N_COMPONENTS, SEED, k_sub);
+                spectral_init::rsvd_solve_accurate(&laplacian, N_COMPONENTS, SEED, k_sub, 6);
             let wall_time = t0.elapsed().as_secs_f64();
 
             // max residual over non-trivial pairs (indices 1..=n_components)

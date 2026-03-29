@@ -49,8 +49,9 @@ pub fn rsvd_solve_accurate(
     n_components: usize,
     seed: u64,
     k_sub: usize,
+    nbiter: usize,
 ) -> (ndarray::Array1<f64>, ndarray::Array2<f64>) {
-    crate::solvers::rsvd::rsvd_solve_accurate(laplacian, n_components, seed, k_sub)
+    crate::solvers::rsvd::rsvd_solve_accurate(laplacian, n_components, seed, k_sub, nbiter)
 }
 
 #[cfg(feature = "testing")]

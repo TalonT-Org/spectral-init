@@ -106,6 +106,25 @@ fn rsvd_k_sub_effective(n: usize, rank: usize) -> usize {
     rsvd_k_sub(n, rank)
 }
 
+/// Returns the effective number of power-iteration passes for randomized SVD.
+///
+/// In test builds (`--features testing`), reads the `SPECTRAL_RSVD_NBITER`
+/// environment variable as the iteration count, falling back to `2` on absence
+/// or parse error. In release builds the function always returns `2` and the
+/// compiler inlines it away entirely.
+#[cfg(feature = "testing")]
+fn rsvd_nbiter_effective() -> usize {
+    std::env::var("SPECTRAL_RSVD_NBITER")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(2)
+}
+
+#[cfg(not(feature = "testing"))]
+fn rsvd_nbiter_effective() -> usize {
+    2
+}
+
 /// Randomized SVD eigensolver via the 2I − L trick (Level 3).
 ///
 /// Implements Algorithm 5.1 (Halko-Tropp) with power iteration:
@@ -128,7 +147,7 @@ pub(crate) fn rsvd_solve(
     let rank = n_components + 1;
     // k = total random vectors; see rsvd_k_sub for the oversampling formula.
     let k = rsvd_k_sub_effective(n, rank);
-    let nbiter = 2;  // QR-stabilized subspace iterations (Halko-Tropp Algorithm 4.4)
+    let nbiter = rsvd_nbiter_effective();  // QR-stabilized subspace iterations (Halko-Tropp Algorithm 4.4)
 
     // ── Step A: Form M = 2I - L ──────────────────────────────────────────────
     let m = two_i_minus_laplacian(laplacian);
@@ -213,6 +232,7 @@ pub(crate) fn rsvd_solve_accurate(
     n_components: usize,
     seed: u64,
     k_sub: usize,
+    nbiter: usize,
 ) -> (Array1<f64>, Array2<f64>) {
     let n = laplacian.rows();
     assert!(k_sub > n_components + 1, "k_sub must be > n_components + 1");
@@ -224,7 +244,6 @@ pub(crate) fn rsvd_solve_accurate(
     let normal = StandardNormal;
     let mut omega = Array2::from_shape_fn((n, k), |_| normal.sample(&mut rng));
 
-    let nbiter = 6;  // more iterations for near-degenerate eigenvalue gaps
     for _ in 0..nbiter {
         let y = sparse_dense_mult(&m, &omega);
         omega = qr_thin_q(&y);
@@ -459,5 +478,32 @@ mod tests {
         let expected = (rank + oversampling).min(n);
         assert_eq!(rsvd_k_sub_effective(n, rank), expected);
         unsafe { std::env::remove_var("SPECTRAL_RSVD_OVERSAMPLING"); }
+    }
+
+    // T-NBE-1 — rsvd_nbiter_effective returns 2 when env var is absent
+    #[test]
+    fn rsvd_nbiter_returns_default_when_env_unset() {
+        // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
+        unsafe { std::env::remove_var("SPECTRAL_RSVD_NBITER"); }
+        assert_eq!(rsvd_nbiter_effective(), 2);
+    }
+
+    // T-NBE-2 — rsvd_nbiter_effective reads SPECTRAL_RSVD_NBITER env var (testing only)
+    #[cfg(feature = "testing")]
+    #[test]
+    fn rsvd_nbiter_reads_env_override() {
+        // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
+        unsafe { std::env::set_var("SPECTRAL_RSVD_NBITER", "4"); }
+        assert_eq!(rsvd_nbiter_effective(), 4);
+        unsafe { std::env::remove_var("SPECTRAL_RSVD_NBITER"); }
+    }
+
+    // T-NBE-3 — rsvd_nbiter_effective falls back to 2 on parse error
+    #[test]
+    fn rsvd_nbiter_falls_back_on_parse_error() {
+        // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
+        unsafe { std::env::set_var("SPECTRAL_RSVD_NBITER", "xyz"); }
+        assert_eq!(rsvd_nbiter_effective(), 2);
+        unsafe { std::env::remove_var("SPECTRAL_RSVD_NBITER"); }
     }
 }
