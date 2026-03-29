@@ -209,8 +209,8 @@ Everything before spectral_init and everything after it runs in Python regardles
 
 ## 5. Phase 0: Data Infrastructure
 
-### Research Question
-> Can we reliably acquire, validate, and stage MERFISH data in formats consumable by both the Python visual eval pipeline and the Rust `spectral_init()` function?
+### Objective
+Download, validate, and stage MERFISH data in formats consumable by both the Python visual eval pipeline and the Rust `spectral_init()` function.
 
 ### 4.1 Data Download
 
@@ -1102,15 +1102,15 @@ For 4.2M cells: **pynndescent** is the no-friction default (already used by UMAP
 
 ### 11.1 Pre-Work Research Questions (Before Writing Code)
 
+These are actual research questions — things we need to investigate to make informed design choices. Data download and staging are tasks, not research questions, and are covered in Section 15 (Issue Decomposition).
+
 | # | Question | Phase | How to Answer |
 |---|---|---|---|
-| RQ-0.1 | Can we download and load the full 4.2M cell H5AD on available hardware? | 0 | Test `anndata.read_h5ad(path, backed='r')` on actual machine |
-| RQ-0.2 | What is the memory footprint of the kNN graph at each scale? | 0 | `n × k × 8 bytes` (f32 data + i32 indices) |
-| RQ-0.3 | Does spatially-stratified subsampling preserve cell-type composition? | 0 | Compare cell-type frequencies in subset vs full |
 | RQ-1.1 | What normalization maximizes spectral gap of the kNN graph Laplacian? | 1 | Parameter sweep on 10K subset |
 | RQ-1.2 | How many PCA dimensions are needed for 1,122 MERFISH genes? | 1 | Elbow plot + spectral gap analysis |
 | RQ-1.3 | Does Harmony batch correction across 147 sections improve UMAP quality? | 1 | Compare with/without Harmony on 100K subset |
-| RQ-1.4 | Does cosine vs euclidean metric affect spatial preservation? | 1 | Side-by-side on 100K subset |
+| RQ-1.4 | Does cosine vs euclidean metric affect spatial preservation? | 1 | Side-by-side on 10K subset |
+| RQ-1.5 | Does the log2-normalized H5AD need additional normalization? | 1 | Check Allen Institute docs; inspect value distributions |
 
 ### 11.2 Core Research Questions (Require Full Pipeline)
 
@@ -1142,18 +1142,18 @@ For 4.2M cells: **pynndescent** is the no-friction default (already used by UMAP
 
 ### 12.0 Research Questions to Answer FIRST
 
-These questions must be answered **before writing any implementation code**. They determine fundamental design choices that propagate through the entire pipeline. Answer them with small experiments or literature review, not by building the full system.
+These are genuine research questions — things we need to investigate to make informed design choices. Data download and staging are just tasks (covered in Section 15), not research questions.
+
+Answer these with small experiments or literature review **before** building the full pipeline.
 
 | # | Question | How to Answer | Blocking? |
 |---|---|---|---|
-| RQ-0.1 | Can we download and load the full H5AD on our hardware? | Try `anndata.read_h5ad(path, backed='r')` on the actual machine | Yes — determines if full-scale is feasible |
-| RQ-0.2 | Does the log2-normalized H5AD need additional normalization? | Read the Allen Institute documentation; check if log2 values are already library-size-normalized | Yes — determines preprocessing pipeline |
-| RQ-0.3 | Does spatially-stratified subsampling at 10K preserve cell-type composition? | Generate a test subset, compare cell-type frequency distribution to full dataset | Yes — validates the 10K subset strategy |
-| RQ-1.1 | How many PCA dimensions for 1,122 MERFISH genes? | Compute PCA on 10K subset, plot explained variance (elbow plot), measure spectral gap at each n_pcs | Yes — determines kNN graph quality |
-| RQ-1.2 | Does batch correction matter for a 10K subset from ~4 sections? | Compare UMAP with/without Harmony on the 10K subset | Partially — may defer to larger subsets |
-| RQ-1.3 | Does cosine vs euclidean metric affect spatial preservation? | Run both on 10K subset, compare trustworthiness | Low — can pick a default and revisit |
+| RQ-1.1 | Does the log2-normalized H5AD need additional normalization? | Read Allen Institute docs; inspect value distributions in the 10K subset | Yes — determines preprocessing pipeline |
+| RQ-1.2 | How many PCA dimensions for 1,122 MERFISH genes? | Compute PCA on 10K subset, plot explained variance (elbow plot), measure spectral gap at each n_pcs | Yes — determines kNN graph quality |
+| RQ-1.3 | Does batch correction matter for a 10K subset from ~4 sections? | Compare UMAP with/without Harmony on the 10K subset | Partially — may defer to larger subsets |
+| RQ-1.4 | Does cosine vs euclidean metric affect spatial preservation? | Run both on 10K subset, compare trustworthiness | Low — can pick a default and revisit |
 
-**Recommended approach:** Create a Jupyter notebook or Python script that answers RQ-0.1 through RQ-1.1 in a single session. This is pure exploration — no permanent code changes.
+**Recommended approach:** Create a Jupyter notebook or Python script that answers these once the 10K subset is staged. This is pure exploration — no permanent code changes.
 
 ### 12.1 Hardware Requirements (10K Focus)
 
@@ -1198,7 +1198,7 @@ These questions must be answered **before writing any implementation code**. The
 
 | Decision | Options | Recommended |
 |---|---|---|
-| Which H5AD? | log2 or raw | log2 (already normalized — answer RQ-0.2 to confirm) |
+| Which H5AD? | log2 or raw | log2 (already normalized — answer RQ-1.1 to confirm) |
 | Full UMAP or spectral only at 10K? | Full SGD vs spectral init only | Full SGD (10K is fast enough for full runs) |
 | Spatial coordinates | Section (x,y) or CCF (x_ccf, y_ccf, z_ccf) | Section (x,y) — available for all cells |
 | n_pcs for 10K | Fixed 30 vs sweep | Sweep {10, 20, 30, 50}, pick winner (RQ-1.1) |
@@ -1416,7 +1416,7 @@ This section maps the plan into concrete GitHub issues for sequential implementa
 | 1.2 | Add `merfish-eval` nextest profile | Add profile to `.config/nextest.toml`. Add `#[ignore]` pattern for MERFISH tests. |
 | 1.3 | Add MERFISH data directory structure | Create `tests/visual_eval/merfish_data/` with `.gitkeep`. Update `.gitignore` for large MERFISH files. |
 
-### Batch 2: Data Acquisition (Answers RQ-0.1 through RQ-0.3)
+### Batch 2: Data Acquisition
 
 | Issue | Title | Description |
 |---|---|---|
