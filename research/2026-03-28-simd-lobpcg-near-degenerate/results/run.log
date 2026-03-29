@@ -1,0 +1,161 @@
+warning: unused import: `std::fs`
+  --> tests/integration/test_simd_lobpcg_parity.rs:13:5
+   |
+13 | use std::fs;
+   |     ^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: constant `SIMD_PARITY_F32_THRESHOLD` is never used
+  --> tests/integration/test_simd_lobpcg_parity.rs:18:7
+   |
+18 | const SIMD_PARITY_F32_THRESHOLD: f64 = 4.0 * f32::EPSILON as f64;
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: constant `SUBSPACE_ANGLE_FAILURE_RAD` is never used
+  --> tests/integration/test_simd_lobpcg_parity.rs:20:7
+   |
+20 | const SUBSPACE_ANGLE_FAILURE_RAD: f64 = 0.01;
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `epsilon_bridge_sqrt_deg` is never used
+   --> tests/integration/test_simd_lobpcg_parity.rs:103:4
+    |
+103 | fn epsilon_bridge_sqrt_deg(cluster_size: usize, bridge_weight: f64) -> Array1<f64> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `spectral-init` (test "test_simd_lobpcg_parity") generated 4 warnings (run `cargo fix --test "test_simd_lobpcg_parity" -p spectral-init` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.07s
+     Running tests/integration/test_simd_lobpcg_parity.rs (target/debug/deps/test_simd_lobpcg_parity-324acd468e8889b2)
+
+running 3 tests
+[timing:level_1] 257419µs
+[timing:level_total] 272476µs
+[timing:level_1] 277273µs
+[timing:level_1] 284199µs
+[timing:level_total] 292029µs
+[timing:level_total] 299063µs
+[timing:simd:level_1] 275974µs
+[timing:simd:level_total] 290731µs
+[timing:simd:level_1] 264588µs
+[timing:simd:level_1] 277242µs
+[timing:simd:level_total] 279442µs
+[timing:simd:level_total] 292001µs
+[timing:level_1] 258802µs
+[timing:level_1] 269002µs
+[timing:level_total] 273206µs
+[timing:level_total] 283600µs
+[timing:level_1] 291382µs
+[timing:level_total] 306179µs
+[timing:simd:level_1] 285594µs
+[timing:simd:level_1] 286605µs
+[timing:simd:level_total] 301293µs
+[timing:simd:level_total] 302190µs
+[timing:simd:level_1] 308061µs
+[timing:simd:level_total] 322553µs
+[timing:level_1] 268786µs
+[timing:level_total] 283493µs
+[timing:level_1] 287695µs
+[timing:level_total] 302395µs
+[timing:level_1] 295968µs
+[timing:level_total] 310638µs
+[timing:simd:level_1] 264377µs
+[timing:simd:level_total] 278880µs
+[timing:simd:level_1] 281522µs
+[timing:simd:level_total] 296350µs
+[timing:simd:level_1] 283599µs
+[timing:simd:level_total] 298054µs
+[timing:level_1] 275850µs
+[timing:level_total] 290944µs
+[timing:level_1] 277474µs
+[timing:level_total] 292700µs
+[timing:level_1] 316530µs
+[timing:level_total] 331077µs
+[timing:simd:level_1] 275733µs
+[timing:simd:level_total] 290286µs
+[timing:simd:level_1] 272434µs
+[timing:simd:level_total] 298773µs
+NOTEWORTHY: w=1.00e-5  level_scalar=1  level_simd=1  max_subspace_angle_rad=9.1468e-6
+[timing:simd:level_1] 339381µs
+[timing:simd:level_total] 354319µs
+[timing:level_1] 337807µs
+[timing:level_total] 352694µs
+[timing:level_1] 278803µs
+[timing:level_total] 293323µs
+[timing:level_1] 278332µs
+[timing:level_total] 298505µs
+[timing:simd:level_1] 268568µs
+[timing:simd:level_total] 283878µs
+[timing:simd:level_1] 282689µs
+[timing:simd:level_total] 298446µs
+NOTEWORTHY: w=1.00e-6  level_scalar=1  level_simd=1  max_subspace_angle_rad=2.1894e-4
+[timing:simd:level_1] 299342µs
+[timing:simd:level_total] 314327µs
+[timing:level_1] 292004µs
+[timing:level_total] 306841µs
+[timing:level_1] 302241µs
+[timing:level_total] 323347µs
+[timing:simd:level_1] 291090µs
+[timing:level_1] 294006µs
+[timing:simd:level_total] 305996µs
+[timing:level_total] 309547µs
+[timing:simd:level_1] 272905µs
+[timing:simd:level_total] 287591µs
+NOTEWORTHY: w=1.00e-7  level_scalar=1  level_simd=1  max_subspace_angle_rad=2.2934e-3
+[timing:simd:level_1] 274441µs
+[timing:simd:level_total] 289711µs
+[timing:level_1] 280470µs
+[timing:level_total] 295491µs
+[timing:level_1] 285348µs
+[timing:level_total] 302375µs
+[timing:simd:level_1] 277546µs
+[timing:simd:level_total] 292730µs
+test test_solver_level_parity ... ok
+[timing:level_1] 287506µs
+[timing:level_total] 302548µs
+[timing:simd:level_1] 259749µs
+[timing:simd:level_total] 274594µs
+NOTEWORTHY: w=1.00e-8  level_scalar=1  level_simd=1  max_subspace_angle_rad=1.0601e-2
+Wrote gap_sweep.json (7 entries)
+test test_gap_sweep ... ok
+[timing:simd:level_1] 284838µs
+[timing:simd:level_total] 299764µs
+[timing:level_1] 251222µs
+[timing:level_total] 265610µs
+[timing:simd:level_1] 249806µs
+[timing:simd:level_total] 264250µs
+[timing:level_1] 257031µs
+[timing:level_total] 272058µs
+[timing:simd:level_1] 254466µs
+[timing:simd:level_total] 269417µs
+[timing:level_1] 249497µs
+[timing:level_total] 264155µs
+[timing:simd:level_1] 256273µs
+[timing:simd:level_total] 271425µs
+[timing:level_1] 259454µs
+[timing:level_total] 274328µs
+[timing:simd:level_1] 258964µs
+[timing:simd:level_total] 273370µs
+[timing:level_1] 257885µs
+[timing:level_total] 272302µs
+[timing:simd:level_1] 261432µs
+[timing:simd:level_total] 275834µs
+[timing:level_1] 260690µs
+[timing:level_total] 275117µs
+[timing:simd:level_1] 248746µs
+[timing:simd:level_total] 263178µs
+[timing:level_1] 278143µs
+[timing:level_total] 292645µs
+[timing:simd:level_1] 312443µs
+[timing:simd:level_total] 327500µs
+[timing:level_1] 273837µs
+[timing:level_total] 288468µs
+[timing:simd:level_1] 264596µs
+[timing:simd:level_total] 279111µs
+Wrote discrete_gaps.json (15 entries)
+test test_discrete_multi_seed ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.80s
+
