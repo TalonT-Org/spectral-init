@@ -15,6 +15,7 @@ Thumbs.db
 
 # Project
 /temp/
+/data/
 
 # Visual eval generated outputs (large, regenerated locally)
 tests/visual_eval/output/

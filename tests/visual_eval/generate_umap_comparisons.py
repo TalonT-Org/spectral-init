@@ -49,7 +49,7 @@ def _fetch_openml(name: str, version: int, data_home: str | None) -> object:
     """Thin wrapper around fetch_openml; extracted for testability."""
     from sklearn.datasets import fetch_openml
 
-    return fetch_openml(name, version=version, as_frame=False, data_home=data_home)
+    return fetch_openml(name, version=version, as_frame=False, parser="liac-arff", data_home=data_home)
 
 
 def load_mnist(
@@ -241,10 +241,83 @@ def run_baseline(
     np.save(output_dir / f"{name}_py_final.npy", final_embedding)
     np.save(output_dir / f"{name}_labels.npy", labels.astype(np.int32))
 
+    # Generate input data reference plot
+    _make_input_plot(name, X, labels, output_dir)
+
     # Generate baseline plot
     _make_baseline_plot(
         name, init_coords, final_embedding, labels, eigenvalues, metrics, output_dir
     )
+
+
+def _make_input_plot(
+    name: str,
+    X: np.ndarray,
+    labels: np.ndarray,
+    output_dir: Path,
+) -> None:
+    """Generate a reference plot of the raw input data before any UMAP processing."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    try:
+        plt.style.use("seaborn-v0_8-whitegrid")
+    except OSError:
+        try:
+            plt.style.use("seaborn-whitegrid")
+        except OSError:
+            pass
+
+    n_features = X.shape[1]
+
+    if n_features == 3 and name.startswith("swiss_roll"):
+        # Swiss roll: show top-down 2D view + 3D view side by side
+        fig = plt.figure(figsize=(13, 5))
+        fig.suptitle(f"{name} — Raw Input Data ({n_features}D)", fontsize=13, fontweight="bold")
+
+        ax1 = fig.add_subplot(1, 2, 1)
+        ax1.scatter(X[:, 0], X[:, 2], c=labels, cmap="Spectral", s=4, alpha=0.7)
+        ax1.set_title("Top-down view (x vs z)")
+        ax1.set_xlabel("x")
+        ax1.set_ylabel("z")
+
+        ax2 = fig.add_subplot(1, 2, 2, projection="3d")
+        ax2.scatter(X[:, 0], X[:, 1], X[:, 2], c=labels, cmap="Spectral", s=2, alpha=0.6)
+        ax2.set_title("3D view")
+        ax2.set_xlabel("x")
+        ax2.set_ylabel("y")
+        ax2.set_zlabel("z")
+        ax2.view_init(elev=12, azim=-70)
+    elif n_features <= 2:
+        # 2D data: plot directly
+        fig, ax = plt.subplots(figsize=(6, 5))
+        ax.scatter(X[:, 0], X[:, 1], c=labels, cmap="tab10", s=10, alpha=0.7)
+        ax.set_title(f"{name} — Raw Input Data", fontsize=13, fontweight="bold")
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+        ax.set_aspect("equal")
+    else:
+        # High-dimensional: project to 2D via PCA
+        from sklearn.decomposition import PCA
+
+        X_2d = PCA(n_components=2, random_state=42).fit_transform(X)
+        fig, ax = plt.subplots(figsize=(6, 5))
+        ax.scatter(X_2d[:, 0], X_2d[:, 1], c=labels, cmap="tab10", s=8, alpha=0.7)
+        ax.set_title(
+            f"{name} — Raw Input Data ({n_features}D, PCA to 2D)",
+            fontsize=13,
+            fontweight="bold",
+        )
+        ax.set_xlabel("PC1")
+        ax.set_ylabel("PC2")
+
+    plt.tight_layout()
+    out_path = output_dir / f"{name}_input.png"
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  Saved input plot: {out_path}")
 
 
 def _make_baseline_plot(
@@ -466,17 +539,17 @@ def _make_comparison_plot(
 
     # Bottom row — post-SGD embeddings
     axes[1, 0].scatter(embed_py[:, 0], embed_py[:, 1], **scatter_kw)
-    axes[1, 0].set_title(f"{name} — Python Init → SGD")
+    axes[1, 0].set_title(f"{name} — Python Init → Python SGD")
     axes[1, 0].set_xticks([])
     axes[1, 0].set_yticks([])
 
     axes[1, 1].scatter(embed_rust[:, 0], embed_rust[:, 1], **scatter_kw)
-    axes[1, 1].set_title(f"{name} — Rust Init → SGD")
+    axes[1, 1].set_title(f"{name} — Rust Init → Python SGD")
     axes[1, 1].set_xticks([])
     axes[1, 1].set_yticks([])
 
     axes[1, 2].scatter(embed_rand[:, 0], embed_rand[:, 1], **scatter_kw)
-    axes[1, 2].set_title(f"{name} — Random Init → SGD")
+    axes[1, 2].set_title(f"{name} — Random Init → Python SGD")
     axes[1, 2].set_xticks([])
     axes[1, 2].set_yticks([])
 
@@ -499,14 +572,42 @@ def _make_overlay_plot(
     import matplotlib.pyplot as plt
 
     fig, ax = plt.subplots(figsize=(8, 8))
-    ax.scatter(embed_py[:, 0], embed_py[:, 1], c="blue", marker="o", alpha=0.3, s=3, label="Python Init → SGD")
-    ax.scatter(embed_rust[:, 0], embed_rust[:, 1], c="red", marker="x", alpha=0.3, s=3, label="Rust Init → SGD")
+    ax.scatter(embed_py[:, 0], embed_py[:, 1], c="blue", marker="o", alpha=0.3, s=3, label="Python Init → Python SGD")
+    ax.scatter(embed_rust[:, 0], embed_rust[:, 1], c="red", marker="x", alpha=0.3, s=3, label="Rust Init → Python SGD")
     ax.legend()
-    ax.set_title(f"{name}: Python vs Rust SGD Overlay")
+    ax.set_title(f"{name}: Python vs Rust Init Overlay (both Python SGD)")
     ax.set_xticks([])
     ax.set_yticks([])
 
     out_path = output_dir / f"{name}_overlay.png"
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  Saved plot: {out_path}")
+
+
+def _make_three_way_overlay(
+    name: str,
+    embed_py: np.ndarray,
+    embed_rust: np.ndarray,
+    embed_rand: np.ndarray,
+    output_dir: Path,
+) -> None:
+    """Generate a three-way overlay: Python spectral, Rust spectral, and random init SGD results."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(8, 8))
+    ax.scatter(embed_py[:, 0], embed_py[:, 1], c="blue", marker="o", alpha=0.3, s=3, label="Python Spectral → SGD")
+    ax.scatter(embed_rust[:, 0], embed_rust[:, 1], c="red", marker="x", alpha=0.3, s=3, label="Rust Spectral → SGD")
+    ax.scatter(embed_rand[:, 0], embed_rand[:, 1], c="green", marker="^", alpha=0.3, s=3, label="Random → SGD")
+    ax.legend()
+    ax.set_title(f"{name}: Three-Way SGD Overlay (all Python SGD)")
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+    out_path = output_dir / f"{name}_three_way_overlay.png"
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"  Saved plot: {out_path}")
@@ -561,6 +662,7 @@ def run_compare(name: str, output_dir: Path) -> dict | None:
 
     _make_comparison_plot(name, py_spectral, rust_init, embed_py, embed_rust, embed_rand, labels, output_dir)
     _make_overlay_plot(name, embed_py, embed_rust, output_dir)
+    _make_three_way_overlay(name, embed_py, embed_rust, embed_rand, output_dir)
 
     result = dict(metrics)
     result["dataset"] = name
