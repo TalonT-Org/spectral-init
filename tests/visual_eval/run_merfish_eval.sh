@@ -19,13 +19,15 @@ python "$SCRIPT_DIR/generate_merfish_comparisons.py" --phase compare
 echo ""
 echo "=== Summary ==="
 python -c "
-import json, glob
-results = sorted(glob.glob('$SCRIPT_DIR/output/merfish_*_metrics.json'))
+import json, glob, sys
+script_dir = sys.argv[1]
+results = sorted(glob.glob(script_dir + '/output/merfish_*_metrics.json'))
 if not results:
-    print('  No metrics files found in $SCRIPT_DIR/output/')
+    print('  No metrics files found in ' + script_dir + '/output/')
 else:
     for f in results:
-        m = json.load(open(f))
-        status = m['pass_fail']['overall']
+        with open(f) as fh:
+            m = json.load(fh)
+        status = m.get('pass_fail', {}).get('overall', 'UNKNOWN')
         print(f\"  {m['dataset']:30s} {status}\")
-"
+" "$SCRIPT_DIR"
