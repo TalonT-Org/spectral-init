@@ -122,6 +122,11 @@ path = "tests/visual_eval/export_rust_init.rs"
 required-features = ["testing"]
 
 [[test]]
+name = "export_merfish_init"
+path = "tests/visual_eval/export_merfish_init.rs"
+required-features = ["testing"]
+
+[[test]]
 name = "test_simd_parity"
 path = "tests/integration/test_simd_parity.rs"
 required-features = ["testing"]

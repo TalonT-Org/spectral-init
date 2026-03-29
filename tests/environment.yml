@@ -13,3 +13,5 @@ dependencies:
   - matplotlib=3.10.*
   - tqdm=4.*
   - pytest
+  - anndata
+  - h5py
