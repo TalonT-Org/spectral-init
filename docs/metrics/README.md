@@ -15,7 +15,7 @@ This directory documents all 17 metrics used in the MERFISH UMAP benchmark pipel
 | # | Metric | Category | Local/Global | Needs Labels | Needs Spatial | Complexity | Library |
 |---|--------|----------|-------------|--------------|---------------|------------|---------|
 | 1 | Trustworthiness | A | Local | No | No | O(n²) | sklearn |
-| 2 | Continuity | A | Local | No | No | O(n²) | pyDRMetrics/ZADU |
+| 2 | Continuity | A | Local | No | No | O(n²) | Custom |
 | 3 | Silhouette score | A | Cluster | Yes | No | O(n²) | sklearn |
 | 4 | Procrustes disparity | A | Global | No | No | O(n) | scipy |
 | 5 | Pairwise distance correlation | A | Global | No | No | O(n²) | scipy |
