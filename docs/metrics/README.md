@@ -31,3 +31,5 @@ This directory documents all 17 metrics used in the MERFISH UMAP benchmark pipel
 | 15 | Shepard diagram correlation | D | Global | No | No | O(n²) | Custom |
 | 16 | Centroid distance correlation | D | Global | Yes | No | O(c²) | Custom |
 | 17 | kNN preservation rate | D | Local | No | No | O(n·k) | Custom |
+
+---
