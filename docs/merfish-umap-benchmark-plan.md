@@ -320,23 +320,22 @@ def spatial_stratified_subsample(coords, n_target, grid_size=50, seed=42):
 
 ### 4.5 Runtime Data Download Script
 
-For larger subsets and the full dataset, provide a script that:
-1. Downloads from the public S3 bucket (no credentials needed)
-2. Validates checksums
-3. Extracts and caches subsets locally
+The download script is implemented at `tests/visual_eval/download_merfish.py`. It uses only Python stdlib (no anndata/polars dependency) and downloads to a **fixed absolute path** so that worktrees share the same data:
 
-```python
-# tests/visual_eval/download_merfish.py
-"""Download and prepare MERFISH data for visual evaluation.
+```bash
+# Download all files (skips any already present and valid)
+python tests/visual_eval/download_merfish.py
 
-Usage:
-    python tests/visual_eval/download_merfish.py --subset 10k
-    python tests/visual_eval/download_merfish.py --subset 100k
-    python tests/visual_eval/download_merfish.py --subset full
-"""
+# Validate existing files without downloading
+python tests/visual_eval/download_merfish.py --check
 ```
 
-This script uses **Polars** for metadata CSV loading (5-30x faster than pandas for the 630 MB cell_metadata.csv) and `anndata` with `backed='r'` for memory-mapped H5AD access.
+**Canonical data path (hardcoded, shared across worktrees):**
+```
+/home/talon/projects/spectral-init/data/merfish-abca1/
+```
+
+All code that references MERFISH data should use this absolute path, NOT a relative path. This ensures worktrees, subagents, and scripts all read from the same location without redundant downloads.
 
 ### 4.6 Dependencies
 
