@@ -40,6 +40,13 @@ fn export_merfish_init_10k() {
         .unwrap_or_else(|e| panic!("spectral_init failed on merfish_10k: {e}"));
     let elapsed = start.elapsed();
 
+    assert_eq!(coords.nrows(), n, "coords row count {} != graph node count {}", coords.nrows(), n);
+    assert_eq!(coords.ncols(), 2, "expected 2-dimensional embedding, got {} columns", coords.ncols());
+    assert!(
+        coords.iter().all(|x| x.is_finite()),
+        "coords contain NaN or Inf values"
+    );
+
     let out_path = output_dir.join("merfish_10k_rust_init.npy");
     write_npy(&out_path, &coords)
         .unwrap_or_else(|e| panic!("failed to write merfish_10k_rust_init.npy: {e}"));
