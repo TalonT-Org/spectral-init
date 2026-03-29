@@ -37,3 +37,10 @@ status-level = "fail"
 final-status-level = "fail"
 success-output = "never"
 failure-output = "immediate-final"
+
+[profile.merfish-eval]
+retries = 0
+slow-timeout = { period = "600s" }
+fail-fast = false
+default-filter = 'test(merfish)'
+# Manual-only: large graph eigensolving. Never runs in CI.
