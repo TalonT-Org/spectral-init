@@ -61,7 +61,7 @@ where `centroids_high[c] = mean(X_high[labels == c])` and similarly for the embe
 **Definition:** `kNNPR(k) = (1/n) · Σ_i (|NN_high(i,k) ∩ NN_low(i,k)| / k)`
 where NN_high(i,k) and NN_low(i,k) are the k-nearest neighbors of point i in high-D and embedding respectively.
 
-**What it measures:** The mean fraction of a point's high-dimensional k-nearest neighbors that survive in the 2D embedding — a direct local topology fidelity score. Closely related to Trustworthiness but measures recall (not false-positive neighbors).
+**What it measures:** The mean fraction of a point's high-dimensional k-nearest neighbors that survive in the 2D embedding — a direct local topology fidelity score. Closely related to Continuity (Category A, metric 2) but framed as recall: what fraction of high-D neighbors are preserved in the embedding.
 
 **Range and interpretation:** [0, 1]. Higher = better. k = 15 for comparability with UMAP's own neighborhood parameter.
 
