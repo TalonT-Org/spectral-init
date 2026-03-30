@@ -174,7 +174,11 @@ def run_baseline(output_dir: Path, data_dir: Path = _DATA_DIR) -> None:
 
 
 def run_compare(output_dir: Path) -> dict | None:
-    """Run Phase 2 three-way comparison for the MERFISH 10K dataset."""
+    """Run Phase 2 three-way comparison for the MERFISH 10K dataset.
+
+    Unlike run_baseline, this function does not accept data_dir because Phase 2
+    reads all inputs (embeddings, labels, PCA) from Phase 1 artifacts in output_dir.
+    """
     import json
     import umap as umap_lib
 
