@@ -54,16 +54,20 @@ def test_run_compare_skips_when_rust_init_missing(tmp_path):
 
 @pytest.mark.slow
 def test_run_compare_produces_output_files(tmp_path):
+    import json as _json
     from generate_merfish_comparisons import run_compare
 
     rng = np.random.RandomState(42)
     n = 200
     _write_compare_artifacts(tmp_path, rng, n)
-    run_compare(tmp_path)
-    assert (tmp_path / "merfish_10k_comparison.png").exists()
-    assert (tmp_path / "merfish_10k_overlay.png").exists()
-    assert (tmp_path / "merfish_10k_three_way_overlay.png").exists()
-    assert (tmp_path / "merfish_10k_metrics.json").exists()
+    result = run_compare(tmp_path)
+    assert result is not None
+    for png in ["merfish_10k_comparison.png", "merfish_10k_overlay.png", "merfish_10k_three_way_overlay.png"]:
+        p = tmp_path / png
+        assert p.exists() and p.stat().st_size > 0
+    metrics_path = tmp_path / "merfish_10k_metrics.json"
+    assert metrics_path.exists()
+    _json.loads(metrics_path.read_text())  # validates parseable JSON
 
 
 @pytest.mark.slow
