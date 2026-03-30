@@ -12,6 +12,8 @@ def test_load_merfish_data_shapes():
     from generate_merfish_comparisons import load_merfish_data
 
     data_dir = Path(__file__).parent / "merfish_data"
+    if not data_dir.exists():
+        pytest.skip("merfish_data/ not present — skipping data shape test")
     expression, spatial, labels, section_ids = load_merfish_data(data_dir)
     assert expression.shape == (10000, 1122) and expression.dtype == np.float32
     assert spatial.shape == (10000, 2) and spatial.dtype == np.float32
