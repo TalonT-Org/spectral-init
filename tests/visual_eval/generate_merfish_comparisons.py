@@ -47,6 +47,16 @@ def load_merfish_data(
         labels      : int32   (10000,)
         section_ids : int32   (10000,)
     """
+    for fname in [
+        "merfish_10k_expression.npz",
+        "merfish_10k_spatial.npz",
+        "merfish_10k_labels.npz",
+        "merfish_10k_section_ids.npz",
+    ]:
+        if not (data_dir / fname).exists():
+            raise FileNotFoundError(
+                f"merfish_10k: data file not found — {data_dir / fname}"
+            )
     expression = np.load(data_dir / "merfish_10k_expression.npz")["arr_0"].astype(np.float32)
     spatial = np.load(data_dir / "merfish_10k_spatial.npz")["arr_0"].astype(np.float32)
     labels = np.load(data_dir / "merfish_10k_labels.npz")["arr_0"].astype(np.int32)
