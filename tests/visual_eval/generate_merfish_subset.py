@@ -9,6 +9,7 @@ Usage:
 import argparse
 import hashlib
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -17,7 +18,7 @@ import numpy as np
 import polars as pl
 from scipy.stats import spearmanr
 
-DATA_DIR = Path("/home/talon/projects/spectral-init/data/merfish-abca1")
+DATA_DIR = Path(os.environ.get("MERFISH_DATA_DIR", "/home/talon/projects/spectral-init/data/merfish-abca1"))
 OUTPUT_DIR = Path(__file__).parent / "merfish_data"
 N_TARGET = 10_000
 GRID_SIZE = 50
