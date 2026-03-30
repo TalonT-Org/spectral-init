@@ -68,6 +68,7 @@ def spatial_stratified_subsample(
         sign = 1 if diff > 0 else -1
         for i in range(abs(diff)):
             per_bin_n[sort_idx[i % len(sort_idx)]] += sign
+        per_bin_n = np.maximum(0, per_bin_n)
 
     indices = []
     for bid, n_sample in zip(unique_bins, per_bin_n):
