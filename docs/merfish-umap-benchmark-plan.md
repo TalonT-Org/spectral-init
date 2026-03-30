@@ -1412,28 +1412,32 @@ This is optional infrastructure — the pipeline should work on CPU-only first, 
 
 This section maps the plan into concrete GitHub issues for sequential implementation. Issues are grouped into batches that can be processed independently.
 
-### Batch 1: Foundation (No Data Required)
+### Batch 1: Foundation (No Data Required) — DONE
 
-| Issue | Title | Description |
-|---|---|---|
-| 1.1 | Create `docs/metrics/` documentation structure | Create `docs/metrics/README.md` with metric catalog from Section 10. Add per-category metric docs. |
-| 1.2 | Add `merfish-eval` nextest profile | Add profile to `.config/nextest.toml`. Add `#[ignore]` pattern for MERFISH tests. |
-| 1.3 | Add MERFISH data directory structure | Create `tests/visual_eval/merfish_data/` with `.gitkeep`. Update `.gitignore` for large MERFISH files. |
+| Issue | Title | Status | PR |
+|---|---|---|---|
+| 1.1 | Create `docs/metrics/` documentation structure | Merged | #188 |
+| 1.2 | Add `merfish-eval` nextest profile and test infrastructure | Merged | #187 |
+| 1.3 | Add MERFISH data directory structure | Done (pre-PR) | — |
 
-### Batch 2: Data Acquisition
+### Batch 2: Data Acquisition — DONE
 
-| Issue | Title | Description |
-|---|---|---|
-| 2.1 | Implement MERFISH download script | `tests/visual_eval/download_merfish.py` — downloads from S3, validates checksums, extracts subsets. Uses Polars for metadata CSV loading. |
-| 2.2 | Generate and commit 10K subset | Run download script, generate spatially-stratified 10K subset, commit compressed `.npz` to repo. Validate cell-type composition matches full dataset proportions. |
+| Issue | Title | Status | PR |
+|---|---|---|---|
+| 2.1 | Implement MERFISH download script | Done (pre-PR) | — |
+| 2.2 | Generate and commit 10K subset | Merged | #190 |
 
 ### Batch 3: Pipeline Integration (Answers RQ-1.1 through RQ-1.4)
 
+**Note:** The implementation uses a dedicated `generate_merfish_comparisons.py` script
+rather than modifying the generic `generate_umap_comparisons.py`. The shell orchestrator
+`run_merfish_eval.sh` already calls this script. Issues 3.1 and 3.2 are collapsed into
+a single issue since spatial coordinates are integral to the MERFISH pipeline.
+
 | Issue | Title | Description |
 |---|---|---|
-| 3.1 | Implement `load_merfish()` in `generate_umap_comparisons.py` | Replace `NotImplementedError` stub. Load from `merfish_data/` directory. Return (expression, labels, spatial_coords, name). |
-| 3.2 | Add spatial coordinates to pipeline data flow | Extend the pipeline to carry spatial coordinates through all phases. Add `_spatial.npy` output alongside existing artifacts. |
-| 3.3 | Run preprocessing parameter sweep on 10K subset | Test normalization × n_pcs × metric combinations. Record spectral gap for each. Document winning configuration. |
+| 3.1 | Implement `generate_merfish_comparisons.py` | Create the MERFISH-specific UMAP comparison script called by `run_merfish_eval.sh`. Load 10K subset from `merfish_data/`, run preprocessing (normalize → PCA → kNN), generate Python baseline (spectral init + SGD), export graph for Rust, run three-way comparison (Python vs Rust vs Random), compute Category A metrics, generate plots. Spatial coordinates flow through all phases. |
+| 3.2 | Run preprocessing parameter sweep on 10K subset | Test normalization × n_pcs × metric combinations. Record spectral gap for each. Document winning configuration. |
 
 ### Batch 4: Metric Implementation
 
