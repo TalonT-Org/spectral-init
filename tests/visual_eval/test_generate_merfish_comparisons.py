@@ -23,7 +23,7 @@ def test_load_merfish_data_shapes():
 
 def test_export_graph_format(tmp_path):
     import scipy.sparse
-    from generate_merfish_comparisons import export_graph
+    from generate_umap_comparisons import export_graph
 
     rng = np.random.RandomState(0)
     G = scipy.sparse.random(50, 50, density=0.1, format="csr", random_state=rng).astype(
