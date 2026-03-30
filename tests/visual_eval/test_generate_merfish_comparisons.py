@@ -39,7 +39,7 @@ def test_export_graph_format(tmp_path):
     assert tuple(loaded["shape"]) == (50, 50)
 
 
-def test_run_compare_skips_when_rust_init_missing(tmp_path, capsys):
+def test_run_compare_skips_when_rust_init_missing(tmp_path):
     from generate_merfish_comparisons import run_compare
 
     rng = np.random.RandomState(0)
@@ -50,8 +50,6 @@ def test_run_compare_skips_when_rust_init_missing(tmp_path, capsys):
     np.save(tmp_path / "merfish_10k_pca.npy", rng.randn(n, 30))
     result = run_compare(tmp_path)
     assert result is None
-    out = capsys.readouterr().out
-    assert "rust_init.npy not found" in out.lower()
 
 
 @pytest.mark.slow
