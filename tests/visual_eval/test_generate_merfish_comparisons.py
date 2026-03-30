@@ -52,6 +52,14 @@ def test_run_compare_skips_when_rust_init_missing(tmp_path):
     assert result is None
 
 
+def _write_compare_artifacts(tmp_path, rng, n):
+    np.save(tmp_path / "merfish_10k_py_spectral.npy", rng.randn(n, 2))
+    np.save(tmp_path / "merfish_10k_py_final.npy", rng.randn(n, 2).astype(np.float32))
+    np.save(tmp_path / "merfish_10k_rust_init.npy", rng.randn(n, 2))
+    np.save(tmp_path / "merfish_10k_labels.npy", (rng.rand(n) * 3).astype(np.int32))
+    np.save(tmp_path / "merfish_10k_pca.npy", rng.randn(n, 30).astype(np.float64))
+
+
 @pytest.mark.slow
 def test_run_compare_produces_output_files(tmp_path):
     import json as _json
@@ -104,11 +112,3 @@ def test_cli_accepts_phase_baseline_and_compare():
         text=True,
     )
     assert r_missing.returncode != 0
-
-
-def _write_compare_artifacts(tmp_path, rng, n):
-    np.save(tmp_path / "merfish_10k_py_spectral.npy", rng.randn(n, 2))
-    np.save(tmp_path / "merfish_10k_py_final.npy", rng.randn(n, 2).astype(np.float32))
-    np.save(tmp_path / "merfish_10k_rust_init.npy", rng.randn(n, 2))
-    np.save(tmp_path / "merfish_10k_labels.npy", (rng.rand(n) * 3).astype(np.int32))
-    np.save(tmp_path / "merfish_10k_pca.npy", rng.randn(n, 30).astype(np.float64))
