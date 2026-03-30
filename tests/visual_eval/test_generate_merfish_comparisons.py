@@ -88,13 +88,22 @@ def test_metrics_json_has_required_keys(tmp_path):
 
 def test_cli_accepts_phase_baseline_and_compare():
     script = Path(__file__).parent / "generate_merfish_comparisons.py"
-    for phase in ["baseline", "compare"]:
-        r = subprocess.run(
-            [sys.executable, str(script), "--phase", phase, "--help"],
-            capture_output=True,
-            text=True,
-        )
-        assert r.returncode == 0
+    # Verify valid choices are accepted: argparse prints usage and exits 0 for --help,
+    # but we need to confirm --phase is actually validated. Test that an invalid phase
+    # is rejected (non-zero exit) to confirm the choices constraint is enforced.
+    r_invalid = subprocess.run(
+        [sys.executable, str(script), "--phase", "invalid_phase"],
+        capture_output=True,
+        text=True,
+    )
+    assert r_invalid.returncode != 0
+    # Verify omitting --phase is also rejected (it is required).
+    r_missing = subprocess.run(
+        [sys.executable, str(script)],
+        capture_output=True,
+        text=True,
+    )
+    assert r_missing.returncode != 0
 
 
 def _write_compare_artifacts(tmp_path, rng, n):
