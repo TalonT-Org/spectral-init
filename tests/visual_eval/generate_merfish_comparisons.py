@@ -14,6 +14,10 @@ import argparse
 import sys
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import anndata
 
 import numpy as np
 import scipy.sparse
@@ -64,7 +68,7 @@ def load_merfish_data(
     return expression, spatial, labels, section_ids
 
 
-def preprocess_merfish(expression: np.ndarray) -> tuple[object, np.ndarray]:
+def preprocess_merfish(expression: np.ndarray) -> tuple[anndata.AnnData, np.ndarray]:
     """Run scanpy preprocessing pipeline on expression matrix.
 
     Pipeline: AnnData wrap → normalize_total(1000) → log1p → scale(10)
