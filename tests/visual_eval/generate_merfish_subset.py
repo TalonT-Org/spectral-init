@@ -21,6 +21,7 @@ from scipy.stats import spearmanr
 DATA_DIR = Path(os.environ.get("MERFISH_DATA_DIR", "/home/talon/projects/spectral-init/data/merfish-abca1"))
 OUTPUT_DIR = Path(__file__).parent / "merfish_data"
 N_TARGET = 10_000
+N_GENES = 1122
 GRID_SIZE = 50
 SEED = 42
 
@@ -154,8 +155,8 @@ def _print_validation_summary(
     # ~80% of types have 0 in the subset, creating massive rank ties. The achievable
     # Spearman (even with random sampling) is ~0.56. Threshold is 0.50.
     spearman_pass = spearman_r > 0.50
-    expr_pass = expr_shape == (10000, 1122)
-    all_pass = spearman_pass and expr_pass and n_cells == 10000 and n_genes == 1122
+    expr_pass = expr_shape == (N_TARGET, N_GENES)
+    all_pass = spearman_pass and expr_pass and n_cells == N_TARGET and n_genes == N_GENES
 
     print("MERFISH 10K Subset Validation")
     print(f"  n_cells:           {n_cells}")
@@ -243,8 +244,8 @@ def generate_subset() -> None:
     }
     n_sections = len(set(subset_df["brain_section_label"].to_list()))
     meta = {
-        "n_cells": 10000,
-        "n_genes": 1122,
+        "n_cells": N_TARGET,
+        "n_genes": N_GENES,
         "n_sections_sampled": n_sections,
         "spatial_extent": {
             "x_min": float(spatial_arr[:, 0].min()),
@@ -269,8 +270,8 @@ def generate_subset() -> None:
 
     # 14. Print validation summary
     all_pass = _print_validation_summary(
-        n_cells=10000,
-        n_genes=1122,
+        n_cells=N_TARGET,
+        n_genes=N_GENES,
         n_sections=n_sections,
         spearman_r=spearman_r,
         expr_shape=expr_matrix.shape,
@@ -302,26 +303,26 @@ def validate_subset() -> None:
 
     # Load and check .npz files
     expr = np.load(OUTPUT_DIR / "merfish_10k_expression.npz")["arr_0"]
-    if expr.shape != (10000, 1122):
-        failures.append(f"expression shape {expr.shape} != (10000, 1122)")
+    if expr.shape != (N_TARGET, N_GENES):
+        failures.append(f"expression shape {expr.shape} != ({N_TARGET}, {N_GENES})")
     if expr.dtype != np.float32:
         failures.append(f"expression dtype {expr.dtype} != float32")
 
     spatial = np.load(OUTPUT_DIR / "merfish_10k_spatial.npz")["arr_0"]
-    if spatial.shape != (10000, 2):
-        failures.append(f"spatial shape {spatial.shape} != (10000, 2)")
+    if spatial.shape != (N_TARGET, 2):
+        failures.append(f"spatial shape {spatial.shape} != ({N_TARGET}, 2)")
     if spatial.dtype != np.float32:
         failures.append(f"spatial dtype {spatial.dtype} != float32")
 
     labels = np.load(OUTPUT_DIR / "merfish_10k_labels.npz")["arr_0"]
-    if labels.shape != (10000,):
-        failures.append(f"labels shape {labels.shape} != (10000,)")
+    if labels.shape != (N_TARGET,):
+        failures.append(f"labels shape {labels.shape} != ({N_TARGET},)")
     if labels.dtype != np.int32:
         failures.append(f"labels dtype {labels.dtype} != int32")
 
     section_ids = np.load(OUTPUT_DIR / "merfish_10k_section_ids.npz")["arr_0"]
-    if section_ids.shape != (10000,):
-        failures.append(f"section_ids shape {section_ids.shape} != (10000,)")
+    if section_ids.shape != (N_TARGET,):
+        failures.append(f"section_ids shape {section_ids.shape} != ({N_TARGET},)")
     if section_ids.dtype != np.int32:
         failures.append(f"section_ids dtype {section_ids.dtype} != int32")
 
@@ -329,10 +330,10 @@ def validate_subset() -> None:
     with open(OUTPUT_DIR / "merfish_10k_meta.json") as f:
         meta = json.load(f)
 
-    if meta["n_cells"] != 10000:
-        failures.append(f"n_cells {meta['n_cells']} != 10000")
-    if meta["n_genes"] != 1122:
-        failures.append(f"n_genes {meta['n_genes']} != 1122")
+    if meta["n_cells"] != N_TARGET:
+        failures.append(f"n_cells {meta['n_cells']} != {N_TARGET}")
+    if meta["n_genes"] != N_GENES:
+        failures.append(f"n_genes {meta['n_genes']} != {N_GENES}")
     if meta["freq_spearman_r"] <= 0.50:
         failures.append(f"freq_spearman_r {meta['freq_spearman_r']:.4f} <= 0.50")
     extent = meta["spatial_extent"]
