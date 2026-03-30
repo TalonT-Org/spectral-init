@@ -205,19 +205,19 @@ def generate_subset() -> None:
     print(f"Opening H5AD: {h5ad_path}")
     adata = anndata.read_h5ad(str(h5ad_path), backed="r")
     print(f"  H5AD shape: {adata.shape}")
+    try:
+        # 6. Map cell_labels to H5AD row indices
+        obs_index = build_obs_index(adata)
+        cell_labels = subset_df["cell_label"].to_list()
+        h5ad_indices = np.array([obs_index[lbl] for lbl in cell_labels], dtype=np.int64)
 
-    # 6. Map cell_labels to H5AD row indices
-    obs_index = build_obs_index(adata)
-    cell_labels = subset_df["cell_label"].to_list()
-    h5ad_indices = np.array([obs_index[lbl] for lbl in cell_labels], dtype=np.int64)
-
-    # 7. Extract expression matrix
-    print("Extracting expression matrix (backed='r')...")
-    expr_matrix = extract_expression(adata, h5ad_indices)
-    print(f"  Expression shape: {expr_matrix.shape}, dtype: {expr_matrix.dtype}")
-
-    # 8. Close backed file
-    adata.file.close()
+        # 7. Extract expression matrix
+        print("Extracting expression matrix (backed='r')...")
+        expr_matrix = extract_expression(adata, h5ad_indices)
+        print(f"  Expression shape: {expr_matrix.shape}, dtype: {expr_matrix.dtype}")
+    finally:
+        # 8. Close backed file
+        adata.file.close()
 
     # 9. Build output arrays
     spatial_arr = subset_df.select(["x", "y"]).to_numpy().astype(np.float32)
