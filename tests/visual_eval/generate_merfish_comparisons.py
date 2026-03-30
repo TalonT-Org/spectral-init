@@ -140,6 +140,10 @@ def run_baseline(output_dir: Path, data_dir: Path = _DATA_DIR) -> None:
             f"(matrix shape {L.shape})"
         ) from exc
     eigenvalues = np.sort(np.maximum(eigenvalues, 0.0))
+    if len(eigenvalues) != 10:
+        raise RuntimeError(
+            f"eigsh returned {len(eigenvalues)} eigenvalues; expected 10"
+        )
 
     # Compute baseline metrics for plot
     tw = trustworthiness(X_pca, final_embedding, n_neighbors=15)
