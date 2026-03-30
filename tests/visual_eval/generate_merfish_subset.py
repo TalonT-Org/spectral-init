@@ -279,8 +279,8 @@ def generate_subset() -> None:
         checksum=checksum_hex,
     )
 
-    if spearman_r <= 0.50:
-        raise ValueError(f"Validation FAILED — freq_spearman_r {spearman_r:.4f} <= 0.50. See summary above.")
+    if not all_pass:
+        raise ValueError("Validation FAILED — see summary above.")
 
 
 def validate_subset() -> None:
