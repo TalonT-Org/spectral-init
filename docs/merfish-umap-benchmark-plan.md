@@ -478,21 +478,35 @@ Test on `merfish_10k` subset, validate on `merfish_100k`:
 **Winner selection criterion:** Highest spectral gap with trustworthiness > 0.95
 
 | rank | normalization | n_pcs | metric | spectral_gap | condition_number | n_components | trustworthiness | silhouette | wall_time_s |
-|------|---------------|-------|--------|--------------|-----------------|--------------|-----------------|------------|-------------|
-| 1    | _TBD_         | _TBD_ | _TBD_  | _TBD_        | _TBD_           | _TBD_        | _TBD_           | _TBD_      | _TBD_       |
-| ...  | ...           | ...   | ...    | ...          | ...             | ...          | ...             | ...        | ...         |
+|------|---------------|-------|--------|--------------|------------------|--------------|-----------------|------------|-------------|
+| 1 | normalize_total+log1p | 10 | euclidean | 0.0018 | 3.5793 | 1 | 0.9902 | -0.4118 | 22.32 |
+| 2 | normalize_total+log1p | 20 | euclidean | 0.0018 | 4.1087 | 1 | 0.9901 | -0.3630 | 12.91 |
+| 3 | log2 | 20 | euclidean | 0.0015 | 3.9236 | 1 | 0.9891 | -0.3256 | 11.59 |
+| 4 | log2 | 30 | euclidean | 0.0015 | 3.4778 | 1 | 0.9889 | -0.3170 | 12.45 |
+| 5 | log2 | 10 | euclidean | 0.0014 | 3.8374 | 1 | 0.9890 | -0.4042 | 10.97 |
+| 6 | normalize_total+log1p | 50 | euclidean | 0.0013 | 5.7039 | 1 | 0.9866 | -0.3403 | 14.10 |
+| 7 | normalize_total+log1p | 30 | cosine | 0.0009 | 4.5924 | 1 | 0.9861 | -0.3434 | 11.82 |
+| 8 | normalize_total+log1p | 10 | cosine | 0.0009 | 7.4400 | 1 | 0.9832 | -0.4000 | 14.27 |
+| 9 | normalize_total+log1p | 20 | cosine | 0.0008 | 4.4634 | 1 | 0.9871 | -0.3712 | 11.92 |
+| 10 | log2 | 10 | cosine | 0.0008 | 6.2229 | 1 | 0.9802 | -0.3701 | 10.71 |
+| 11 | log2 | 30 | cosine | 0.0006 | 5.3513 | 1 | 0.9861 | -0.3279 | 11.79 |
+| 12 | log2 | 20 | cosine | 0.0006 | 5.6272 | 1 | 0.9846 | -0.3332 | 11.64 |
+| 13 | log2 | 50 | cosine | 0.0000 | 68098.6781 | 2 | 0.9855 | -0.3207 | 13.07 |
+| 14 | log2 | 50 | euclidean | 0.0000 | 232640.6998 | 3 | 0.9877 | -0.3298 | 13.51 |
+| 15 | normalize_total+log1p | 30 | euclidean | 0.0000 | 1443164.8160 | 2 | 0.9885 | -0.3571 | 12.98 |
+| 16 | normalize_total+log1p | 50 | cosine | 0.0000 | 9561835.3729 | 1 | 0.9843 | -0.3089 | 12.30 |
 
 **Winning configuration:**
-- normalization: _TBD_
-- n_pcs: _TBD_
-- metric: _TBD_
+- normalization: normalize_total+log1p
+- n_pcs: 10
+- metric: euclidean
 
 **Research question answers:**
-- **RQ-1.1** (normalization): _TBD — which normalization produces higher spectral gap?_
-- **RQ-1.2** (PCA dims): _TBD — what is the optimal n_pcs for 1,122 MERFISH genes?_
-- **RQ-1.4** (distance metric): _TBD — does cosine vs euclidean affect quality?_
+- **RQ-1.1** (normalization): `normalize_total+log1p` achieved a higher mean spectral_gap (0.000945) than `log2` (0.000795) across all 8 of its configurations — a difference of 0.000150 (19% higher). `normalize_total+log1p` is the preferred normalization.
+- **RQ-1.2** (PCA dims): The winning configuration uses n_pcs=10. For `normalize_total+log1p`, spectral_gap peaks at n_pcs=10 (0.0018) and n_pcs=20 (0.0018), then degrades sharply at n_pcs=30 (euclidean graph disconnects: spectral_gap≈0) and partially recovers at n_pcs=50 (euclidean: 0.0013, cosine: ≈0). Fewer PCA dimensions preserve k-NN graph connectivity better for 1,122 MERFISH genes — n_pcs ≤ 20 is optimal.
+- **RQ-1.4** (distance metric): No normalization/n_pcs pairing exceeded the 0.01 spectral_gap difference threshold between euclidean and cosine (maximum observed difference: 0.0013). Cosine and euclidean are equivalent for this dataset by the defined criterion. Euclidean is systematically preferred (higher or equal spectral_gap in 7/8 pairings).
 
-**generate_merfish_comparisons.py update:** _TBD (updated / no change needed)_
+**generate_merfish_comparisons.py update:** Updated n_comps and n_pcs to 10 in `preprocess_merfish()` in `generate_merfish_comparisons.py`.
 
 Full results saved to: `tests/visual_eval/output/merfish_preprocessing_sweep.csv`
 

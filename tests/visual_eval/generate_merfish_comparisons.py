@@ -77,11 +77,11 @@ def preprocess_merfish(expression: np.ndarray) -> tuple[anndata.AnnData, np.ndar
     applied correctly.
 
     Pipeline: back-transform(log2→raw) → normalize_total(1000) → log1p
-              → scale(10) → pca(30) → neighbors(15, 30, euclidean)
+              → scale(10) → pca(10) → neighbors(15, 10, euclidean)
 
     Returns:
         adata  : AnnData with .obsm['X_pca'] populated
-        X_pca  : float64 ndarray (n, 30)
+        X_pca  : float64 ndarray (n, 10)
     """
     import anndata
     import scanpy as sc
@@ -91,8 +91,8 @@ def preprocess_merfish(expression: np.ndarray) -> tuple[anndata.AnnData, np.ndar
     sc.pp.normalize_total(adata, target_sum=1000)
     sc.pp.log1p(adata)
     sc.pp.scale(adata, max_value=10)
-    sc.tl.pca(adata, n_comps=30)
-    sc.pp.neighbors(adata, n_neighbors=15, n_pcs=30, metric="euclidean")
+    sc.tl.pca(adata, n_comps=10)
+    sc.pp.neighbors(adata, n_neighbors=15, n_pcs=10, metric="euclidean")
     X_pca = adata.obsm["X_pca"].astype(np.float64)
     return adata, X_pca
 
