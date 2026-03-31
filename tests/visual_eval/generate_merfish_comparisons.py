@@ -71,8 +71,13 @@ def load_merfish_data(
 def preprocess_merfish(expression: np.ndarray) -> tuple[anndata.AnnData, np.ndarray]:
     """Run scanpy preprocessing pipeline on expression matrix.
 
-    Pipeline: AnnData wrap → normalize_total(1000) → log1p → scale(10)
-              → pca(30) → neighbors(15, 30, euclidean)
+    The input ``expression`` stores log2(count+1) values extracted directly from
+    the Zhuang-ABCA-1 H5AD file.  We back-transform to raw counts before
+    applying normalize_total so that the Zhuang lab normalization pipeline is
+    applied correctly.
+
+    Pipeline: back-transform(log2→raw) → normalize_total(1000) → log1p
+              → scale(10) → pca(30) → neighbors(15, 30, euclidean)
 
     Returns:
         adata  : AnnData with .obsm['X_pca'] populated
@@ -81,7 +86,8 @@ def preprocess_merfish(expression: np.ndarray) -> tuple[anndata.AnnData, np.ndar
     import anndata
     import scanpy as sc
 
-    adata = anndata.AnnData(X=expression.astype(np.float32))
+    raw_counts = np.exp2(expression) - 1.0  # 2^log2(count+1) − 1 = raw count
+    adata = anndata.AnnData(X=raw_counts.astype(np.float32))
     sc.pp.normalize_total(adata, target_sum=1000)
     sc.pp.log1p(adata)
     sc.pp.scale(adata, max_value=10)

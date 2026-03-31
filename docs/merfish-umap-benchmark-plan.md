@@ -472,6 +472,30 @@ Test on `merfish_10k` subset, validate on `merfish_100k`:
 
 **Winner selection:** Maximize spectral gap subject to trustworthiness > 0.85 and silhouette > 0.2.
 
+### 5.8.1 Sweep Results (Issue #193, 2026-03-30)
+
+**Status:** Complete
+**Winner selection criterion:** Highest spectral gap with trustworthiness > 0.95
+
+| rank | normalization | n_pcs | metric | spectral_gap | condition_number | n_components | trustworthiness | silhouette | wall_time_s |
+|------|---------------|-------|--------|--------------|-----------------|--------------|-----------------|------------|-------------|
+| 1    | _TBD_         | _TBD_ | _TBD_  | _TBD_        | _TBD_           | _TBD_        | _TBD_           | _TBD_      | _TBD_       |
+| ...  | ...           | ...   | ...    | ...          | ...             | ...          | ...             | ...        | ...         |
+
+**Winning configuration:**
+- normalization: _TBD_
+- n_pcs: _TBD_
+- metric: _TBD_
+
+**Research question answers:**
+- **RQ-1.1** (normalization): _TBD — which normalization produces higher spectral gap?_
+- **RQ-1.2** (PCA dims): _TBD — what is the optimal n_pcs for 1,122 MERFISH genes?_
+- **RQ-1.4** (distance metric): _TBD — does cosine vs euclidean affect quality?_
+
+**generate_merfish_comparisons.py update:** _TBD (updated / no change needed)_
+
+Full results saved to: `tests/visual_eval/output/merfish_preprocessing_sweep.csv`
+
 ### 5.9 Output Artifacts Per Configuration
 
 - `merfish_{n}_{config}_graph.npz` — fuzzy kNN graph in Rust CSR format
