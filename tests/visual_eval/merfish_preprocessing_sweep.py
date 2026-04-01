@@ -147,8 +147,24 @@ def run_config(
 
 def run_sweep(data_dir: Path = DATA_DIR) -> pd.DataFrame:
     """Run all 16 preprocessing configurations and return results as a DataFrame."""
-    expression = np.load(data_dir / "merfish_10k_expression.npz")["arr_0"].astype(np.float32)
-    labels = np.load(data_dir / "merfish_10k_labels.npz")["arr_0"].astype(np.int32)
+    expr_npz = np.load(data_dir / "merfish_10k_expression.npz")
+    if "arr_0" not in expr_npz:
+        raise KeyError(f"'arr_0' not found in merfish_10k_expression.npz; keys: {list(expr_npz)}")
+    expression = expr_npz["arr_0"].astype(np.float32)
+    if expression.ndim != 2:
+        raise ValueError(f"Expected 2-D expression array, got shape {expression.shape}")
+
+    lbl_npz = np.load(data_dir / "merfish_10k_labels.npz")
+    if "arr_0" not in lbl_npz:
+        raise KeyError(f"'arr_0' not found in merfish_10k_labels.npz; keys: {list(lbl_npz)}")
+    labels = lbl_npz["arr_0"].astype(np.int32)
+    if labels.ndim != 1:
+        raise ValueError(f"Expected 1-D labels array, got shape {labels.shape}")
+    if labels.shape[0] != expression.shape[0]:
+        raise ValueError(
+            f"expression and labels first dimension mismatch: "
+            f"{expression.shape[0]} vs {labels.shape[0]}"
+        )
 
     configs = list(itertools.product(NORMALIZATIONS, PCA_DIMS, METRICS))
     results = []
