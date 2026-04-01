@@ -83,6 +83,8 @@ def spatial_distance_correlation(
     d_spatial = pdist(spatial_coords[idx])
     d_embed = pdist(embedding[idx])
     rho, _ = spearmanr(d_spatial, d_embed)
+    if np.isnan(rho):
+        return 0.0
     return float(rho)
 
 
