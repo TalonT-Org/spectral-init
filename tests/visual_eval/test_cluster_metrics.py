@@ -7,8 +7,8 @@ def _make_cluster_blobs(n_clusters=5, n_per_cluster=60, seed=42):
 
     Returns
     -------
-    embedding : (300, 2) float64 — UMAP-like 2-D coordinates
-    true_labels : (300,) int — cluster IDs 0..n_clusters-1
+    embedding : (n_clusters * n_per_cluster, 2) float64 — UMAP-like 2-D coordinates
+    true_labels : (n_clusters * n_per_cluster,) int — cluster IDs 0..n_clusters-1
     """
     from sklearn.datasets import make_blobs
 
@@ -61,7 +61,7 @@ def test_perfect_alignment_gives_scores_near_one():
 
 
 def test_random_permutation_gives_ari_near_zero():
-    """Randomly permuted reference labels give ARI ≈ 0.0."""
+    """Randomly permuted reference labels give ARI ≈ 0.0, NMI ≈ 0.0, and degraded purity."""
     embedding, true_labels = _make_cluster_blobs()
     rng = np.random.RandomState(0)
     permuted = rng.permutation(true_labels)
@@ -69,6 +69,8 @@ def test_random_permutation_gives_ari_near_zero():
 
     result = compute_cluster_metrics(embedding, permuted)
     assert abs(result["ari"]) < 0.1, f"ARI not near zero: {result['ari']}"
+    assert result["nmi"] < 0.1, f"NMI not near zero: {result['nmi']}"
+    assert result["celltype_purity"] < 0.4, f"purity not sufficiently degraded: {result['celltype_purity']}"
 
 
 def test_compute_cluster_metrics_returns_required_keys():
