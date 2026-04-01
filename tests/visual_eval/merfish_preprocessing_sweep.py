@@ -155,7 +155,7 @@ def run_sweep(data_dir: Path = DATA_DIR) -> pd.DataFrame:
     configs = list(itertools.product(NORMALIZATIONS, PCA_DIMS, METRICS))
     results = []
     for i, (norm, n_pcs, metric) in enumerate(configs, 1):
-        print(f"[{i:2d}/16] norm={norm!s:<25s} n_pcs={n_pcs:2d}  metric={metric} ...", flush=True)
+        print(f"[{i:2d}/{len(configs)}] norm={norm!s:<25s} n_pcs={n_pcs:2d}  metric={metric} ...", flush=True)
         row = run_config(expression, labels, norm, n_pcs, metric)
         results.append(row)
         print(
