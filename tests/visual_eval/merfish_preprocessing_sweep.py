@@ -212,11 +212,11 @@ def print_summary(df: pd.DataFrame, winner: pd.Series) -> None:
     print(f"  spectral_gap  : {winner['spectral_gap']:.4f}")
     print(f"  condition_num : {winner['condition_number']:.2f}")
     print(f"  n_components  : {int(winner['n_components'])}")
-    print(f"  trustworthness: {winner['trustworthiness']:.4f}")
+    print(f"  trustworthiness: {winner['trustworthiness']:.4f}")
     print(f"  silhouette    : {winner['silhouette']:.4f}")
     print(f"  wall_time_s   : {winner['wall_time_s']:.1f}s")
     # Report diff vs defaults
-    defaults = {"normalization": "normalize_total+log1p", "n_pcs": 30, "metric": "euclidean"}
+    defaults = {"normalization": "normalize_total+log1p", "n_pcs": 10, "metric": "euclidean"}
     diffs = {k: (defaults[k], winner[k]) for k in defaults if defaults[k] != winner[k]}
     if diffs:
         print("\n  NOTE: Winner differs from current defaults in generate_merfish_comparisons.py:")
