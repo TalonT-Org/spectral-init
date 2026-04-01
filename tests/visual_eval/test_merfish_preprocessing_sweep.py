@@ -1,22 +1,22 @@
 """Unit tests for merfish_preprocessing_sweep.py."""
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import pytest
 
-# Ensure the visual_eval directory is on sys.path so the sweep module is importable.
-sys.path.insert(0, str(Path(__file__).parent))
+from merfish_preprocessing_sweep import (
+    METRICS,
+    NORMALIZATIONS,
+    PCA_DIMS,
+    apply_normalization,
+    select_winner,
+)
 
 
 # ---------------------------------------------------------------------------
 # Test 1 — Parameter grid completeness
 # ---------------------------------------------------------------------------
-
-from merfish_preprocessing_sweep import NORMALIZATIONS, PCA_DIMS, METRICS
 
 
 def test_parameter_grid_size():
@@ -35,8 +35,6 @@ def test_parameter_grid_values():
 # ---------------------------------------------------------------------------
 # Test 2 — apply_normalization() — log2 variant
 # ---------------------------------------------------------------------------
-
-from merfish_preprocessing_sweep import apply_normalization
 
 
 def test_apply_normalization_log2_passthrough():
@@ -62,6 +60,10 @@ def test_apply_normalization_normalize_total_log1p_back_transforms():
     assert not np.allclose(result, log2_vals, atol=1e-3)
     # All values must be non-negative (log1p output >= 0)
     assert np.all(result >= -1e-6)
+    # After normalize_total(target_sum=1000), raw counts per row should sum to ~1000
+    # before log1p is applied. Verify by checking that exp(result) - 1 row sums are ~1000.
+    back = np.expm1(result)
+    np.testing.assert_allclose(back.sum(axis=1), [1000.0, 1000.0], rtol=1e-4)
 
 
 def test_apply_normalization_unknown_raises():
@@ -73,8 +75,6 @@ def test_apply_normalization_unknown_raises():
 # ---------------------------------------------------------------------------
 # Test 4 — select_winner() — normal case
 # ---------------------------------------------------------------------------
-
-from merfish_preprocessing_sweep import select_winner
 
 
 def test_select_winner_highest_spectral_gap_above_threshold():
