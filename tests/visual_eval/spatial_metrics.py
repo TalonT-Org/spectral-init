@@ -107,6 +107,8 @@ def morans_i(
     float in [-1, 1].
     """
     n = len(values)
+    if n <= k:
+        return 0.0
     z = values - np.mean(values)
 
     nn = NearestNeighbors(n_neighbors=k + 1, algorithm="kd_tree")
