@@ -92,6 +92,11 @@ def run_config(
     X_pca = adata.obsm["X_pca"].astype(np.float64)
 
     # Normalized Laplacian eigenvalues (same construction as run_baseline)
+    if "connectivities" not in adata.obsp:
+        raise RuntimeError(
+            f"sc.pp.neighbors did not produce 'connectivities' for "
+            f"norm={norm}, n_pcs={n_pcs}, metric={metric}"
+        )
     graph = adata.obsp["connectivities"]
     degree = np.array(graph.sum(axis=1)).flatten()
     D_inv_sqrt = diags(1.0 / np.sqrt(np.maximum(degree, 1e-10)))
