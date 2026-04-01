@@ -144,9 +144,9 @@ def chaos_score(
     -------
     float >= 0.
     """
-    n = len(labels)
     unique_clusters = np.unique(labels)
     total_weighted = 0.0
+    n_participating = 0
 
     for c in unique_clusters:
         mask = labels == c
@@ -158,8 +158,11 @@ def chaos_score(
         nn.fit(coords_c)
         dists, _ = nn.kneighbors(coords_c)
         total_weighted += n_c * dists[:, 1].mean()
+        n_participating += n_c
 
-    return float(total_weighted / n)
+    if n_participating == 0:
+        return 0.0
+    return float(total_weighted / n_participating)
 
 
 def pas_score(
