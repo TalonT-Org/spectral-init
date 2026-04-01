@@ -1,6 +1,5 @@
 """Smoke tests for spatial_metrics.py — Category B spatial correlation metrics."""
 import numpy as np
-import pytest
 
 
 def _make_spatial_blobs(n_per_cluster=80, seed=42):
@@ -179,7 +178,7 @@ def test_chaos_skips_singleton_clusters():
     assert isinstance(result, float) and result >= 0.0
 
 
-def test_sna_subsampling_reproducibility():
+def test_spatial_dist_corr_subsampling_reproducibility():
     """spatial_distance_correlation with same seed gives same result."""
     from spatial_metrics import spatial_distance_correlation
 
