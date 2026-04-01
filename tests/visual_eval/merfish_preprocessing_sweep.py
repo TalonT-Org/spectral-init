@@ -5,13 +5,17 @@ from __future__ import annotations
 import itertools
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
 
+import anndata
 import numpy as np
 import pandas as pd
-
-if TYPE_CHECKING:
-    import anndata
+import scanpy as sc
+import umap as umap_lib
+from scipy.sparse import diags, eye
+from scipy.sparse.csgraph import connected_components
+from scipy.sparse.linalg import eigsh
+from sklearn.manifold import trustworthiness
+from sklearn.metrics import silhouette_score
 
 DATA_DIR = Path(__file__).parent / "merfish_data"
 OUTPUT_DIR = Path(__file__).parent / "output"
@@ -24,7 +28,7 @@ SCALE_MAX_VALUE = 10
 TRUSTWORTHINESS_THRESHOLD = 0.95
 
 
-def apply_normalization(expression: np.ndarray, norm: str) -> "anndata.AnnData":
+def apply_normalization(expression: np.ndarray, norm: str) -> anndata.AnnData:
     """Normalize expression matrix according to the specified strategy.
 
     Parameters
@@ -38,9 +42,6 @@ def apply_normalization(expression: np.ndarray, norm: str) -> "anndata.AnnData":
     -------
     AnnData with ``.X`` containing the normalized expression matrix.
     """
-    import anndata
-    import scanpy as sc
-
     if norm == "normalize_total+log1p":
         # Back-transform log2(count+1) → raw counts, then apply Zhuang lab pipeline
         raw_counts = np.exp2(expression) - 1.0  # 2^x − 1
@@ -82,14 +83,6 @@ def run_config(
     Dict with keys: normalization, n_pcs, metric, spectral_gap, condition_number,
     n_components, trustworthiness, silhouette, wall_time_s.
     """
-    import scanpy as sc
-    import umap as umap_lib
-    from sklearn.manifold import trustworthiness
-    from sklearn.metrics import silhouette_score
-    from scipy.sparse import eye, diags
-    from scipy.sparse.linalg import eigsh
-    from scipy.sparse.csgraph import connected_components
-
     t0 = time.perf_counter()
 
     adata = apply_normalization(expression, norm)
