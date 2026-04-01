@@ -189,6 +189,8 @@ def pas_score(
     -------
     float in [0, 1].
     """
+    if len(spatial_coords) <= k:
+        return 0.0
     nn = NearestNeighbors(n_neighbors=k + 1, algorithm="kd_tree")
     nn.fit(spatial_coords)
     neighbors = nn.kneighbors(return_distance=False)[:, 1:]  # (n, k)
