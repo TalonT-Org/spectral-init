@@ -56,8 +56,12 @@ def _write_compare_artifacts(tmp_path, rng, n):
     np.save(tmp_path / "merfish_10k_py_spectral.npy", rng.randn(n, 2))
     np.save(tmp_path / "merfish_10k_py_final.npy", rng.randn(n, 2).astype(np.float32))
     np.save(tmp_path / "merfish_10k_rust_init.npy", rng.randn(n, 2))
-    np.save(tmp_path / "merfish_10k_labels.npy", (rng.rand(n) * 3).astype(np.int32))
+    np.save(tmp_path / "merfish_10k_labels.npy", (rng.rand(n) * 5).astype(np.int32))
     np.save(tmp_path / "merfish_10k_pca.npy", rng.randn(n, 30).astype(np.float64))
+    np.savez_compressed(
+        tmp_path / "merfish_10k_spatial.npz",
+        arr_0=rng.randn(n, 2).astype(np.float32),
+    )
 
 
 @pytest.mark.slow
@@ -92,6 +96,58 @@ def test_metrics_json_has_required_keys(tmp_path):
     assert data["pass_fail"]["overall"] in ("PASS", "FAIL")
     assert "python_spectral" in data
     assert "rust_spectral" in data
+
+
+def test_sna_gate_logic():
+    from generate_merfish_comparisons import _check_sna_gate
+
+    # Rust SNA exactly at threshold: PASS
+    assert _check_sna_gate(rust_sna=0.30, python_sna=0.32) == "PASS"
+    # Rust SNA above threshold: PASS
+    assert _check_sna_gate(rust_sna=0.35, python_sna=0.32) == "PASS"
+    # Rust SNA just below threshold: FAIL (strict boundary)
+    assert _check_sna_gate(rust_sna=0.2999, python_sna=0.32) == "FAIL"
+    # Rust SNA below threshold by small margin: FAIL
+    assert _check_sna_gate(rust_sna=0.29, python_sna=0.32) == "FAIL"
+    # Custom threshold
+    assert _check_sna_gate(rust_sna=0.20, python_sna=0.30, threshold=0.05) == "FAIL"
+    assert _check_sna_gate(rust_sna=0.26, python_sna=0.30, threshold=0.05) == "PASS"
+
+
+@pytest.mark.slow
+def test_metrics_json_bcd_keys(tmp_path):
+    from generate_merfish_comparisons import run_compare
+
+    rng = np.random.RandomState(13)
+    n = 200
+    _write_compare_artifacts(tmp_path, rng, n)
+    result = run_compare(tmp_path)
+    assert result is not None
+    data = json.loads((tmp_path / "merfish_10k_metrics.json").read_text())
+
+    cat_b_keys = ("sna", "spatial_dist_corr", "morans_i_max", "morans_i_dim0",
+                  "morans_i_dim1", "chaos", "pas")
+    cat_c_keys = ("ari", "nmi", "celltype_purity")
+    cat_d_keys = ("triplet_accuracy", "shepard_pearson", "shepard_spearman",
+                  "centroid_dist_corr", "knn_preservation")
+
+    for emb_key in ("python_spectral", "rust_spectral", "random"):
+        emb = data[emb_key]
+        for k in cat_b_keys + cat_c_keys + cat_d_keys:
+            assert k in emb, f"{emb_key} missing key '{k}'"
+
+
+@pytest.mark.slow
+def test_sna_gate_in_pass_fail(tmp_path):
+    from generate_merfish_comparisons import run_compare
+
+    rng = np.random.RandomState(99)
+    n = 200
+    _write_compare_artifacts(tmp_path, rng, n)
+    result = run_compare(tmp_path)
+    assert result is not None
+    assert "sna" in result["pass_fail"], "SNA gate missing from pass_fail"
+    assert result["pass_fail"]["sna"] in ("PASS", "FAIL")
 
 
 def test_cli_accepts_phase_baseline_and_compare():
