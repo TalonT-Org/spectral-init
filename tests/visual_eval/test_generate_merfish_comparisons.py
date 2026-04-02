@@ -105,6 +105,8 @@ def test_sna_gate_logic():
     assert _check_sna_gate(rust_sna=0.30, python_sna=0.32) == "PASS"
     # Rust SNA above threshold: PASS
     assert _check_sna_gate(rust_sna=0.35, python_sna=0.32) == "PASS"
+    # Rust SNA just below threshold: FAIL (strict boundary)
+    assert _check_sna_gate(rust_sna=0.2999, python_sna=0.32) == "FAIL"
     # Rust SNA below threshold by small margin: FAIL
     assert _check_sna_gate(rust_sna=0.29, python_sna=0.32) == "FAIL"
     # Custom threshold
