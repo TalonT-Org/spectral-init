@@ -30,7 +30,7 @@ def random_triplet_accuracy(
 
     Returns
     -------
-    float in [0.5, 1.0] — fraction of triplets with preserved ordering
+    float in [0.0, 1.0] — fraction of triplets with preserved ordering
     """
     rng = np.random.RandomState(seed)
     n = len(X_high)

@@ -41,7 +41,7 @@ def test_random_triplet_accuracy_returns_float_in_range():
     from global_metrics import random_triplet_accuracy
     result = random_triplet_accuracy(X_high, X_low_pca)
     assert isinstance(result, float)
-    assert 0.5 <= result <= 1.0
+    assert 0.0 <= result <= 1.0
 
 
 def test_shepard_correlation_returns_dict_with_correct_keys():
@@ -60,7 +60,7 @@ def test_centroid_distance_correlation_returns_float_in_range():
     from global_metrics import centroid_distance_correlation
     result = centroid_distance_correlation(X_high, X_low_pca, labels)
     assert isinstance(result, float)
-    assert -1.0 <= result <= 1.0
+    assert result > 0.9, f"centroid_dist_corr too low for well-separated PCA blobs: {result:.4f}"
 
 
 def test_knn_preservation_returns_float_in_unit_interval():
@@ -68,7 +68,8 @@ def test_knn_preservation_returns_float_in_unit_interval():
     from global_metrics import knn_preservation
     result = knn_preservation(X_high, X_low_pca, k=10)
     assert isinstance(result, float)
-    assert 0.0 <= result <= 1.0
+    assert result >= 0.7, f"knn_preservation too low for PCA-projected blobs: {result:.4f}"
+    assert result <= 1.0
 
 
 def test_compute_global_metrics_returns_required_keys():
@@ -91,6 +92,8 @@ def test_pca_beats_random_directionality():
     bad  = compute_global_metrics(X_high, X_low_random, labels)
     for key in ("triplet_accuracy", "shepard_pearson", "shepard_spearman",
                 "centroid_dist_corr", "knn_preservation"):
+        assert not np.isnan(good[key]), f"{key}: PCA result is NaN"
+        assert not np.isnan(bad[key]), f"{key}: random result is NaN"
         assert good[key] > bad[key], (
             f"{key}: PCA={good[key]:.4f} not > random={bad[key]:.4f}"
         )
