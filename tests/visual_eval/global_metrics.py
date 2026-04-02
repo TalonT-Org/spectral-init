@@ -98,6 +98,9 @@ def shepard_correlation(
     d_high = pdist(Xh)
     d_low = pdist(Xl)
 
+    if np.std(d_high) == 0.0 or np.std(d_low) == 0.0:
+        return {"pearson": float("nan"), "spearman": float("nan")}
+
     pearson_r, _ = pearsonr(d_high, d_low)
     spearman_r, _ = spearmanr(d_high, d_low)
 
@@ -122,6 +125,8 @@ def centroid_distance_correlation(
     float in [-1, 1]
     """
     unique_labels = np.unique(labels)
+    if len(unique_labels) < 2:
+        return float("nan")
     centroids_high = np.array([X_high[labels == lbl].mean(axis=0) for lbl in unique_labels])
     centroids_low = np.array([X_low[labels == lbl].mean(axis=0) for lbl in unique_labels])
 
