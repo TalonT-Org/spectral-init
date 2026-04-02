@@ -154,11 +154,16 @@ def knn_preservation(
     -------
     float in [0, 1]
     """
+    if len(X_high) <= k:
+        raise ValueError(
+            f"n_samples ({len(X_high)}) must be greater than k ({k}) for knn_preservation"
+        )
     nn_high = NearestNeighbors(n_neighbors=k).fit(X_high)
     nn_low = NearestNeighbors(n_neighbors=k).fit(X_low)
 
-    _, idx_high = nn_high.kneighbors(X_high)
-    _, idx_low = nn_low.kneighbors(X_low)
+    # kneighbors() without X excludes self; kneighbors(X_high) would include self.
+    _, idx_high = nn_high.kneighbors()
+    _, idx_low = nn_low.kneighbors()
 
     preservation = np.array([
         len(np.intersect1d(idx_high[i], idx_low[i])) / k
