@@ -284,6 +284,11 @@ def run_compare(output_dir: Path) -> dict | None:
     _make_overlay_plot(DATASET_NAME, embed_py, embed_rust, output_dir)
     _make_three_way_overlay(DATASET_NAME, embed_py, embed_rust, embed_rand, output_dir)
 
+    _extra_keys = set(b_py) | set(c_py) | set(d_py)
+    _base_keys = set(metrics["python_spectral"])
+    _collision = _base_keys & _extra_keys
+    assert not _collision, f"Key collision in metric merge: {_collision}"
+
     result = {
         "dataset": DATASET_NAME,
         "n_samples": int(X_pca.shape[0]),
