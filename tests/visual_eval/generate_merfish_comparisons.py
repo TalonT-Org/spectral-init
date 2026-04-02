@@ -302,28 +302,31 @@ def run_compare(output_dir: Path) -> dict | None:
     json_path = output_dir / "merfish_10k_metrics.json"
     json_path.write_text(json.dumps(result, indent=2))
     print(f"  Saved metrics: {json_path}")
-    pf = result["pass_fail"]
+    pf_out = result["pass_fail"]
     py_m  = result["python_spectral"]
     ru_m  = result["rust_spectral"]
-    print(f"  {'merfish_10k':25s} {pf['overall']}")
+    print(f"  {'merfish_10k':25s} {pf_out['overall']}")
     print(
         f"    Cat-A  TW={py_m['trustworthiness']:.4f}(py) {ru_m['trustworthiness']:.4f}(ru)"
         f"  Sil={py_m['silhouette']:.4f}(py) {ru_m['silhouette']:.4f}(ru)"
+        f"  Proc={ru_m['procrustes_vs_python']:.4f}  PairCorr={ru_m['pairwise_corr_vs_python']:.4f}"
     )
     print(
         f"    Cat-B  SNA={py_m['sna']:.4f}(py) {ru_m['sna']:.4f}(ru)"
-        f"  DistCorr={ru_m['spatial_dist_corr']:.4f}"
-        f"  MoranI={ru_m['morans_i_max']:.4f}"
-        f"  [SNA gate: {pf['sna']}]"
+        f"  DistCorr={py_m['spatial_dist_corr']:.4f}(py) {ru_m['spatial_dist_corr']:.4f}(ru)"
+        f"  MoranI={py_m['morans_i_max']:.4f}(py) {ru_m['morans_i_max']:.4f}(ru)"
+        f"  [SNA gate: {pf_out['sna']}]"
     )
     print(
-        f"    Cat-C  ARI={ru_m['ari']:.4f}  NMI={ru_m['nmi']:.4f}"
-        f"  Purity={ru_m['celltype_purity']:.4f}"
+        f"    Cat-C  ARI={py_m['ari']:.4f}(py) {ru_m['ari']:.4f}(ru)"
+        f"  NMI={py_m['nmi']:.4f}(py) {ru_m['nmi']:.4f}(ru)"
+        f"  Purity={py_m['celltype_purity']:.4f}(py) {ru_m['celltype_purity']:.4f}(ru)"
     )
     print(
-        f"    Cat-D  TripletAcc={ru_m['triplet_accuracy']:.4f}"
-        f"  ShepdSpearman={ru_m['shepard_spearman']:.4f}"
-        f"  KNNPres={ru_m['knn_preservation']:.4f}"
+        f"    Cat-D  TripletAcc={py_m['triplet_accuracy']:.4f}(py) {ru_m['triplet_accuracy']:.4f}(ru)"
+        f"  ShepdPearson={py_m['shepard_pearson']:.4f}(py) {ru_m['shepard_pearson']:.4f}(ru)"
+        f"  ShepdSpearman={py_m['shepard_spearman']:.4f}(py) {ru_m['shepard_spearman']:.4f}(ru)"
+        f"  KNNPres={py_m['knn_preservation']:.4f}(py) {ru_m['knn_preservation']:.4f}(ru)"
     )
     return result
 
