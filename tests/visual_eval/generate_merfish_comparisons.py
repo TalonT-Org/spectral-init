@@ -34,10 +34,18 @@ from generate_umap_comparisons import (  # noqa: E402
     _make_overlay_plot,
     _make_three_way_overlay,
 )
+from spatial_metrics import compute_spatial_metrics   # noqa: E402
+from cluster_metrics import compute_cluster_metrics   # noqa: E402
+from global_metrics import compute_global_metrics     # noqa: E402
 
 DATASET_NAME = "merfish_10k"
 _DATA_DIR = Path(__file__).parent / "merfish_data"
 _DEFAULT_OUTPUT_DIR = Path(__file__).parent / "output"
+
+
+def _check_sna_gate(rust_sna: float, python_sna: float, threshold: float = 0.02) -> str:
+    """Return 'PASS' if rust_sna >= python_sna - threshold, else 'FAIL'."""
+    return "PASS" if rust_sna >= python_sna - threshold else "FAIL"
 
 
 def load_merfish_data(
@@ -202,6 +210,7 @@ def run_compare(output_dir: Path) -> dict | None:
         output_dir / "merfish_10k_py_final.npy",
         output_dir / "merfish_10k_labels.npy",
         output_dir / "merfish_10k_pca.npy",
+        output_dir / "merfish_10k_spatial.npz",
     ]:
         if not baseline_file.exists():
             raise FileNotFoundError(
@@ -213,6 +222,7 @@ def run_compare(output_dir: Path) -> dict | None:
     rust_init = np.load(rust_init_path)
     labels = np.load(output_dir / "merfish_10k_labels.npy")
     X_pca = np.load(output_dir / "merfish_10k_pca.npy")
+    spatial = np.load(output_dir / "merfish_10k_spatial.npz")["arr_0"].astype(np.float64)
 
     umap_kw = dict(
         n_neighbors=15,
@@ -239,21 +249,77 @@ def run_compare(output_dir: Path) -> dict | None:
     if pf["overall"] == "PASS" and all([rand_proc_pass, rand_corr_pass, rand_tw_pass, rand_sil_pass]):
         print(f"  [WARN] merfish_10k: random init also passes all thresholds")
 
+    b_py   = compute_spatial_metrics(spatial, embed_py,   labels)
+    b_rust = compute_spatial_metrics(spatial, embed_rust,  labels)
+    b_rand = compute_spatial_metrics(spatial, embed_rand,  labels)
+
+    c_py   = compute_cluster_metrics(embed_py,   labels)
+    c_rust = compute_cluster_metrics(embed_rust,  labels)
+    c_rand = compute_cluster_metrics(embed_rand,  labels)
+
+    d_py   = compute_global_metrics(X_pca, embed_py,   labels)
+    d_rust = compute_global_metrics(X_pca, embed_rust,  labels)
+    d_rand = compute_global_metrics(X_pca, embed_rand,  labels)
+
+    pf_sna = _check_sna_gate(b_rust["sna"], b_py["sna"])
+    metrics["pass_fail"]["sna"] = pf_sna
+    metrics["pass_fail"]["overall"] = (
+        "PASS"
+        if all(
+            v == "PASS"
+            for v in [
+                metrics["pass_fail"]["procrustes"],
+                metrics["pass_fail"]["pairwise_corr"],
+                metrics["pass_fail"]["trustworthiness"],
+                metrics["pass_fail"]["silhouette"],
+                pf_sna,
+            ]
+        )
+        else "FAIL"
+    )
+
     _make_comparison_plot(
         DATASET_NAME, py_spectral, rust_init, embed_py, embed_rust, embed_rand, labels, output_dir
     )
     _make_overlay_plot(DATASET_NAME, embed_py, embed_rust, output_dir)
     _make_three_way_overlay(DATASET_NAME, embed_py, embed_rust, embed_rand, output_dir)
 
-    result = dict(metrics)
-    result["dataset"] = DATASET_NAME
-    result["n_samples"] = int(X_pca.shape[0])
-    result["n_features"] = int(X_pca.shape[1])
+    result = {
+        "dataset": DATASET_NAME,
+        "n_samples": int(X_pca.shape[0]),
+        "n_features": int(X_pca.shape[1]),
+        "python_spectral": {**metrics["python_spectral"], **b_py, **c_py, **d_py},
+        "rust_spectral":   {**metrics["rust_spectral"],   **b_rust, **c_rust, **d_rust},
+        "random":          {**metrics["random"],           **b_rand, **c_rand, **d_rand},
+        "pass_fail":       metrics["pass_fail"],
+    }
 
     json_path = output_dir / "merfish_10k_metrics.json"
     json_path.write_text(json.dumps(result, indent=2))
     print(f"  Saved metrics: {json_path}")
+    pf = result["pass_fail"]
+    py_m  = result["python_spectral"]
+    ru_m  = result["rust_spectral"]
     print(f"  {'merfish_10k':25s} {pf['overall']}")
+    print(
+        f"    Cat-A  TW={py_m['trustworthiness']:.4f}(py) {ru_m['trustworthiness']:.4f}(ru)"
+        f"  Sil={py_m['silhouette']:.4f}(py) {ru_m['silhouette']:.4f}(ru)"
+    )
+    print(
+        f"    Cat-B  SNA={py_m['sna']:.4f}(py) {ru_m['sna']:.4f}(ru)"
+        f"  DistCorr={ru_m['spatial_dist_corr']:.4f}"
+        f"  MoranI={ru_m['morans_i_max']:.4f}"
+        f"  [SNA gate: {pf['sna']}]"
+    )
+    print(
+        f"    Cat-C  ARI={ru_m['ari']:.4f}  NMI={ru_m['nmi']:.4f}"
+        f"  Purity={ru_m['celltype_purity']:.4f}"
+    )
+    print(
+        f"    Cat-D  TripletAcc={ru_m['triplet_accuracy']:.4f}"
+        f"  ShepdSpearman={ru_m['shepard_spearman']:.4f}"
+        f"  KNNPres={ru_m['knn_preservation']:.4f}"
+    )
     return result
 
 
