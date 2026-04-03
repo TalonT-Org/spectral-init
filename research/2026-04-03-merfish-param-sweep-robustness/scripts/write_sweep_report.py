@@ -95,7 +95,9 @@ def compute_h2_table(df: pd.DataFrame, solver_levels_path: Path) -> pd.DataFrame
 
 
 def compute_h3_verdict(df: pd.DataFrame) -> dict:
-    sub = df[(df["param_swept"] == "n_neighbors") & (df["param_value"] <= 15)]
+    pv_num = pd.to_numeric(df["param_value"], errors="coerce")
+    sub = df[(df["param_swept"] == "n_neighbors") & (pv_num <= 15)].copy()
+    sub["_pv_num"] = pd.to_numeric(sub["param_value"], errors="coerce")
     if len(sub) < 2:
         return {
             "verdict": "INCONCLUSIVE",
@@ -104,9 +106,9 @@ def compute_h3_verdict(df: pd.DataFrame) -> dict:
         }
     slopes = {}
     for method in ("rust_spectral", "random"):
-        mdf = sub[sub["init_method"] == method].sort_values("param_value")
+        mdf = sub[sub["init_method"] == method].sort_values("_pv_num")
         if len(mdf) >= 2:
-            result = stats.linregress(mdf["param_value"], mdf["trustworthiness"])
+            result = stats.linregress(mdf["_pv_num"], mdf["trustworthiness"])
             slopes[method] = result.slope
         else:
             slopes[method] = None

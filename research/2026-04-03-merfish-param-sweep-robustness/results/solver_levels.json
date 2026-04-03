@@ -1,0 +1,16 @@
+{
+  "n_neighbors_5_euclidean": 1,
+  "n_neighbors_10_euclidean": 1,
+  "n_neighbors_15_euclidean": 1,
+  "n_neighbors_30_euclidean": 1,
+  "n_neighbors_50_euclidean": 1,
+  "n_neighbors_100_euclidean": 1,
+  "min_dist_0.0_euclidean": 1,
+  "min_dist_0.01_euclidean": 1,
+  "min_dist_0.1_euclidean": 1,
+  "min_dist_0.25_euclidean": 1,
+  "min_dist_0.5_euclidean": 1,
+  "min_dist_0.8_euclidean": 1,
+  "metric_euclidean_euclidean": 1,
+  "metric_cosine_cosine": 1
+}
