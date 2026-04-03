@@ -64,7 +64,8 @@ def test_centroid_distance_correlation_returns_float_in_range():
 
 
 def test_knn_preservation_returns_float_in_unit_interval():
-    X_high, X_low_pca, _, _ = _make_high_low_blobs()
+    # Use n_dims=2 so PCA is a near-identity transform and knn preservation is high.
+    X_high, X_low_pca, _, _ = _make_high_low_blobs(n_dims=2)
     from global_metrics import knn_preservation
     result = knn_preservation(X_high, X_low_pca, k=10)
     assert isinstance(result, float)
