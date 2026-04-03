@@ -4,6 +4,9 @@ mod common;
 use common::load_sparse_csr_f32_u32;
 use ndarray_npy::write_npy;
 use spectral_init::{spectral_init, SpectralInitConfig};
+use spectral_init::{
+    compute_degrees, build_normalized_laplacian, solve_eigenproblem_pub, ComputeMode,
+};
 use std::path::Path;
 use std::time::Instant;
 
@@ -34,6 +37,18 @@ fn export_merfish_init_10k() {
     println!("\nMERFISH 10K Rust Spectral Init Export");
     println!("=====================================");
     println!("Graph: {} nodes", n);
+
+    // Emit solver level via the testing seam so the Python sweep harness can parse it.
+    // Builds the Laplacian independently of spectral_init(); the actual embedding below
+    // still uses spectral_init() as the authoritative pipeline path.
+    let (_degrees, sqrt_deg) = compute_degrees(&graph, ComputeMode::PythonCompat);
+    let inv_sqrt_deg: Vec<f64> = sqrt_deg
+        .iter()
+        .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
+        .collect();
+    let lap = build_normalized_laplacian(&graph, &inv_sqrt_deg);
+    let (_, solver_level) = solve_eigenproblem_pub(&lap, 2, 42);
+    println!("SOLVER_LEVEL={}", solver_level);
 
     let start = Instant::now();
     let coords = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
