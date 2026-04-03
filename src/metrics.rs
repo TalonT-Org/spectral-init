@@ -12,7 +12,7 @@ use faer::linalg::solvers::SelfAdjointEigen;
 use ndarray::{Array1, Array2, ArrayView1, ArrayView2};
 use rayon::prelude::*;
 use sprs::CsMatI;
-use std::collections::HashSet;
+use std::collections::{BinaryHeap, HashSet};
 
 // ─── Threshold constants ──────────────────────────────────────────────────────
 
@@ -383,8 +383,9 @@ pub fn eigenvalue_condition_number(eigenvalues: &Array1<f64>) -> f64 {
 /// # Panics
 /// Panics if `k == 0`, `k >= n / 2`, or if `x` and `y` have different row counts.
 /// The `k < n/2` restriction is required by the normalization denominator
-/// `G_k = n·k·(2n−3k−1)`: when `k ≥ n/2` this branch produces T > 1. sklearn
-/// enforces the same constraint via `ValueError`.
+/// `G_k = n·k·(2n−3k−1)`: when `k ≥ n/2` this denominator produces T > 1.
+/// The guard uses integer floor division (`n / 2`), matching sklearn's exact boundary
+/// condition (`n_neighbors >= n // 2` raises `ValueError` in sklearn).
 pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 {
     let n = x.nrows();
     assert_eq!(y.nrows(), n, "trustworthiness: x and y must have the same number of rows");
@@ -398,7 +399,6 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
         let xi = x.row(i);
         let yi = y.row(i);
 
-        // Step 1-3: compute distances in X, sort, build rank array
         let mut dist_x: Vec<(f64, usize)> = (0..n)
             .map(|j| {
                 let d: f64 = xi.iter().zip(x.row(j).iter()).map(|(&a, &b)| (a - b) * (a - b)).sum();
@@ -406,7 +406,7 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
             })
             .collect();
         // Sort by distance (ascending); ties broken by index for determinism
-        dist_x.sort_unstable_by(|a, b| a.0.partial_cmp(&b.0).unwrap().then(a.1.cmp(&b.1)));
+        dist_x.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
 
         // rank_x[j] = 0-indexed position of j in sorted order (rank 0 = self)
         let mut rank_x = vec![0usize; n];
@@ -414,19 +414,18 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
             rank_x[j] = rank;
         }
 
-        // Step 4: k-NN set in X (excluding self at rank 0)
         let knn_x_set: HashSet<usize> = dist_x[1..=k].iter().map(|&(_, j)| j).collect();
 
-        // Step 5: streaming max-heap over Y distances to find k-NN in Y
+        // Streaming max-heap over Y distances to find k-NN in Y.
         // BinaryHeap<(bits, index)> acts as a max-heap; we keep only the k smallest.
-        // Using u64 bit representation of f64 for ordered comparison (valid for non-negative f64).
-        use std::collections::BinaryHeap;
+        // Using u64 bit representation of f64 for ordered comparison (valid for non-negative finite f64).
         let mut heap: BinaryHeap<(u64, usize)> = BinaryHeap::with_capacity(k + 1);
         for j in 0..n {
             if j == i {
                 continue;
             }
             let d: f64 = yi.iter().zip(y.row(j).iter()).map(|(&a, &b)| (a - b) * (a - b)).sum();
+            debug_assert!(d.is_finite(), "trustworthiness: NaN/inf distance in Y at i={i} j={j}");
             let bits = d.to_bits();
             heap.push((bits, j));
             if heap.len() > k {
@@ -434,18 +433,18 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
             }
         }
 
-        // Step 6: accumulate penalty for Y-neighbors not in X-neighbors
         let mut row_penalty = 0u64;
         for (_, j) in heap {
             if !knn_x_set.contains(&j) {
                 // rank_x[j] > k is guaranteed: j is in Y-NN but not X-NN, so X-rank > k
+                debug_assert!(rank_x[j] > k, "invariant violated: rank_x[{j}]={} <= k={k}", rank_x[j]);
                 row_penalty += (rank_x[j] - k) as u64;
             }
         }
         row_penalty as f64
     }).sum();
 
-    let denom = n as f64 * k as f64 * (2 * n - 3 * k - 1) as f64;
+    let denom = n as f64 * k as f64 * (2 * n).saturating_sub(3 * k + 1) as f64;
     1.0 - penalty_sum * 2.0 / denom
 }
 
