@@ -10,7 +10,9 @@
 use faer::{Mat as FaerMat, Side};
 use faer::linalg::solvers::SelfAdjointEigen;
 use ndarray::{Array1, Array2, ArrayView1, ArrayView2};
+use rayon::prelude::*;
 use sprs::CsMatI;
+use std::collections::HashSet;
 
 // ─── Threshold constants ──────────────────────────────────────────────────────
 
@@ -364,6 +366,88 @@ pub fn eigenvalue_condition_number(eigenvalues: &Array1<f64>) -> f64 {
     }
 }
 
+// ─── Trustworthiness metric ───────────────────────────────────────────────────
+
+/// Computes the trustworthiness metric T(k) — a measure of how well the k-nearest-neighbor
+/// structure of X (high-dimensional) is preserved in Y (embedding).
+///
+/// Memory-efficient implementation: processes one row at a time with O(n) peak memory per
+/// iteration. No (n×n) matrix is materialized.
+///
+/// # Formula
+/// `T(k) = 1 − (2 / (n·k·(2n−3k−1))) · Σᵢ Σ_{j ∈ U_i(k)} (r(i,j) − k)`
+///
+/// where `r(i,j)` is the 0-indexed rank of j in the distance ordering from i in X
+/// (self = rank 0), and `U_i(k)` is the set of j in k-NN(i, Y) but NOT in k-NN(i, X).
+///
+/// # Panics
+/// Panics if `k == 0`, `k >= n / 2`, or if `x` and `y` have different row counts.
+/// The `k < n/2` restriction is required by the normalization denominator
+/// `G_k = n·k·(2n−3k−1)`: when `k ≥ n/2` this branch produces T > 1. sklearn
+/// enforces the same constraint via `ValueError`.
+pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 {
+    let n = x.nrows();
+    assert_eq!(y.nrows(), n, "trustworthiness: x and y must have the same number of rows");
+    assert!(k > 0, "trustworthiness: k must be > 0");
+    assert!(k < n / 2, "trustworthiness: k ({k}) must be < n/2 ({} / 2 = {}); \
+        this constraint is required by the normalization denominator and matches sklearn's ValueError",
+        n, n / 2);
+
+    let penalty_sum: f64 = (0..n).into_par_iter().map(|i| {
+        let xi = x.row(i);
+        let yi = y.row(i);
+
+        // Step 1-3: compute distances in X, sort, build rank array
+        let mut dist_x: Vec<(f64, usize)> = (0..n)
+            .map(|j| {
+                let d: f64 = xi.iter().zip(x.row(j).iter()).map(|(&a, &b)| (a - b) * (a - b)).sum();
+                (d, j)
+            })
+            .collect();
+        // Sort by distance (ascending); ties broken by index for determinism
+        dist_x.sort_unstable_by(|a, b| a.0.partial_cmp(&b.0).unwrap().then(a.1.cmp(&b.1)));
+
+        // rank_x[j] = 0-indexed position of j in sorted order (rank 0 = self)
+        let mut rank_x = vec![0usize; n];
+        for (rank, &(_, j)) in dist_x.iter().enumerate() {
+            rank_x[j] = rank;
+        }
+
+        // Step 4: k-NN set in X (excluding self at rank 0)
+        let knn_x_set: HashSet<usize> = dist_x[1..=k].iter().map(|&(_, j)| j).collect();
+
+        // Step 5: streaming max-heap over Y distances to find k-NN in Y
+        // BinaryHeap<(bits, index)> acts as a max-heap; we keep only the k smallest.
+        // Using u64 bit representation of f64 for ordered comparison (valid for non-negative f64).
+        use std::collections::BinaryHeap;
+        let mut heap: BinaryHeap<(u64, usize)> = BinaryHeap::with_capacity(k + 1);
+        for j in 0..n {
+            if j == i {
+                continue;
+            }
+            let d: f64 = yi.iter().zip(y.row(j).iter()).map(|(&a, &b)| (a - b) * (a - b)).sum();
+            let bits = d.to_bits();
+            heap.push((bits, j));
+            if heap.len() > k {
+                heap.pop(); // discard farthest
+            }
+        }
+
+        // Step 6: accumulate penalty for Y-neighbors not in X-neighbors
+        let mut row_penalty = 0u64;
+        for (_, j) in heap {
+            if !knn_x_set.contains(&j) {
+                // rank_x[j] > k is guaranteed: j is in Y-NN but not X-NN, so X-rank > k
+                row_penalty += (rank_x[j] - k) as u64;
+            }
+        }
+        row_penalty as f64
+    }).sum();
+
+    let denom = n as f64 * k as f64 * (2 * n - 3 * k - 1) as f64;
+    1.0 - penalty_sum * 2.0 / denom
+}
+
 // ─── Data structures (testing feature only) ──────────────────────────────────
 
 #[cfg(feature = "testing")]
@@ -687,6 +771,79 @@ mod tests {
     }
 
     // ── Data structures: serde round-trip ────────────────────────────────────
+
+    // ── Trustworthiness metric ────────────────────────────────────────────────
+
+    #[test]
+    fn t_tw_01_perfect_preservation() {
+        // 20-point grid; each point embedded to its own location
+        let x = ndarray::Array2::from_shape_fn((20, 4), |(i, d)| (i * 4 + d) as f64);
+        let y = x.slice(ndarray::s![.., ..2]).to_owned();
+        let t = trustworthiness(x.view(), y.view(), 5);
+        assert!((t - 1.0).abs() < 1e-10, "perfect preservation: T={t}");
+    }
+
+    #[test]
+    fn t_tw_02_result_in_unit_interval() {
+        use rand::{SeedableRng, Rng};
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(99);
+        let x = ndarray::Array2::from_shape_fn((20, 10), |_| rng.random::<f64>());
+        let y = ndarray::Array2::from_shape_fn((20, 2), |_| rng.random::<f64>());
+        let t = trustworthiness(x.view(), y.view(), 5);
+        assert!(t >= 0.0 && t <= 1.0, "T out of [0,1]: {t}");
+    }
+
+    /// Hand-verifiable 3-point, k=1 example with exactly one violation of rank penalty 1.
+    ///
+    /// X = [[0,0],[1,0],[0,100]] (point 2 far from 0 and 1):
+    ///   KNN(0,X,1)={1}, KNN(1,X,1)={0}, KNN(2,X,1)={0}
+    ///
+    /// Y = [[0,0],[2,0],[0,0.5]] (point 2 moved close to 0 in Y):
+    ///   KNN(0,Y,1)={2} → violation: rank_x[2]=2, penalty = 2-1 = 1
+    ///   KNN(1,Y,1)={0} → 0 ∈ KNN(1,X,1): no penalty
+    ///   KNN(2,Y,1)={0} → 0 ∈ KNN(2,X,1): no penalty
+    ///
+    /// T = 1 - 2·1 / (3·1·(6-3-1)) = 1 - 2/6 = 2/3
+    #[test]
+    fn t_tw_03_formula_hand_check() {
+        let x = ndarray::Array2::from_shape_vec(
+            (3, 2),
+            vec![0.0f64, 0.0, 1.0, 0.0, 0.0, 100.0],
+        ).unwrap();
+        let y = ndarray::Array2::from_shape_vec(
+            (3, 2),
+            vec![0.0f64, 0.0, 2.0, 0.0, 0.0, 0.5],
+        ).unwrap();
+        let t = trustworthiness(x.view(), y.view(), 1);
+        let expected = 2.0 / 3.0;
+        assert!(
+            (t - expected).abs() < 1e-10,
+            "hand-check: T={t:.10}, expected {expected:.10}"
+        );
+    }
+
+    #[test]
+    fn t_tw_04_k_less_than_half_n() {
+        use rand::{SeedableRng, Rng};
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(7);
+        let n = 20usize;
+        let k = n / 2 - 1; // 9, just below the boundary
+        let x = ndarray::Array2::from_shape_fn((n, 4), |_| rng.random::<f64>());
+        let y = ndarray::Array2::from_shape_fn((n, 2), |_| rng.random::<f64>());
+        let t = trustworthiness(x.view(), y.view(), k);
+        assert!(t.is_finite(), "T should be finite at k=n/2-1: {t}");
+        assert!(t >= 0.0 && t <= 1.0, "T out of [0,1] at k=n/2-1: {t}");
+    }
+
+    #[test]
+    #[should_panic(expected = "k must be < n/2")]
+    fn t_tw_05_panics_on_k_gte_half_n() {
+        let n = 20usize;
+        let k = n / 2; // exactly n/2 — must panic
+        let x = ndarray::Array2::zeros((n, 4));
+        let y = ndarray::Array2::zeros((n, 2));
+        let _ = trustworthiness(x.view(), y.view(), k);
+    }
 
     #[cfg(feature = "testing")]
     #[test]
