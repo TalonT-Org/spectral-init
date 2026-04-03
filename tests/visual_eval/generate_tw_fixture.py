@@ -12,7 +12,6 @@ Run from the repository root:
 """
 
 import pathlib
-import sys
 import numpy as np
 from sklearn.manifold import trustworthiness
 
