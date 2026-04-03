@@ -30,6 +30,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from generate_umap_comparisons import (  # noqa: E402
     export_graph,
     _compute_metrics,
+    _find_tw_binary,
+    _tw_rust,
     _make_baseline_plot,
     _make_comparison_plot,
     _make_overlay_plot,
@@ -110,7 +112,6 @@ def run_baseline(output_dir: Path, data_dir: Path = _DATA_DIR) -> tuple[dict, fl
     """Run Phase 1 baseline generation for the MERFISH 10K subset."""
     import umap as umap_lib
     from umap.spectral import spectral_layout
-    from sklearn.manifold import trustworthiness
     from sklearn.metrics import silhouette_score
     from scipy.sparse import eye, diags
     from scipy.sparse.linalg import eigsh
@@ -172,7 +173,12 @@ def run_baseline(output_dir: Path, data_dir: Path = _DATA_DIR) -> tuple[dict, fl
         )
 
     # Compute baseline metrics for plot
-    tw = trustworthiness(X_pca, final_embedding, n_neighbors=15)
+    _tw_bin = _find_tw_binary()
+    if _tw_bin is not None:
+        tw = _tw_rust(X_pca, final_embedding.astype(np.float64), k=15, binary=_tw_bin)
+    else:
+        from sklearn.manifold import trustworthiness as _sk_tw
+        tw = float(_sk_tw(X_pca, final_embedding, n_neighbors=15))
     sil = silhouette_score(final_embedding, labels)
     n_conn, _ = connected_components(graph, directed=False)
     spectral_gap = float(eigenvalues[1] - eigenvalues[0]) if len(eigenvalues) >= 2 else 0.0
