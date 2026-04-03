@@ -10,7 +10,9 @@ python "$SCRIPT_DIR/generate_merfish_comparisons.py" --phase baseline
 echo ""
 echo "=== Phase 2: Rust Export — MERFISH spectral init ==="
 cd "$PROJECT_ROOT"
-cargo nextest run --profile merfish-eval --run-ignored all --features testing
+RUST_PERF_FILE="$SCRIPT_DIR/output/merfish_10k_rust_perf.txt"
+/usr/bin/time -o "$RUST_PERF_FILE" -f "%e %M" \
+    cargo nextest run --profile merfish-eval --run-ignored all --features testing
 
 echo ""
 echo "=== Phase 3: Python comparison (Python vs Rust vs Random) ==="
