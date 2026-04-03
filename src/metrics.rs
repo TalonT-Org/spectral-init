@@ -389,9 +389,10 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
     let n = x.nrows();
     assert_eq!(y.nrows(), n, "trustworthiness: x and y must have the same number of rows");
     assert!(k > 0, "trustworthiness: k must be > 0");
-    assert!(k < n / 2, "trustworthiness: k ({k}) must be < n/2 ({} / 2 = {}); \
+    assert!(k < n / 2,
+        "trustworthiness: k must be < n/2 (got k={k}, n={n}, n/2={}); \
         this constraint is required by the normalization denominator and matches sklearn's ValueError",
-        n, n / 2);
+        n / 2);
 
     let penalty_sum: f64 = (0..n).into_par_iter().map(|i| {
         let xi = x.row(i);
@@ -793,32 +794,35 @@ mod tests {
         assert!(t >= 0.0 && t <= 1.0, "T out of [0,1]: {t}");
     }
 
-    /// Hand-verifiable 3-point, k=1 example with exactly one violation of rank penalty 1.
+    /// Hand-verifiable 4-point, k=1 example with exactly one violation of rank penalty 1.
     ///
-    /// X = [[0,0],[1,0],[0,100]] (point 2 far from 0 and 1):
-    ///   KNN(0,X,1)={1}, KNN(1,X,1)={0}, KNN(2,X,1)={0}
+    /// n=4, k=1: denominator = 4·1·(8−3−1) = 16.
     ///
-    /// Y = [[0,0],[2,0],[0,0.5]] (point 2 moved close to 0 in Y):
-    ///   KNN(0,Y,1)={2} → violation: rank_x[2]=2, penalty = 2-1 = 1
+    /// X = [[0,0],[1,0],[0,1.5],[0,100]]:
+    ///   KNN(0,X,1)={1} (rank_x[2]=2), KNN(1,X,1)={0}, KNN(2,X,1)={0}, KNN(3,X,1)={2}
+    ///
+    /// Y = [[0,0],[1,0],[0,0.5],[0,100]] (point 2 moved closer to 0):
+    ///   KNN(0,Y,1)={2} → violation: rank_x[2]=2, penalty = 2−1 = 1
     ///   KNN(1,Y,1)={0} → 0 ∈ KNN(1,X,1): no penalty
     ///   KNN(2,Y,1)={0} → 0 ∈ KNN(2,X,1): no penalty
+    ///   KNN(3,Y,1)={2} → 2 ∈ KNN(3,X,1): no penalty
     ///
-    /// T = 1 - 2·1 / (3·1·(6-3-1)) = 1 - 2/6 = 2/3
+    /// T = 1 − 2·1/16 = 7/8 = 0.875
     #[test]
     fn t_tw_03_formula_hand_check() {
         let x = ndarray::Array2::from_shape_vec(
-            (3, 2),
-            vec![0.0f64, 0.0, 1.0, 0.0, 0.0, 100.0],
+            (4, 2),
+            vec![0.0f64, 0.0, 1.0, 0.0, 0.0, 1.5, 0.0, 100.0],
         ).unwrap();
         let y = ndarray::Array2::from_shape_vec(
-            (3, 2),
-            vec![0.0f64, 0.0, 2.0, 0.0, 0.0, 0.5],
+            (4, 2),
+            vec![0.0f64, 0.0, 1.0, 0.0, 0.0, 0.5, 0.0, 100.0],
         ).unwrap();
         let t = trustworthiness(x.view(), y.view(), 1);
-        let expected = 2.0 / 3.0;
+        let expected = 7.0 / 8.0;
         assert!(
             (t - expected).abs() < 1e-10,
-            "hand-check: T={t:.10}, expected {expected:.10}"
+            "hand-check: T={t:.10}, expected {expected:.10} (7/8)"
         );
     }
 
