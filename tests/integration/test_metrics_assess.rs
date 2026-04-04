@@ -48,7 +48,8 @@ const DATASETS: &[(&str, usize, bool, usize)] = &[
 const ORTHO_THRESHOLD: f64 = 1e-8;
 
 /// Eigenvalue bounds tolerance (λ ∈ [-tol, 2+tol]).
-const BOUNDS_TOL: f64 = 1e-12;
+/// Machine-precision only: enforce_psd_contract guarantees λ ∈ [0, 2] exactly.
+const BOUNDS_TOL: f64 = f64::EPSILON * 4.0;  // ~8.88e-16
 
 /// Sign-agnostic max error threshold for parity assessment.
 const SIGN_ERROR_THRESHOLD: f64 = 5e-3;

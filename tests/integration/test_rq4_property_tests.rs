@@ -21,7 +21,7 @@ proptest! {
             spectral_init::solve_eigenproblem_pub(&laplacian, 2, 42);
         for i in 0..eigs.len() - 1 {
             prop_assert!(
-                eigs[i] <= eigs[i + 1] + 1e-12,
+                eigs[i] <= eigs[i + 1] + f64::EPSILON * 4.0,
                 "eigenvalues not sorted: λ[{}]={} > λ[{}]={}",
                 i, eigs[i], i + 1, eigs[i + 1]
             );
@@ -34,7 +34,7 @@ proptest! {
         let ((eigs, _vecs), _level) =
             spectral_init::solve_eigenproblem_pub(&laplacian, 2, 42);
         for (i, &e) in eigs.iter().enumerate() {
-            prop_assert!(e >= -1e-12, "eigenvalue λ[{}]={} is negative", i, e);
+            prop_assert!(e >= -f64::EPSILON * 4.0, "eigenvalue λ[{}]={} is negative", i, e);
         }
     }
 
@@ -45,7 +45,7 @@ proptest! {
             spectral_init::solve_eigenproblem_pub(&laplacian, 2, 42);
         for (i, &e) in eigs.iter().enumerate() {
             prop_assert!(
-                e <= 2.0 + 1e-12,
+                e <= 2.0 + f64::EPSILON * 4.0,
                 "eigenvalue λ[{}]={} exceeds spectral bound 2.0", i, e
             );
         }
