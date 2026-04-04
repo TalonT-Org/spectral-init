@@ -483,6 +483,8 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
     });
 
     // Per-component residuals — Dense EVD tier (component size < 2000)
+    // 1e-6 matches DENSE_EVD_QUALITY_THRESHOLD: small components (n=16-17) produce
+    // residuals ~2.5e-8 which pass the solver gate but would fail a tighter bound.
     let worst_per_comp_dense = all_metrics.iter()
         .filter_map(|m| m.disconnected_path.as_ref())
         .flat_map(|dp| dp.per_comp_max_residual.iter()
