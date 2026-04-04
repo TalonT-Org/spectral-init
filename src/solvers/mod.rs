@@ -51,6 +51,23 @@ fn dense_n_threshold() -> usize {
 }
 
 
+/// Enforce the mathematical PSD contract on solver output.
+///
+/// The symmetric normalized Laplacian has eigenvalues in [0, 2] by construction.
+/// Floating-point arithmetic in any solver (faer dense EVD, LOBPCG Rayleigh-Ritz,
+/// rSVD 2-λ cancellation, sinv 1/μ-ε recovery) can produce eigenvalues slightly
+/// outside this range. This function restores the mathematical invariant at the
+/// single exit point of the solver chain — callers of `solve_eigenproblem` may
+/// assume λ ∈ [0.0, 2.0] exactly.
+///
+/// This matches Python's `np.maximum(eigenvalues, 0.0)` convention in
+/// `tests/generate_fixtures.py` and extends it to the upper bound.
+fn enforce_psd_contract(result: EigenResult) -> EigenResult {
+    let (eigenvalues, eigenvectors) = result;
+    let clamped = eigenvalues.mapv(|lambda| lambda.max(0.0).min(2.0));
+    (clamped, eigenvectors)
+}
+
 /// Solver escalation chain. Tries six levels in order, advancing only on failure.
 ///
 /// Returns `n_components+1` eigenpairs (including the trivial λ≈0 vector at index 0)
@@ -95,7 +112,7 @@ pub(crate) fn solve_eigenproblem(
                     );
                     #[cfg(feature = "testing")]
                     eprintln!("[timing:level_total] {}µs", _t_solve.elapsed().as_micros());
-                    return ((eigs, vecs), 0);
+                    return (enforce_psd_contract((eigs, vecs)), 0);
                 }
                 log::debug!(
                     "[spectral] Level 0 (dense EVD) poor quality \
@@ -122,7 +139,7 @@ pub(crate) fn solve_eigenproblem(
             );
             #[cfg(feature = "testing")]
             eprintln!("[timing:level_total] {}µs", _t_solve.elapsed().as_micros());
-            return ((eigs, vecs), 1);
+            return (enforce_psd_contract((eigs, vecs)), 1);
         }
         log::debug!(
             "[spectral] Level 1 (LOBPCG) poor quality \
@@ -147,7 +164,7 @@ pub(crate) fn solve_eigenproblem(
             );
             #[cfg(feature = "testing")]
             eprintln!("[timing:level_total] {}µs", _t_solve.elapsed().as_micros());
-            return ((eigs, vecs), 2);
+            return (enforce_psd_contract((eigs, vecs)), 2);
         }
         log::debug!(
             "[spectral] Level 2 (sinv LOBPCG) poor quality \
@@ -172,7 +189,7 @@ pub(crate) fn solve_eigenproblem(
             );
             #[cfg(feature = "testing")]
             eprintln!("[timing:level_total] {}µs", _t_solve.elapsed().as_micros());
-            return ((eigs, vecs), 3);
+            return (enforce_psd_contract((eigs, vecs)), 3);
         }
         log::debug!(
             "[spectral] Level 3 (LOBPCG+reg) poor quality \
@@ -195,7 +212,7 @@ pub(crate) fn solve_eigenproblem(
             );
             #[cfg(feature = "testing")]
             eprintln!("[timing:level_total] {}µs", _t_solve.elapsed().as_micros());
-            return ((eigs, vecs), 4);
+            return (enforce_psd_contract((eigs, vecs)), 4);
         }
         log::debug!(
             "[spectral] Level 4 (rSVD) poor quality (max_residual={quality:.2e}), \
@@ -220,7 +237,7 @@ pub(crate) fn solve_eigenproblem(
     eprintln!("[timing:level_5] {}µs", _t5.elapsed().as_micros());
     #[cfg(feature = "testing")]
     eprintln!("[timing:level_total] {}µs", _t_solve.elapsed().as_micros());
-    (result, 5)
+    (enforce_psd_contract(result), 5)
 }
 
 /// SIMD variant of `solve_eigenproblem`: identical escalation chain but uses
@@ -256,7 +273,7 @@ pub(crate) fn solve_eigenproblem_simd(
                 if quality < DENSE_EVD_QUALITY_THRESHOLD {
                     #[cfg(feature = "testing")]
                     eprintln!("[timing:simd:level_total] {}µs", _t_solve.elapsed().as_micros());
-                    return ((eigs, vecs), 0);
+                    return (enforce_psd_contract((eigs, vecs)), 0);
                 }
             }
             Err(_) => {}
@@ -274,7 +291,7 @@ pub(crate) fn solve_eigenproblem_simd(
         if quality < LOBPCG_QUALITY_THRESHOLD {
             #[cfg(feature = "testing")]
             eprintln!("[timing:simd:level_total] {}µs", _t_solve.elapsed().as_micros());
-            return ((eigs, vecs), 1);
+            return (enforce_psd_contract((eigs, vecs)), 1);
         }
     }
 
@@ -289,7 +306,7 @@ pub(crate) fn solve_eigenproblem_simd(
         if quality < SINV_LOBPCG_QUALITY_THRESHOLD {
             #[cfg(feature = "testing")]
             eprintln!("[timing:simd:level_total] {}µs", _t_solve.elapsed().as_micros());
-            return ((eigs, vecs), 2);
+            return (enforce_psd_contract((eigs, vecs)), 2);
         }
     }
 
@@ -304,7 +321,7 @@ pub(crate) fn solve_eigenproblem_simd(
         if quality < LOBPCG_QUALITY_THRESHOLD {
             #[cfg(feature = "testing")]
             eprintln!("[timing:simd:level_total] {}µs", _t_solve.elapsed().as_micros());
-            return ((eigs, vecs), 3);
+            return (enforce_psd_contract((eigs, vecs)), 3);
         }
     }
 
@@ -319,7 +336,7 @@ pub(crate) fn solve_eigenproblem_simd(
         if quality < RSVD_QUALITY_THRESHOLD {
             #[cfg(feature = "testing")]
             eprintln!("[timing:simd:level_total] {}µs", _t_solve.elapsed().as_micros());
-            return ((eigs, vecs), 4);
+            return (enforce_psd_contract((eigs, vecs)), 4);
         }
     }
 
@@ -333,7 +350,7 @@ pub(crate) fn solve_eigenproblem_simd(
     eprintln!("[timing:simd:level_5] {}µs", _t5.elapsed().as_micros());
     #[cfg(feature = "testing")]
     eprintln!("[timing:simd:level_total] {}µs", _t_solve.elapsed().as_micros());
-    (result, 5)
+    (enforce_psd_contract(result), 5)
 }
 
 // ─── Unit Tests ──────────────────────────────────────────────────────────────
@@ -537,5 +554,49 @@ mod tests {
         unsafe { std::env::set_var("SPECTRAL_DENSE_N_THRESHOLD", "not_a_number"); }
         assert_eq!(dense_n_threshold(), DENSE_N_THRESHOLD);
         unsafe { std::env::remove_var("SPECTRAL_DENSE_N_THRESHOLD"); }
+    }
+
+    #[test]
+    fn test_enforce_psd_contract_clamps_negative() {
+        // Simulates dense EVD noise: smallest eigenvalue slightly negative
+        let raw_eigenvalues = ndarray::arr1(&[-1.657e-10_f64, 2.668e-3, 7.235e-3]);
+        let dummy_vecs = ndarray::Array2::zeros((10, 3));
+        let contracted = enforce_psd_contract((raw_eigenvalues, dummy_vecs.clone()));
+        assert_eq!(contracted.0[0], 0.0,
+            "smallest eigenvalue must be clamped from -1.657e-10 to 0.0");
+        assert!(contracted.0[1] > 0.0 && contracted.0[2] > 0.0,
+            "non-trivial eigenvalues must be unchanged");
+        assert_eq!(contracted.1, dummy_vecs, "eigenvectors must pass through unmodified");
+    }
+
+    #[test]
+    fn test_enforce_psd_contract_clamps_above_2() {
+        // Simulates rSVD upper-bound noise near the bipartite limit
+        let raw_eigenvalues = ndarray::arr1(&[0.0_f64, 1.5, 2.0 + 1.3e-15]);
+        let dummy_vecs = ndarray::Array2::zeros((10, 3));
+        let contracted = enforce_psd_contract((raw_eigenvalues, dummy_vecs.clone()));
+        assert_eq!(contracted.0[2], 2.0,
+            "eigenvalue above 2.0 must be clamped to exactly 2.0");
+        assert_eq!(contracted.1, dummy_vecs, "eigenvectors must pass through unmodified");
+    }
+
+    #[test]
+    fn test_enforce_psd_contract_passes_clean_eigenvalues_unchanged() {
+        // Eigenvalues already in range must not be modified
+        let raw_eigenvalues = ndarray::arr1(&[0.0_f64, 0.5, 1.0]);
+        let dummy_vecs = ndarray::Array2::zeros((10, 3));
+        let contracted = enforce_psd_contract((raw_eigenvalues.clone(), dummy_vecs));
+        assert_eq!(contracted.0, raw_eigenvalues,
+            "clean eigenvalues must pass through unmodified");
+    }
+
+    #[test]
+    fn test_enforce_psd_contract_clamps_rsvd_cancellation() {
+        // Simulates rSVD 2 - λ_M cancellation producing ~-1e-8
+        let raw_eigenvalues = ndarray::arr1(&[-8.2e-9_f64, 1.1e-3, 3.4e-3]);
+        let dummy_vecs = ndarray::Array2::zeros((10, 3));
+        let contracted = enforce_psd_contract((raw_eigenvalues, dummy_vecs));
+        assert_eq!(contracted.0[0], 0.0,
+            "rSVD cancellation artifact must be clamped to 0.0");
     }
 }

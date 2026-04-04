@@ -53,6 +53,14 @@ pub const DEGENERATE_GAP_THRESHOLD: f64 = 1e-6;
 /// Minimum acceptable subspace Gram determinant for quality assessment.
 pub const SUBSPACE_GRAM_DET_THRESHOLD: f64 = 0.95;
 
+/// Empirical noise floor for eigenvalue deviation below 0.0 in faer dense EVD
+/// (the tightest solver; rSVD 2-λ cancellation can reach ~1e-8, which exceeds this constant).
+///
+/// After `enforce_psd_contract` is applied at the solver chain boundary, callers of
+/// `solve_eigenproblem` receive eigenvalues already clamped to [0, 2] and do not need
+/// to account for this floor. This constant is retained for internal diagnostic use only.
+pub const PSD_NOISE_FLOOR: f64 = 1e-9;
+
 // ─── Accuracy metric functions ────────────────────────────────────────────────
 
 /// Computes the relative residual `‖L·v − λ·v‖₂ / max(‖v‖₂, ε)` for a single eigenpair.

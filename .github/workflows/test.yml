@@ -17,6 +17,9 @@ jobs:
     name: cargo nextest
     runs-on: ubuntu-latest
 
+    env:
+      RUSTFLAGS: "-C target-cpu=x86-64"
+
     steps:
       - uses: actions/checkout@v4
 
