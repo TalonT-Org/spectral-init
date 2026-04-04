@@ -162,6 +162,12 @@ pub use crate::metrics::{
     MetricResult,
 };
 
+// Re-export trustworthiness for the CLI binary when built with the `cli` feature.
+// The `testing` block above already covers test builds; this separate cfg avoids
+// double-export when both features are active.
+#[cfg(all(feature = "cli", not(feature = "testing")))]
+pub use crate::metrics::trustworthiness;
+
 use ndarray::{Array2, ArrayView2};
 use sprs::CsMatI;
 

@@ -425,7 +425,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--subset",
-        choices=["10k", "100k"],
+        choices=["10k", "20k", "50k", "100k"],
         default="10k",
         help="Dataset subset to use (default: 10k)",
     )
