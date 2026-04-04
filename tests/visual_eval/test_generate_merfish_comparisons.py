@@ -277,3 +277,11 @@ def test_run_compare_skips_when_rust_init_missing_still_returns_none(tmp_path):
     from generate_merfish_comparisons import run_compare
     result = run_compare(tmp_path)
     assert result is None
+
+
+def test_no_sklearn_trustworthiness_in_merfish_comparisons():
+    """generate_merfish_comparisons.py must not import or call sklearn.manifold.trustworthiness."""
+    from pathlib import Path
+    src = (Path(__file__).parent / "generate_merfish_comparisons.py").read_text()
+    assert "from sklearn.manifold import trustworthiness" not in src
+    assert "sklearn.manifold.trustworthiness" not in src
