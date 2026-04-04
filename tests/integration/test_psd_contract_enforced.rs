@@ -1,7 +1,5 @@
 // Verifies the PSD contract: solve_eigenproblem must return eigenvalues in [0, 2]
 // exactly (no tolerance margin), for all fixtures and all reachable solver levels.
-//
-// This test FAILS today for moons_200 because dense_evd returns λ ≈ -1.657e-10.
 
 #[path = "../common/mod.rs"]
 mod common;
@@ -15,7 +13,6 @@ const ALL_FIXTURES: &[&str] = &[
 
 #[test]
 fn test_psd_contract_all_fixtures() {
-    // All fixtures regardless of solver level: solve_eigenproblem must return λ ∈ [0, 2]
     for fixture_name in ALL_FIXTURES {
         let laplacian = common::load_sparse_csr(
             &common::fixture_path(fixture_name, "").join("comp_b_laplacian.npz"),
@@ -28,7 +25,7 @@ fn test_psd_contract_all_fixtures() {
                  The PSD contract must be enforced at the solver chain boundary."
             );
             assert!(
-                lambda <= 2.0 + f64::EPSILON * 4.0,
+                lambda <= 2.0,
                 "{fixture_name}: eigenvalue[{i}] = {lambda:.4e} exceeds 2.0. \
                  The normalized Laplacian eigenvalues must lie in [0, 2]."
             );
