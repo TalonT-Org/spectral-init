@@ -181,6 +181,7 @@ def run_baseline(
     from scipy.sparse.linalg import eigsh
     from scipy.sparse.csgraph import connected_components
 
+    tw_binary = _find_tw_binary()
     X, labels, _ = load_dataset(name, data_home=data_home, singlecell_path=singlecell_path)
 
     # Fit UMAP
@@ -219,7 +220,7 @@ def run_baseline(
     eigenvalues = np.sort(np.maximum(eigenvalues, 0.0))
 
     # Compute quality metrics
-    tw = _tw_rust(X, final_embedding.astype(np.float64), k=15, binary=_find_tw_binary())
+    tw = _tw_rust(X, final_embedding.astype(np.float64), k=15, binary=tw_binary)
     sil = silhouette_score(final_embedding, labels)
     n_conn, _ = connected_components(graph, directed=False)
     spectral_gap = float(eigenvalues[1] - eigenvalues[0]) if len(eigenvalues) >= 2 else 0.0
