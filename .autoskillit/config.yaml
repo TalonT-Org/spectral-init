@@ -1,5 +1,8 @@
 github:
   default_repo: TalonT-Org/spectral-init
+packs:
+  enabled:
+  - research
 safety:
   require_dry_walkthrough: true
   reset_guard_marker: .autoskillit-workspace
