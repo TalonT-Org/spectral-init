@@ -170,3 +170,8 @@ required-features = ["testing"]
 name = "simd_spmv_exp"
 harness = false
 required-features = ["testing"]
+
+[[bench]]
+name = "lobpcg_bench"
+harness = false
+required-features = ["testing"]
