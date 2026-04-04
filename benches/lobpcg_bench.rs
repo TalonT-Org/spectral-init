@@ -93,6 +93,12 @@ fn load_laplacian(path: &Path) -> Option<sprs::CsMatI<f64, usize>> {
             Err(e) => panic!("error reading 'shape' from {:?}: {}", path, e),
         };
 
+    assert!(
+        shape.len() >= 2,
+        "'shape' in {:?} has {} element(s), expected 2 (must be a 2-D matrix)",
+        path,
+        shape.len()
+    );
     let (rows, cols) = (shape[0], shape[1]);
     Some(
         sprs::CsMatI::try_new((rows, cols), indptr, indices, data)
