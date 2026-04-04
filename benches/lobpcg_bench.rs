@@ -156,6 +156,10 @@ fn bench_lobpcg_merfish_10k(c: &mut Criterion) {
 
     let n = laplacian.rows();
     let seed = 42_u64;
+
+    // One call outside the timed loop: primes instruction caches and surfaces
+    // the solver level via the --features testing timing lines on stderr.
+    let _ = solve_eigenproblem_pub(black_box(&laplacian), black_box(2), black_box(seed));
     eprintln!("[lobpcg_bench] merfish_10k ready: n={n}");
 
     let mut group = c.benchmark_group("lobpcg_merfish_10k");
@@ -191,6 +195,10 @@ fn bench_lobpcg_merfish_100k(c: &mut Criterion) {
 
     let n = laplacian.rows();
     let seed = 42_u64;
+
+    // One call outside the timed loop: primes instruction caches and surfaces
+    // the solver level via the --features testing timing lines on stderr.
+    let _ = solve_eigenproblem_pub(black_box(&laplacian), black_box(2), black_box(seed));
     eprintln!("[lobpcg_bench] merfish_100k ready: n={n}");
 
     let mut group = c.benchmark_group("lobpcg_merfish_100k");
