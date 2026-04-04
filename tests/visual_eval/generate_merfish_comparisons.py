@@ -117,6 +117,7 @@ def run_baseline(output_dir: Path, data_dir: Path = _DATA_DIR) -> tuple[dict, fl
     from scipy.sparse.linalg import eigsh
     from scipy.sparse.csgraph import connected_components
 
+    tw_binary = _find_tw_binary()
     t_run_start = time.perf_counter()
 
     print(f"  Loading MERFISH 10K data from {data_dir}...")
@@ -173,7 +174,7 @@ def run_baseline(output_dir: Path, data_dir: Path = _DATA_DIR) -> tuple[dict, fl
         )
 
     # Compute baseline metrics for plot
-    tw = _tw_rust(X_pca, final_embedding.astype(np.float64), k=15, binary=_find_tw_binary())
+    tw = _tw_rust(X_pca, final_embedding.astype(np.float64), k=15, binary=tw_binary)
     sil = silhouette_score(final_embedding, labels)
     n_conn, _ = connected_components(graph, directed=False)
     spectral_gap = float(eigenvalues[1] - eigenvalues[0]) if len(eigenvalues) >= 2 else 0.0
