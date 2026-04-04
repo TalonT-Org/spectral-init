@@ -561,11 +561,12 @@ mod tests {
         // Simulates dense EVD noise: smallest eigenvalue slightly negative
         let raw_eigenvalues = ndarray::arr1(&[-1.657e-10_f64, 2.668e-3, 7.235e-3]);
         let dummy_vecs = ndarray::Array2::zeros((10, 3));
-        let contracted = enforce_psd_contract((raw_eigenvalues, dummy_vecs));
+        let contracted = enforce_psd_contract((raw_eigenvalues, dummy_vecs.clone()));
         assert_eq!(contracted.0[0], 0.0,
             "smallest eigenvalue must be clamped from -1.657e-10 to 0.0");
         assert!(contracted.0[1] > 0.0 && contracted.0[2] > 0.0,
             "non-trivial eigenvalues must be unchanged");
+        assert_eq!(contracted.1, dummy_vecs, "eigenvectors must pass through unmodified");
     }
 
     #[test]
@@ -573,9 +574,10 @@ mod tests {
         // Simulates rSVD upper-bound noise near the bipartite limit
         let raw_eigenvalues = ndarray::arr1(&[0.0_f64, 1.5, 2.0 + 1.3e-15]);
         let dummy_vecs = ndarray::Array2::zeros((10, 3));
-        let contracted = enforce_psd_contract((raw_eigenvalues, dummy_vecs));
-        assert!(contracted.0[2] <= 2.0,
-            "eigenvalue above 2.0 must be clamped down");
+        let contracted = enforce_psd_contract((raw_eigenvalues, dummy_vecs.clone()));
+        assert_eq!(contracted.0[2], 2.0,
+            "eigenvalue above 2.0 must be clamped to exactly 2.0");
+        assert_eq!(contracted.1, dummy_vecs, "eigenvectors must pass through unmodified");
     }
 
     #[test]
