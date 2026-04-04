@@ -176,7 +176,6 @@ def run_baseline(
     """Run Phase 1 baseline generation for a single dataset."""
     import umap as umap_lib
     from umap.spectral import spectral_layout
-    from sklearn.manifold import trustworthiness
     from sklearn.metrics import silhouette_score
     from scipy.sparse import eye, diags
     from scipy.sparse.linalg import eigsh
@@ -220,7 +219,7 @@ def run_baseline(
     eigenvalues = np.sort(np.maximum(eigenvalues, 0.0))
 
     # Compute quality metrics
-    tw = trustworthiness(X, final_embedding, n_neighbors=15)
+    tw = _tw_rust(X, final_embedding.astype(np.float64), k=15, binary=_find_tw_binary())
     sil = silhouette_score(final_embedding, labels)
     n_conn, _ = connected_components(graph, directed=False)
     spectral_gap = float(eigenvalues[1] - eigenvalues[0]) if len(eigenvalues) >= 2 else 0.0
@@ -410,14 +409,20 @@ def _make_baseline_plot(
     print(f"  Saved plot: {out_path}")
 
 
-def _find_tw_binary() -> "pathlib.Path | None":
-    """Resolve path to the compiled Rust trustworthiness binary, or None if absent."""
+def _find_tw_binary() -> "pathlib.Path":
+    """Resolve path to the compiled Rust trustworthiness binary.
+
+    Raises RuntimeError if the binary is not present.
+    Build it with: cargo build --release --features cli
+    """
     import pathlib
     candidate = pathlib.Path(__file__).parents[2] / "target" / "release" / "trustworthiness"
-    return candidate if candidate.exists() else None
-
-
-_TW_BINARY = _find_tw_binary()
+    if not candidate.exists():
+        raise RuntimeError(
+            f"Rust trustworthiness binary not found: {candidate}\n"
+            "Build it with: cargo build --release --features cli"
+        )
+    return candidate
 
 
 def _tw_rust(X: np.ndarray, emb: np.ndarray, k: int, binary: "pathlib.Path") -> float:
@@ -457,11 +462,10 @@ def _compute_metrics(
         if arr.shape[0] != n:
             raise ValueError(f"_compute_metrics: {name} has {arr.shape[0]} rows but X has {n}")
 
+    _tw_bin = _find_tw_binary()
+
     def _tw(emb):
-        if _TW_BINARY is not None:
-            return _tw_rust(X, emb, k=15, binary=_TW_BINARY)
-        from sklearn.manifold import trustworthiness as _sk_tw
-        return float(_sk_tw(X, emb, n_neighbors=15))
+        return _tw_rust(X, emb, k=15, binary=_tw_bin)
 
     def _sil(emb):
         if len(np.unique(labels)) < 2:

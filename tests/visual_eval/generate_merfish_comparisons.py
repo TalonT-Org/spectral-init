@@ -44,7 +44,6 @@ from global_metrics import compute_global_metrics     # noqa: E402
 DATASET_NAME = "merfish_10k"
 _DATA_DIR = Path(__file__).parent / "merfish_data"
 _DEFAULT_OUTPUT_DIR = Path(__file__).parent / "output"
-_TW_BINARY = _find_tw_binary()
 
 
 def _check_sna_gate(rust_sna: float, python_sna: float, threshold: float = 0.02) -> str:
@@ -174,11 +173,7 @@ def run_baseline(output_dir: Path, data_dir: Path = _DATA_DIR) -> tuple[dict, fl
         )
 
     # Compute baseline metrics for plot
-    if _TW_BINARY is not None:
-        tw = _tw_rust(X_pca, final_embedding.astype(np.float64), k=15, binary=_TW_BINARY)
-    else:
-        from sklearn.manifold import trustworthiness as _sk_tw
-        tw = float(_sk_tw(X_pca, final_embedding, n_neighbors=15))
+    tw = _tw_rust(X_pca, final_embedding.astype(np.float64), k=15, binary=_find_tw_binary())
     sil = silhouette_score(final_embedding, labels)
     n_conn, _ = connected_components(graph, directed=False)
     spectral_gap = float(eigenvalues[1] - eigenvalues[0]) if len(eigenvalues) >= 2 else 0.0
