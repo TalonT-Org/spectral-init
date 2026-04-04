@@ -88,3 +88,20 @@ def test_unknown_dataset_exits(monkeypatch):
 def test_all_tier_datasets():
     from tests.visual_eval.generate_umap_comparisons import TIER1_DATASETS, TIER2_DATASETS, ALL_DATASETS
     assert ALL_DATASETS == TIER1_DATASETS + TIER2_DATASETS
+
+
+def test_find_tw_binary_raises_when_absent(monkeypatch):
+    """_find_tw_binary() must raise RuntimeError with cargo build message when binary is missing."""
+    import pathlib
+    monkeypatch.setattr(pathlib.Path, "exists", lambda self: False)
+    from tests.visual_eval.generate_umap_comparisons import _find_tw_binary
+    with pytest.raises(RuntimeError, match="cargo build --release --features cli"):
+        _find_tw_binary()
+
+
+def test_no_sklearn_trustworthiness_in_umap_comparisons():
+    """generate_umap_comparisons.py must not import or call sklearn.manifold.trustworthiness."""
+    from pathlib import Path
+    src = (Path(__file__).parent / "generate_umap_comparisons.py").read_text()
+    assert "from sklearn.manifold import trustworthiness" not in src
+    assert "sklearn.manifold.trustworthiness" not in src
