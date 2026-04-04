@@ -410,6 +410,36 @@ def _make_baseline_plot(
     print(f"  Saved plot: {out_path}")
 
 
+def _find_tw_binary() -> "pathlib.Path | None":
+    """Resolve path to the compiled Rust trustworthiness binary, or None if absent."""
+    import pathlib
+    candidate = pathlib.Path(__file__).parents[2] / "target" / "release" / "trustworthiness"
+    return candidate if candidate.exists() else None
+
+
+_TW_BINARY = _find_tw_binary()
+
+
+def _tw_rust(X: np.ndarray, emb: np.ndarray, k: int, binary: "pathlib.Path") -> float:
+    """Write X and emb to temp .npy files, invoke the Rust binary, return parsed float."""
+    import subprocess
+    import tempfile
+    import os
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        x_path = os.path.join(tmpdir, "X.npy")
+        y_path = os.path.join(tmpdir, "Y.npy")
+        np.save(x_path, X.astype(np.float64))
+        np.save(y_path, emb.astype(np.float64))
+        result = subprocess.run(
+            [str(binary), "--x", x_path, "--y", y_path, "--k", str(k)],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return float(result.stdout.strip())
+
+
 def _compute_metrics(
     X: np.ndarray,
     labels: np.ndarray,
@@ -418,7 +448,6 @@ def _compute_metrics(
     embed_rand: np.ndarray,
 ) -> dict:
     """Compute comparison metrics for three UMAP strategies."""
-    from sklearn.manifold import trustworthiness
     from sklearn.metrics import silhouette_score
     from scipy.spatial import procrustes
     from scipy.spatial.distance import pdist
@@ -429,7 +458,10 @@ def _compute_metrics(
             raise ValueError(f"_compute_metrics: {name} has {arr.shape[0]} rows but X has {n}")
 
     def _tw(emb):
-        return float(trustworthiness(X, emb, n_neighbors=15))
+        if _TW_BINARY is not None:
+            return _tw_rust(X, emb, k=15, binary=_TW_BINARY)
+        from sklearn.manifold import trustworthiness as _sk_tw
+        return float(_sk_tw(X, emb, n_neighbors=15))
 
     def _sil(emb):
         if len(np.unique(labels)) < 2:
