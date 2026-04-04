@@ -1,0 +1,14 @@
+{
+  "data_loading_s": 1.1495204959974217,
+  "preprocessing_s": 22.29920135700013,
+  "python_spectral_init_s": 8.764878915000736,
+  "python_sgd_s": 28.376639380996494,
+  "graph_export_s": 2.0345969590016466,
+  "total_baseline_s": 206.6176790440004,
+  "rust_spectral_init_s": 52.07,
+  "rust_init_sgd_s": 37.25936783299767,
+  "random_sgd_s": 27.871000438997726,
+  "metrics_s": 651.2282718230017,
+  "plots_s": 8.715748335998796,
+  "total_compare_s": 725.0829992959989
+}

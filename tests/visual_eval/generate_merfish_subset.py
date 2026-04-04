@@ -1,9 +1,11 @@
 """
-Generate a spatially-stratified 10K-cell subset of the MERFISH Zhuang-ABCA-1 dataset.
+Generate a spatially-stratified subset of the MERFISH Zhuang-ABCA-1 dataset.
 
 Usage:
-    python generate_merfish_subset.py          # generate and commit artifacts
-    python generate_merfish_subset.py --check  # validate existing artifacts only
+    python generate_merfish_subset.py                                 # 10K (default)
+    python generate_merfish_subset.py --n-cells 100000 --output-dir temp/merfish_100k
+    python generate_merfish_subset.py --check                        # validate 10K artifacts
+    python generate_merfish_subset.py --check --n-cells 100000 --output-dir temp/merfish_100k
 """
 
 import argparse
@@ -19,8 +21,6 @@ import polars as pl
 from scipy.stats import spearmanr
 
 DATA_DIR = Path(os.environ.get("MERFISH_DATA_DIR", "/home/talon/projects/spectral-init/data/merfish-abca1"))
-OUTPUT_DIR = Path(__file__).parent / "merfish_data"
-N_TARGET = 10_000
 N_GENES = 1122
 GRID_SIZE = 50
 SEED = 42
@@ -149,16 +149,18 @@ def _print_validation_summary(
     expr_shape: tuple,
     spatial_arr: np.ndarray,
     checksum: str,
+    n_target: int,
 ) -> bool:
     """Print validation summary and return True if all checks pass."""
     # Note: with 5168 unique cluster types and only 10K cells (~1046 types representable),
     # ~80% of types have 0 in the subset, creating massive rank ties. The achievable
     # Spearman (even with random sampling) is ~0.56. Threshold is 0.50.
     spearman_pass = spearman_r > 0.50
-    expr_pass = expr_shape == (N_TARGET, N_GENES)
-    all_pass = spearman_pass and expr_pass and n_cells == N_TARGET and n_genes == N_GENES
+    expr_pass = expr_shape == (n_target, N_GENES)
+    all_pass = spearman_pass and expr_pass and n_cells == n_target and n_genes == N_GENES
 
-    print("MERFISH 10K Subset Validation")
+    n_k = n_target // 1000
+    print(f"MERFISH {n_k}K Subset Validation")
     print(f"  n_cells:           {n_cells}")
     print(f"  n_genes:           {n_genes}")
     print(f"  n_sections:        {n_sections}")
@@ -173,15 +175,16 @@ def _print_validation_summary(
     return all_pass
 
 
-def generate_subset() -> None:
+def generate_subset(n_target: int, output_dir: Path, output_prefix: str) -> None:
     """Main generation logic — load, subsample, extract, save, validate."""
+    n_k = n_target // 1000
     print("=" * 60)
-    print("MERFISH 10K Subset Generator")
+    print(f"MERFISH {n_k}K Subset Generator")
     print(f"  Data dir:  {DATA_DIR}")
-    print(f"  Output dir: {OUTPUT_DIR}")
+    print(f"  Output dir: {output_dir}")
     print("=" * 60)
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     # 1. Load metadata
     print("Loading cell metadata (Polars lazy scan)...")
@@ -193,8 +196,8 @@ def generate_subset() -> None:
 
     # 3. Spatially-stratified subsample
     print(f"Running spatial stratified subsampling ({GRID_SIZE}x{GRID_SIZE} grid, seed={SEED})...")
-    subset_row_indices = spatial_stratified_subsample(coords, N_TARGET, GRID_SIZE, SEED)
-    assert len(subset_row_indices) == N_TARGET, f"Expected {N_TARGET}, got {len(subset_row_indices)}"
+    subset_row_indices = spatial_stratified_subsample(coords, n_target, GRID_SIZE, SEED)
+    assert len(subset_row_indices) == n_target, f"Expected {n_target}, got {len(subset_row_indices)}"
     print(f"  Selected {len(subset_row_indices):,} cells")
 
     # 4. Extract subset metadata rows
@@ -244,7 +247,7 @@ def generate_subset() -> None:
     }
     n_sections = len(set(subset_df["brain_section_label"].to_list()))
     meta = {
-        "n_cells": N_TARGET,
+        "n_cells": n_target,
         "n_genes": N_GENES,
         "n_sections_sampled": n_sections,
         "spatial_extent": {
@@ -260,41 +263,42 @@ def generate_subset() -> None:
 
     # 13. Save artifacts
     print("Saving artifacts...")
-    np.savez_compressed(OUTPUT_DIR / "merfish_10k_expression.npz", arr_0=expr_matrix)
-    np.savez_compressed(OUTPUT_DIR / "merfish_10k_spatial.npz", arr_0=spatial_arr)
-    np.savez_compressed(OUTPUT_DIR / "merfish_10k_labels.npz", arr_0=labels_arr)
-    np.savez_compressed(OUTPUT_DIR / "merfish_10k_section_ids.npz", arr_0=section_ids_arr)
-    with open(OUTPUT_DIR / "merfish_10k_meta.json", "w") as f:
+    np.savez_compressed(output_dir / f"{output_prefix}expression.npz", arr_0=expr_matrix)
+    np.savez_compressed(output_dir / f"{output_prefix}spatial.npz",    arr_0=spatial_arr)
+    np.savez_compressed(output_dir / f"{output_prefix}labels.npz",     arr_0=labels_arr)
+    np.savez_compressed(output_dir / f"{output_prefix}section_ids.npz", arr_0=section_ids_arr)
+    with open(output_dir / f"{output_prefix}meta.json", "w") as f:
         json.dump(meta, f, indent=2)
     print("  Artifacts saved.")
 
     # 14. Print validation summary
     all_pass = _print_validation_summary(
-        n_cells=N_TARGET,
+        n_cells=n_target,
         n_genes=N_GENES,
         n_sections=n_sections,
         spearman_r=spearman_r,
         expr_shape=expr_matrix.shape,
         spatial_arr=spatial_arr,
         checksum=checksum_hex,
+        n_target=n_target,
     )
 
     if not all_pass:
         raise ValueError("Validation FAILED — see summary above.")
 
 
-def validate_subset() -> None:
+def validate_subset(n_target: int, output_dir: Path, output_prefix: str) -> None:
     """--check mode: validate existing artifacts without regenerating."""
     artifacts = [
-        "merfish_10k_expression.npz",
-        "merfish_10k_spatial.npz",
-        "merfish_10k_labels.npz",
-        "merfish_10k_section_ids.npz",
-        "merfish_10k_meta.json",
+        f"{output_prefix}expression.npz",
+        f"{output_prefix}spatial.npz",
+        f"{output_prefix}labels.npz",
+        f"{output_prefix}section_ids.npz",
+        f"{output_prefix}meta.json",
     ]
 
     # Check all files exist
-    missing = [f for f in artifacts if not (OUTPUT_DIR / f).exists()]
+    missing = [f for f in artifacts if not (output_dir / f).exists()]
     if missing:
         print(f"FAIL: Missing artifacts: {missing}")
         sys.exit(1)
@@ -302,36 +306,36 @@ def validate_subset() -> None:
     failures = []
 
     # Load and check .npz files
-    expr = np.load(OUTPUT_DIR / "merfish_10k_expression.npz")["arr_0"]
-    if expr.shape != (N_TARGET, N_GENES):
-        failures.append(f"expression shape {expr.shape} != ({N_TARGET}, {N_GENES})")
+    expr = np.load(output_dir / f"{output_prefix}expression.npz")["arr_0"]
+    if expr.shape != (n_target, N_GENES):
+        failures.append(f"expression shape {expr.shape} != ({n_target}, {N_GENES})")
     if expr.dtype != np.float32:
         failures.append(f"expression dtype {expr.dtype} != float32")
 
-    spatial = np.load(OUTPUT_DIR / "merfish_10k_spatial.npz")["arr_0"]
-    if spatial.shape != (N_TARGET, 2):
-        failures.append(f"spatial shape {spatial.shape} != ({N_TARGET}, 2)")
+    spatial = np.load(output_dir / f"{output_prefix}spatial.npz")["arr_0"]
+    if spatial.shape != (n_target, 2):
+        failures.append(f"spatial shape {spatial.shape} != ({n_target}, 2)")
     if spatial.dtype != np.float32:
         failures.append(f"spatial dtype {spatial.dtype} != float32")
 
-    labels = np.load(OUTPUT_DIR / "merfish_10k_labels.npz")["arr_0"]
-    if labels.shape != (N_TARGET,):
-        failures.append(f"labels shape {labels.shape} != ({N_TARGET},)")
+    labels = np.load(output_dir / f"{output_prefix}labels.npz")["arr_0"]
+    if labels.shape != (n_target,):
+        failures.append(f"labels shape {labels.shape} != ({n_target},)")
     if labels.dtype != np.int32:
         failures.append(f"labels dtype {labels.dtype} != int32")
 
-    section_ids = np.load(OUTPUT_DIR / "merfish_10k_section_ids.npz")["arr_0"]
-    if section_ids.shape != (N_TARGET,):
-        failures.append(f"section_ids shape {section_ids.shape} != ({N_TARGET},)")
+    section_ids = np.load(output_dir / f"{output_prefix}section_ids.npz")["arr_0"]
+    if section_ids.shape != (n_target,):
+        failures.append(f"section_ids shape {section_ids.shape} != ({n_target},)")
     if section_ids.dtype != np.int32:
         failures.append(f"section_ids dtype {section_ids.dtype} != int32")
 
     # Load and check meta.json
-    with open(OUTPUT_DIR / "merfish_10k_meta.json") as f:
+    with open(output_dir / f"{output_prefix}meta.json") as f:
         meta = json.load(f)
 
-    if meta["n_cells"] != N_TARGET:
-        failures.append(f"n_cells {meta['n_cells']} != {N_TARGET}")
+    if meta["n_cells"] != n_target:
+        failures.append(f"n_cells {meta['n_cells']} != {n_target}")
     if meta["n_genes"] != N_GENES:
         failures.append(f"n_genes {meta['n_genes']} != {N_GENES}")
     if meta["freq_spearman_r"] <= 0.50:
@@ -354,6 +358,7 @@ def validate_subset() -> None:
         expr_shape=expr.shape,
         spatial_arr=spatial,
         checksum=checksum,
+        n_target=n_target,
     )
 
     if failures:
@@ -365,19 +370,35 @@ def validate_subset() -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Generate or validate the spatially-stratified 10K MERFISH subset."
+        description="Generate or validate a spatially-stratified MERFISH subset."
     )
     parser.add_argument(
         "--check",
         action="store_true",
         help="Validate existing subset artifacts, no regen",
     )
+    parser.add_argument(
+        "--n-cells",
+        type=int,
+        default=10_000,
+        help="Number of cells to sample (default: 10000)",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path(__file__).parent / "merfish_data",
+        help="Output directory for generated artifacts (default: merfish_data/)",
+    )
     args = parser.parse_args()
 
+    n_cells = args.n_cells
+    output_dir = args.output_dir
+    output_prefix = f"merfish_{n_cells // 1000}k_"
+
     if args.check:
-        validate_subset()
+        validate_subset(n_target=n_cells, output_dir=output_dir, output_prefix=output_prefix)
     else:
-        generate_subset()
+        generate_subset(n_target=n_cells, output_dir=output_dir, output_prefix=output_prefix)
 
 
 if __name__ == "__main__":

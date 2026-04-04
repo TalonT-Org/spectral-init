@@ -2,7 +2,7 @@
 """
 generate_merfish_comparisons.py — MERFISH-specific UMAP comparison pipeline.
 
-Phase 1 (--phase baseline): Loads the committed 10K MERFISH subset, preprocesses
+Phase 1 (--phase baseline): Loads the committed MERFISH subset, preprocesses
 with scanpy, fits Python UMAP, exports the graph for Rust, and generates a baseline plot.
 
 Phase 2 (--phase compare): Loads Phase 1 artifacts and Rust spectral init coordinates,
@@ -41,8 +41,6 @@ from spatial_metrics import compute_spatial_metrics   # noqa: E402
 from cluster_metrics import compute_cluster_metrics   # noqa: E402
 from global_metrics import compute_global_metrics     # noqa: E402
 
-DATASET_NAME = "merfish_10k"
-_DATA_DIR = Path(__file__).parent / "merfish_data"
 _DEFAULT_OUTPUT_DIR = Path(__file__).parent / "output"
 
 
@@ -53,29 +51,30 @@ def _check_sna_gate(rust_sna: float, python_sna: float, threshold: float = 0.02)
 
 def load_merfish_data(
     data_dir: Path,
+    prefix: str = "merfish_10k_",
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Load 10K MERFISH subset from compressed .npz files.
+    """Load MERFISH subset from compressed .npz files.
 
     Returns:
-        expression  : float32 (10000, 1122)
-        spatial     : float32 (10000, 2)
-        labels      : int32   (10000,)
-        section_ids : int32   (10000,)
+        expression  : float32 (n, 1122)
+        spatial     : float32 (n, 2)
+        labels      : int32   (n,)
+        section_ids : int32   (n,)
     """
     for fname in [
-        "merfish_10k_expression.npz",
-        "merfish_10k_spatial.npz",
-        "merfish_10k_labels.npz",
-        "merfish_10k_section_ids.npz",
+        f"{prefix}expression.npz",
+        f"{prefix}spatial.npz",
+        f"{prefix}labels.npz",
+        f"{prefix}section_ids.npz",
     ]:
         if not (data_dir / fname).exists():
             raise FileNotFoundError(
-                f"merfish_10k: data file not found — {data_dir / fname}"
+                f"{prefix.rstrip('_')}: data file not found — {data_dir / fname}"
             )
-    expression = np.load(data_dir / "merfish_10k_expression.npz")["arr_0"].astype(np.float32)
-    spatial = np.load(data_dir / "merfish_10k_spatial.npz")["arr_0"].astype(np.float32)
-    labels = np.load(data_dir / "merfish_10k_labels.npz")["arr_0"].astype(np.int32)
-    section_ids = np.load(data_dir / "merfish_10k_section_ids.npz")["arr_0"].astype(np.int32)
+    expression = np.load(data_dir / f"{prefix}expression.npz")["arr_0"].astype(np.float32)
+    spatial = np.load(data_dir / f"{prefix}spatial.npz")["arr_0"].astype(np.float32)
+    labels = np.load(data_dir / f"{prefix}labels.npz")["arr_0"].astype(np.int32)
+    section_ids = np.load(data_dir / f"{prefix}section_ids.npz")["arr_0"].astype(np.int32)
     return expression, spatial, labels, section_ids
 
 
@@ -108,8 +107,8 @@ def preprocess_merfish(expression: np.ndarray) -> tuple[anndata.AnnData, np.ndar
     return adata, X_pca
 
 
-def run_baseline(output_dir: Path, data_dir: Path = _DATA_DIR) -> tuple[dict, float]:
-    """Run Phase 1 baseline generation for the MERFISH 10K subset."""
+def run_baseline(output_dir: Path, data_dir: Path, dataset_name: str) -> tuple[dict, float]:
+    """Run Phase 1 baseline generation for the given MERFISH subset."""
     import umap as umap_lib
     from umap.spectral import spectral_layout
     from sklearn.metrics import silhouette_score
@@ -120,9 +119,9 @@ def run_baseline(output_dir: Path, data_dir: Path = _DATA_DIR) -> tuple[dict, fl
     tw_binary = _find_tw_binary()
     t_run_start = time.perf_counter()
 
-    print(f"  Loading MERFISH 10K data from {data_dir}...")
+    print(f"  Loading {dataset_name} data from {data_dir}...")
     t0 = time.perf_counter()
-    expression, spatial, labels, _ = load_merfish_data(data_dir)
+    expression, spatial, labels, _ = load_merfish_data(data_dir, prefix=f"{dataset_name}_")
     data_loading_s = time.perf_counter() - t0
 
     print("  Preprocessing (scanpy: normalize → log1p → scale → PCA → neighbors)...")
@@ -164,7 +163,7 @@ def run_baseline(output_dir: Path, data_dir: Path = _DATA_DIR) -> tuple[dict, fl
         eigenvalues, _ = eigsh(L, k=10, which="SM")
     except scipy.sparse.linalg.ArpackNoConvergence as exc:
         raise RuntimeError(
-            "eigsh failed to converge for merfish_10k "
+            f"eigsh failed to converge for {dataset_name} "
             f"(matrix shape {L.shape})"
         ) from exc
     eigenvalues = np.sort(np.maximum(eigenvalues, 0.0))
@@ -194,14 +193,14 @@ def run_baseline(output_dir: Path, data_dir: Path = _DATA_DIR) -> tuple[dict, fl
     # Export artifacts + plot (timed together as graph_export_s)
     t0 = time.perf_counter()
     output_dir.mkdir(parents=True, exist_ok=True)
-    export_graph(mapper.graph_, output_dir / "merfish_10k_graph.npz")
-    np.save(output_dir / "merfish_10k_py_spectral.npy", init_coords.astype(np.float64))
-    np.save(output_dir / "merfish_10k_py_final.npy", final_embedding)
-    np.save(output_dir / "merfish_10k_pca.npy", X_pca)
-    np.save(output_dir / "merfish_10k_labels.npy", labels.astype(np.int32))
-    np.savez_compressed(output_dir / "merfish_10k_spatial.npz", arr_0=spatial)
+    export_graph(mapper.graph_, output_dir / f"{dataset_name}_graph.npz")
+    np.save(output_dir / f"{dataset_name}_py_spectral.npy", init_coords.astype(np.float64))
+    np.save(output_dir / f"{dataset_name}_py_final.npy", final_embedding)
+    np.save(output_dir / f"{dataset_name}_pca.npy", X_pca)
+    np.save(output_dir / f"{dataset_name}_labels.npy", labels.astype(np.int32))
+    np.savez_compressed(output_dir / f"{dataset_name}_spatial.npz", arr_0=spatial)
     _make_baseline_plot(
-        DATASET_NAME, init_coords, final_embedding, labels, eigenvalues, metrics, output_dir
+        dataset_name, init_coords, final_embedding, labels, eigenvalues, metrics, output_dir
     )
     graph_export_s = time.perf_counter() - t0
 
@@ -219,8 +218,8 @@ def run_baseline(output_dir: Path, data_dir: Path = _DATA_DIR) -> tuple[dict, fl
     return timings_baseline, rss_baseline_mb
 
 
-def run_compare(output_dir: Path) -> tuple[dict, float, float] | None:
-    """Run Phase 2 three-way comparison for the MERFISH 10K dataset.
+def run_compare(output_dir: Path, dataset_name: str) -> tuple[dict, float, float] | None:
+    """Run Phase 2 three-way comparison for the given MERFISH dataset.
 
     Unlike run_baseline, this function does not accept data_dir because Phase 2
     reads all inputs (embeddings, labels, PCA) from Phase 1 artifacts in output_dir.
@@ -230,31 +229,31 @@ def run_compare(output_dir: Path) -> tuple[dict, float, float] | None:
 
     t_run_start = time.perf_counter()
 
-    rust_init_path = output_dir / "merfish_10k_rust_init.npy"
+    rust_init_path = output_dir / f"{dataset_name}_rust_init.npy"
     if not rust_init_path.exists():
-        print(f"  [WARN] merfish_10k: rust_init.npy not found — skipping")
+        print(f"  [WARN] {dataset_name}: rust_init.npy not found — skipping")
         return None
 
     for baseline_file in [
-        output_dir / "merfish_10k_py_spectral.npy",
-        output_dir / "merfish_10k_py_final.npy",
-        output_dir / "merfish_10k_labels.npy",
-        output_dir / "merfish_10k_pca.npy",
-        output_dir / "merfish_10k_spatial.npz",
+        output_dir / f"{dataset_name}_py_spectral.npy",
+        output_dir / f"{dataset_name}_py_final.npy",
+        output_dir / f"{dataset_name}_labels.npy",
+        output_dir / f"{dataset_name}_pca.npy",
+        output_dir / f"{dataset_name}_spatial.npz",
     ]:
         if not baseline_file.exists():
             raise FileNotFoundError(
-                f"  [ERROR] merfish_10k: baseline file not found — {baseline_file}"
+                f"  [ERROR] {dataset_name}: baseline file not found — {baseline_file}"
             )
 
-    py_spectral = np.load(output_dir / "merfish_10k_py_spectral.npy")
-    py_final = np.load(output_dir / "merfish_10k_py_final.npy")
+    py_spectral = np.load(output_dir / f"{dataset_name}_py_spectral.npy")
+    py_final = np.load(output_dir / f"{dataset_name}_py_final.npy")
     rust_init = np.load(rust_init_path)
-    labels = np.load(output_dir / "merfish_10k_labels.npy")
-    X_pca = np.load(output_dir / "merfish_10k_pca.npy")
-    spatial = np.load(output_dir / "merfish_10k_spatial.npz")["arr_0"].astype(np.float64)
+    labels = np.load(output_dir / f"{dataset_name}_labels.npy")
+    X_pca = np.load(output_dir / f"{dataset_name}_pca.npy")
+    spatial = np.load(output_dir / f"{dataset_name}_spatial.npz")["arr_0"].astype(np.float64)
 
-    perf_path = output_dir / "merfish_10k_rust_perf.txt"
+    perf_path = output_dir / f"{dataset_name}_rust_perf.txt"
     if perf_path.exists():
         fields = perf_path.read_text().split()
         rust_spectral_init_s = float(fields[0])
@@ -303,7 +302,7 @@ def run_compare(output_dir: Path) -> tuple[dict, float, float] | None:
     rand_tw_pass = abs(rand_m["trustworthiness"] - py_m["trustworthiness"]) < 0.01
     rand_sil_pass = abs(rand_m["silhouette"] - py_m["silhouette"]) < 0.05
     if pf["overall"] == "PASS" and all([rand_proc_pass, rand_corr_pass, rand_tw_pass, rand_sil_pass]):
-        print(f"  [WARN] merfish_10k: random init also passes all thresholds")
+        print(f"  [WARN] {dataset_name}: random init also passes all thresholds")
 
     pf_sna = _check_sna_gate(b_rust["sna"], b_py["sna"])
     metrics["pass_fail"]["sna"] = pf_sna
@@ -324,10 +323,10 @@ def run_compare(output_dir: Path) -> tuple[dict, float, float] | None:
 
     t0 = time.perf_counter()
     _make_comparison_plot(
-        DATASET_NAME, py_spectral, rust_init, embed_py, embed_rust, embed_rand, labels, output_dir
+        dataset_name, py_spectral, rust_init, embed_py, embed_rust, embed_rand, labels, output_dir
     )
-    _make_overlay_plot(DATASET_NAME, embed_py, embed_rust, output_dir)
-    _make_three_way_overlay(DATASET_NAME, embed_py, embed_rust, embed_rand, output_dir)
+    _make_overlay_plot(dataset_name, embed_py, embed_rust, output_dir)
+    _make_three_way_overlay(dataset_name, embed_py, embed_rust, embed_rand, output_dir)
     plots_s = time.perf_counter() - t0
 
     _extra_keys = set(b_py) | set(c_py) | set(d_py)
@@ -336,7 +335,7 @@ def run_compare(output_dir: Path) -> tuple[dict, float, float] | None:
     assert not _collision, f"Key collision in metric merge: {_collision}"
 
     result = {
-        "dataset": DATASET_NAME,
+        "dataset": dataset_name,
         "n_samples": int(X_pca.shape[0]),
         "n_features": int(X_pca.shape[1]),
         "python_spectral": {**metrics["python_spectral"], **b_py, **c_py, **d_py},
@@ -345,13 +344,13 @@ def run_compare(output_dir: Path) -> tuple[dict, float, float] | None:
         "pass_fail":       metrics["pass_fail"],
     }
 
-    json_path = output_dir / "merfish_10k_metrics.json"
+    json_path = output_dir / f"{dataset_name}_metrics.json"
     json_path.write_text(json.dumps(result, indent=2))
     print(f"  Saved metrics: {json_path}")
     pf_out = result["pass_fail"]
     py_m  = result["python_spectral"]
     ru_m  = result["rust_spectral"]
-    print(f"  {'merfish_10k':25s} {pf_out['overall']}")
+    print(f"  {dataset_name:25s} {pf_out['overall']}")
     print(
         f"    Cat-A  TW={py_m['trustworthiness']:.4f}(py) {ru_m['trustworthiness']:.4f}(ru)"
         f"  Sil={py_m['silhouette']:.4f}(py) {ru_m['silhouette']:.4f}(ru)"
@@ -389,9 +388,9 @@ def run_compare(output_dir: Path) -> tuple[dict, float, float] | None:
     return timings_compare, rss_compare_mb, rust_peak_rss_mb
 
 
-def _write_timing_json(output_dir: Path, new_keys: dict) -> None:
+def _write_timing_json(output_dir: Path, dataset_name: str, new_keys: dict) -> None:
     import json
-    path = output_dir / "merfish_10k_timing.json"
+    path = output_dir / f"{dataset_name}_timing.json"
     data: dict = {}
     if path.exists():
         data = json.loads(path.read_text())
@@ -399,9 +398,9 @@ def _write_timing_json(output_dir: Path, new_keys: dict) -> None:
     path.write_text(json.dumps(data, indent=2))
 
 
-def _write_memory_json(output_dir: Path, new_keys: dict) -> None:
+def _write_memory_json(output_dir: Path, dataset_name: str, new_keys: dict) -> None:
     import json
-    path = output_dir / "merfish_10k_memory.json"
+    path = output_dir / f"{dataset_name}_memory.json"
     data: dict = {}
     if path.exists():
         data = json.loads(path.read_text())
@@ -424,27 +423,41 @@ def main() -> None:
         default=str(_DEFAULT_OUTPUT_DIR),
         help="Output directory (default: tests/visual_eval/output).",
     )
+    parser.add_argument(
+        "--subset",
+        choices=["10k", "20k", "50k", "100k"],
+        default="10k",
+        help="Dataset subset to use (default: 10k)",
+    )
+    parser.add_argument(
+        "--data-dir",
+        type=Path,
+        default=Path(__file__).parent / "merfish_data",
+        help="Directory containing the MERFISH subset .npz files (default: merfish_data/)",
+    )
     args = parser.parse_args()
 
+    dataset_name = f"merfish_{args.subset}"
+    data_dir = args.data_dir
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     t0 = time.time()
-    print(f"[merfish_10k] phase={args.phase} ...")
+    print(f"[{dataset_name}] phase={args.phase} ...")
     if args.phase == "baseline":
-        timings_baseline, rss_baseline_mb = run_baseline(output_dir)
-        _write_timing_json(output_dir, timings_baseline)
-        _write_memory_json(output_dir, {"peak_rss_baseline_mb": rss_baseline_mb})
+        timings_baseline, rss_baseline_mb = run_baseline(output_dir, data_dir=data_dir, dataset_name=dataset_name)
+        _write_timing_json(output_dir, dataset_name, timings_baseline)
+        _write_memory_json(output_dir, dataset_name, {"peak_rss_baseline_mb": rss_baseline_mb})
     else:
-        result = run_compare(output_dir)
+        result = run_compare(output_dir, dataset_name)
         if result is not None:
             timings_compare, rss_compare_mb, rust_peak_rss_mb = result
-            _write_timing_json(output_dir, timings_compare)
-            _write_memory_json(output_dir, {
+            _write_timing_json(output_dir, dataset_name, timings_compare)
+            _write_memory_json(output_dir, dataset_name, {
                 "peak_rss_compare_mb": rss_compare_mb,
                 "rust_peak_rss_mb": rust_peak_rss_mb,
             })
-    print(f"[merfish_10k] done in {time.time() - t0:.1f}s")
+    print(f"[{dataset_name}] done in {time.time() - t0:.1f}s")
 
 
 if __name__ == "__main__":
