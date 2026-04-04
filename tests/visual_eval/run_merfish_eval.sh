@@ -7,20 +7,28 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # Accept subset scale as first positional argument
 SUBSET="${1:-10k}"
 
-# Determine data-dir arg for 100K (empty string for 10K = use default)
+# Determine data-dir arg (empty string for 10K = use default)
 DATA_DIR_ARG=""
-if [ "$SUBSET" = "100k" ]; then
-    DATA_DIR_ARG="--data-dir $PROJECT_ROOT/temp/merfish_100k"
+if [ "$SUBSET" != "10k" ]; then
+    DATA_DIR_ARG="--data-dir $PROJECT_ROOT/temp/merfish_${SUBSET}"
 fi
 
-# Phase 0: generate 100K subset (100K only, idempotent)
-if [ "$SUBSET" = "100k" ] && [ ! -f "$PROJECT_ROOT/temp/merfish_100k/merfish_100k_meta.json" ]; then
-    echo "=== Phase 0: Generate MERFISH 100K subset ==="
-    python "$SCRIPT_DIR/generate_merfish_subset.py" \
-        --n-cells 100000 \
-        --output-dir "$PROJECT_ROOT/temp/merfish_100k"
-elif [ "$SUBSET" = "100k" ]; then
-    echo "=== Phase 0: MERFISH 100K subset already present, skipping ==="
+# Map subset label to cell count
+declare -A SUBSET_CELLS=( [20k]=20000 [50k]=50000 [100k]=100000 [250k]=250000 [500k]=500000 )
+
+# Phase 0: generate subset (non-10k only, idempotent)
+if [ "$SUBSET" != "10k" ]; then
+    N_CELLS="${SUBSET_CELLS[$SUBSET]}"
+    DATA_DIR="$PROJECT_ROOT/temp/merfish_${SUBSET}"
+    META_FILE="$DATA_DIR/merfish_${SUBSET}_meta.json"
+    if [ ! -f "$META_FILE" ]; then
+        echo "=== Phase 0: Generate MERFISH ${SUBSET} subset ==="
+        python "$SCRIPT_DIR/generate_merfish_subset.py" \
+            --n-cells "$N_CELLS" \
+            --output-dir "$DATA_DIR"
+    else
+        echo "=== Phase 0: MERFISH ${SUBSET} subset already present, skipping ==="
+    fi
 fi
 
 echo "=== Phase 1: Generate MERFISH baselines ==="
