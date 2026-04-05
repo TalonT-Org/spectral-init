@@ -139,6 +139,14 @@ pub fn normalize_signs_pub(coords: &mut ndarray::Array2<f64>) {
 // trustworthiness is part of the stable public API and always available.
 pub use crate::metrics::trustworthiness;
 
+// Trustworthiness optimization variants — part of the tw-perf-scaling experiment (groupB).
+pub use crate::metrics::trustworthiness_thread_local;
+pub use crate::metrics::trustworthiness_partial_rank;
+pub use crate::metrics::trustworthiness_avx2_kernel;
+pub use crate::metrics::trustworthiness_avx512_kernel;
+pub use crate::metrics::trustworthiness_combined;
+pub use crate::metrics::trustworthiness_approx;
+
 #[cfg(feature = "testing")]
 #[doc(hidden)]
 pub use crate::metrics::{
