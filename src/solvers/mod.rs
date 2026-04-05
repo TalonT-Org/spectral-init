@@ -264,10 +264,10 @@ pub(crate) fn solve_eigenproblem_simd(
     if n < dense_n_threshold() {
         #[cfg(feature = "testing")]
         let _t0 = std::time::Instant::now();
-        let _l0_result = dense_evd(laplacian, n_components + 1);
+        let l0_result = dense_evd(laplacian, n_components + 1);
         #[cfg(feature = "testing")]
         eprintln!("[timing:simd:level_0] {}µs", _t0.elapsed().as_micros());
-        if let Ok((eigs, vecs)) = _l0_result {
+        if let Ok((eigs, vecs)) = l0_result {
             let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
             if quality < DENSE_EVD_QUALITY_THRESHOLD {
                 #[cfg(feature = "testing")]
