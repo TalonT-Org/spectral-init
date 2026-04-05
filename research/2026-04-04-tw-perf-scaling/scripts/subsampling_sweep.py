@@ -26,8 +26,8 @@ def main() -> None:
     parser.add_argument("--x", required=True, type=Path, help="Path to X embedding .npy")
     parser.add_argument("--y", required=True, type=Path, help="Path to Y embedding .npy")
     parser.add_argument("--m", required=True, type=int, help="Subsample size")
-    parser.add_argument("--n-trials", default=1, type=int, dest="n_trials",
-                        help="Number of trials to run (default: 1)")
+    parser.add_argument("--n-trials", default=3, type=int, dest="n_trials",
+                        help="Number of trials to run (default: 3)")
     parser.add_argument("--seed", required=True, type=int, help="Master RNG seed")
     parser.add_argument("--output", required=True, type=Path, help="Output JSON path")
     args = parser.parse_args()
