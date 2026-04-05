@@ -2,6 +2,7 @@ github:
   default_repo: TalonT-Org/spectral-init
 packs:
   enabled:
+  - exp-lens
   - research
 safety:
   require_dry_walkthrough: true
