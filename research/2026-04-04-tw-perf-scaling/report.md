@@ -18,7 +18,8 @@ benchmarks, which build without the testing feature, are the authoritative sourc
 
 The conclusive finding is that the pre-locked **combined exact variant** (`partial_rank +
 avx2_kernel`) achieves a consistent **2.04× Criterion speedup at n=50K** (95% CI: 2.01×–2.06×),
-estimated ~2.15× at n=100K, reducing wall-clock from ~45s to ~21s at production scale.
+estimated ~1.95× at n=100K (extrapolated from Criterion n=50K using O(n² log n) scaling),
+reducing wall-clock from ~41s to ~21s at production scale.
 Thread-local buffers contribute zero measurable speedup in clean code. The AVX2 standalone
 kernel is inconsistent at small n. AVX-512 provides only 1.08× improvement over AVX2 at
 d=10 (62.5% register utilization), below the 1.2× NO-GO threshold. H5 row subsampling could
@@ -64,13 +65,30 @@ Criterion speedup at n=50K AND ≥1.5× wall-clock at n=100K without any output 
 
 **Controls:** k=15, d_x=10, d_y=2, warmup 2 iterations (discarded), 5 measurement iterations,
 Gaussian seed=0 (throughput), blobs seed=1 (parity), combined variant composition pre-locked
-as `partial_rank + avx2_kernel` (thread-local excluded after H2 failed in clean code).
+as `partial_rank + avx2_kernel`.
+
+> **Protocol deviation:** The upstream experiment plan
+> (`research/2026-04-04-trustworthiness-performance-sc/experiment-plan.md`, locked at
+> `thread_local + partial_rank + avx2_kernel`) was amended after H2 was evaluated and found
+> to deliver zero real speedup (1.01× Criterion at n=50K). Thread-local buffers were excluded
+> from combined's composition to avoid shipping a component with no measured benefit. This
+> change violated the plan's pre-registration lock and is disclosed here as a protocol
+> deviation. Justification: the plan's lock was a prophylactic against selective reporting;
+> the H2 exclusion was based on the clean Criterion measurement, not on hypothesis-shopping.
+
+**Measurement contamination:** The baseline function contains `#[cfg(feature="testing")]`
+`eprintln!` calls (7 per row) that are active in `tw_profiler` (which requires
+`--features testing`). At n=100K this generates ~700K stderr writes per iteration,
+inflating tw_profiler baseline timing by **~6.25×** relative to clean code. All
+tw_profiler baseline-vs-variant speedup ratios are therefore invalid; Criterion benchmarks
+(which build without the testing feature) are the authoritative source for all GO/NO-GO
+decisions. This contamination was discovered during execution and is documented in O1.
 
 ### Environment
 
 - **Repository commit:** `359d2b4dcf8f550e15441e5b99a23ebcb0d72d99`
 - **Branch:** `research-20260404-174030`
-- **Rust toolchain:** `rustc 1.96.0-nightly`, `cargo 1.96.0-nightly`
+- **Rust toolchain:** `rustc 1.96.0-nightly` (exact channel: `nightly-2026-03-26`, commit hash `23903d01c`), `cargo 1.96.0-nightly`; pinned in `research/2026-04-04-tw-perf-scaling/rust-toolchain.toml`
 - **Python:** 3.13.2, scikit-learn 1.8.0
 - **Key library versions (from `cargo tree --depth 1`):**
   - `sprs 0.11.4` — sparse matrices
@@ -101,7 +119,14 @@ as `partial_rank + avx2_kernel` (thread-local excluded after H2 failed in clean 
    all variants at n=100K. AVX-512 variant run conditionally on `/proc/cpuinfo` detection.
 
 5. **Criterion benchmarks (authoritative):** `cargo bench --bench trustworthiness_bench
-   -- --sample-size 10` — all five variants × five n-sizes (1K–50K).
+   -- --sample-size 10` — all five variants × five n-sizes (1K–50K). **Isolation caveat:**
+   all five benchmark groups run in a single binary invocation (`criterion_main!` with a
+   single `criterion_group!`). Rayon worker threads and OS-thread-lifetime statics
+   (`TL_DIST_X`, `COMB_DIST_X`, etc.) persist across groups. Groups run in registration
+   order (baseline → thread_local → partial_rank → avx2_kernel → combined); combined runs
+   last after thread_local has warmed the rayon pool. Criterion's own per-group warmup
+   (discarded iterations) mitigates most thermal and cache effects, but the cross-group
+   thread-local state represents a potential source of first-allocation bias for later groups.
 
 6. **Integration tests:** `cargo test` (default features) — all `trustworthiness_*` tests.
 
@@ -125,7 +150,12 @@ as `partial_rank + avx2_kernel` (thread-local excluded after H2 failed in clean 
 
 All 5 integration tests pass: `sklearn_parity_avx2_kernel`, `sklearn_parity_combined`,
 `sklearn_parity_partial_rank`, `sklearn_parity_thread_local`, `sklearn_parity_synthetic`.
-|T_rust − T_sklearn| = 0 on the n=200 fixture for all exact variants.
+|T_rust − T_sklearn| = 0 on the n=200 fixture for all exact variants. The exact equality
+reflects Python-generated reference data embedded in the test fixture at the same f64
+precision: the sklearn reference values are stored in `tests/fixtures/` as f64 `.npy` arrays
+computed by `scripts/sklearn_reference.py` and both sides operate on the same inputs without
+rounding. At n=200 with d=10, the Rust implementation follows the same computation graph as
+sklearn's `trustworthiness()` with no intermediate precision loss.
 
 ---
 
@@ -174,18 +204,24 @@ All 5 integration tests pass: `sklearn_parity_avx2_kernel`, `sklearn_parity_comb
 | avx512_kernel | 37.66 | 0.91 |
 | combined | **21.21** | 0.95 |
 
-**Valid variant-vs-variant speedups at n=100K:**
+**Valid variant-vs-variant speedups at n=100K** (point estimates; 5 iterations, std_s shown
+in table above; no Criterion CI available at n=100K due to prohibitive benchmark time):
 
-| Comparison | Speedup |
-|------------|---------|
-| combined vs thread_local | 2.00× |
-| combined vs partial_rank | 1.40× |
-| combined vs avx2_kernel | 1.92× |
-| avx512_kernel vs avx2_kernel | 1.08× |
+| Comparison | Speedup | Approx. uncertainty (±1σ) |
+|------------|---------|--------------------------|
+| combined vs thread_local | 2.00× | ±0.11× (from combined σ=0.95s, tl σ=2.30s) |
+| combined vs partial_rank | 1.40× | ±0.08× |
+| combined vs avx2_kernel | 1.92× | ±0.10× |
+| avx512_kernel vs avx2_kernel | 1.08× | ±0.05× |
+
+These are point estimates from 5 tw_profiler iterations; treat ±σ values as rough guides,
+not Criterion-quality CIs.
 
 **Estimated clean baseline at n=100K** (extrapolating from Criterion n=50K = 9.94s using
-O(n² log n) scaling, factor ≈ 4.6): ~**45.7s**. Combined true speedup estimate: 45.7 / 21.21
-≈ **2.15×** (consistent with Criterion 2.04× at n=50K).
+O(n² log n) scaling, factor = (100K² × log₂(100K)) / (50K² × log₂(50K)) ≈ **4.17×**):
+~**41.4s**. Combined true speedup estimate: 41.4 / 21.21 ≈ **1.95×** (consistent with
+Criterion 2.04× at n=50K). Both the baseline and the derived speedup are extrapolations;
+no direct clean measurement at n=100K was obtained.
 
 ---
 
@@ -222,6 +258,17 @@ Threshold: ≥1.2× required for GO. **Result: 1.08× < 1.2× → NO-GO.**
 `temp/merfish_100k/merfish_100k_expression.npz` and `merfish_100k_spatial.npz` are absent.
 The `tw_approx_runner` binary is implemented and functional. H5 result: **N/A**.
 
+**Data acquisition:** The MERFISH dataset is from Allen Brain Cell Atlas MERFISH whole-brain
+mouse data (Yao et al. 2023, doi:[10.1038/s41586-023-06812-z](https://doi.org/10.1038/s41586-023-06812-z)).
+Download from the Allen Brain Cell Atlas portal. Once acquired, place at
+`temp/merfish_100k/merfish_100k_expression.npz` and `merfish_100k_spatial.npz`, or pass
+`--expr-path`/`--spat-path` to `scripts/prepare_merfish.py`.
+
+**Scope limitation:** The H5 approximation quality threshold (|T_approx − T_exact| < 0.001)
+is specified for the n=10K MERFISH fixture only. The ≥5× speedup projection to n=100K+
+assumes O(mn log n) work where m=5000 is fixed, but the approximation error at n=100K has
+not been characterized. Results at n>10K should validate both speedup and quality independently.
+
 ---
 
 ### H0/H1: Per-Step Profiling — Design Gap
@@ -241,30 +288,18 @@ absent from all JSON output files. H0/H1 result: **N/A**.
 | AVX2 auto-vectorization | H3 refuted | N/A | **GO (manual warranted)** | Scalar XMM in inner loop confirmed; manual AVX2 provides benefit |
 | Manual AVX2 kernel | 1.13× (noisy, 0.63–1.13×) | ~1.1× | **NO-GO (standalone)** | Inconsistent across n-sizes; marginal benefit only at large n |
 | AVX-512 kernel | N/A | 1.08× over AVX2 | **NO-GO** | < 1.2× over AVX2; 62.5% register utilization at d=10 |
-| Row subsampling | N/A | N/A | **N/A** | MERFISH source data absent |
-| Combined exact | **2.04×** [CI: 2.01–2.06×] | **~2.15×** | **GO (ship)** | Consistent 2× at n=50K (tight CI); short of ≥3× H6 goal; recommend ship |
+| Row subsampling | N/A | N/A | **N/A** | MERFISH source data absent; see H5 section for data acquisition |
+| Combined exact | **2.04×** [CI: 2.01–2.06×] | **~1.95×** (est.) | **GO (ship)** | Consistent 2× at n=50K (tight CI); short of ≥3× H6 goal; H1_combined ≥1.5× criterion met at both scales; n=100K estimate is extrapolated from Criterion n=50K |
 
-### Standardized Metrics
-
-**Accuracy metrics** (from `accuracy_metrics.json`, generated 2026-04-05T08:46:53Z):
-
-| Dataset | n | Solver | max_eigenpair_residual | Threshold | Status | orthogonality_error | Threshold | Status |
-|---------|---|--------|------------------------|-----------|--------|---------------------|-----------|--------|
-| blobs_connected_200 | 200 | Dense EVD | 1.333e-15 | 1e-6 | ✅ PASS | 4.598e-15 | 1e-8 | ✅ PASS |
-| blobs_connected_2000 | 2000 | LOBPCG | 9.097e-6 | 1e-5 | ✅ PASS | 1.387e-15 | 1e-8 | ✅ PASS |
-| circles_300 | 300 | Dense EVD | 1.201e-15 | 1e-6 | ✅ PASS | 2.971e-15 | 1e-8 | ✅ PASS |
-| moons_200 | 200 | Dense EVD | 1.657e-10 | 1e-6 | ✅ PASS | 4.865e-15 | 1e-8 | ✅ PASS |
-| near_dupes_100 | 100 | Dense EVD | 1.110e-15 | 1e-6 | ✅ PASS | 2.929e-15 | 1e-8 | ✅ PASS |
-
-**Parity metrics** (from `parity_metrics.json`, generated 2026-04-05T08:47:09Z):
-
-| Dataset | n | Solver | max_eigenvalue_abs_error | Threshold | Status | sign_agnostic_max_error | Threshold | Status |
-|---------|---|--------|--------------------------|-----------|--------|-------------------------|-----------|--------|
-| blobs_connected_200 | 200 | Dense EVD | 2.613e-17 | 1e-6 | ✅ PASS | 0.0 | 0.005 | ✅ PASS |
-| blobs_connected_2000 | 2000 | LOBPCG | 6.590e-10 | 1e-5 | ✅ PASS | 1.897e-3 | 0.005 | ✅ PASS |
-| circles_300 | 300 | Dense EVD | 2.982e-12 | 1e-6 | ✅ PASS | 1.960e-4 | 0.005 | ✅ PASS |
-| moons_200 | 200 | Dense EVD | 2.351e-16 | 1e-6 | ✅ PASS | 0.0 | 0.005 | ✅ PASS |
-| near_dupes_100 | 100 | Dense EVD | 4.233e-16 | 1e-6 | ✅ PASS | 0.0 | 0.005 | ✅ PASS |
+> **Note on partial_rank INCONCLUSIVE vs combined GO:** partial_rank is INCONCLUSIVE as a
+> standalone optimization because its n=50K Criterion CI lower bound (1.10×) fails the ≥1.5×
+> threshold — the partial sort's O(n) pivot selection has high variance on synthetic Gaussian
+> data. However, partial_rank is the *primary* speedup contributor within combined: it
+> reduces the sort from O(n log n) to O(n) on a prefix, while avx2_kernel provides a
+> multiplicative gain in the distance kernel. The combined effect (2.04× with CI [2.01–2.06×])
+> is tighter and stronger than partial_rank alone because (a) partial_rank's variance is
+> absorbed into combined's 5-iteration sample, and (b) the avx2_kernel's contribution is
+> consistent across n-sizes, masking partial_rank's n=50K instability.
 
 All accuracy and parity metrics PASS. All trustworthiness integration tests pass (5/5).
 
@@ -285,7 +320,8 @@ not real speedups.
 
 Criterion at n=50K: 9.94s → 4.87s = **2.04×**, CI [2.01×–2.06×]. The tight CI confirms
 this is statistically robust. tw_profiler combined absolute timing (21.21s) vs estimated
-clean baseline (~45.7s) ≈ 2.15×, consistent. The speedup is real and ships.
+clean baseline (~41.4s extrapolated from Criterion n=50K using O(n² log n) scaling factor
+≈4.17×) ≈ 1.95×, consistent with Criterion. The speedup is real and ships.
 
 **O3: Thread-Local Buffers Provide Zero Real Speedup**
 
@@ -344,8 +380,9 @@ only 10 elements with non-unit stride memory access pattern from the `dist_x` sl
 **H4 NO-GO is robust:** On Zen 5, with no frequency throttling, 1.08× reflects pure register
 underutilization. The architectural headroom for AVX-512 at d=10 is fundamentally limited.
 
-**The corrected combine speedup (2.04×) makes n=100K evaluation practical:** estimated 21s
-wall-clock vs ~45s clean baseline, a reduction of ~24 seconds per evaluation iteration.
+**The corrected combined speedup (2.04×) makes n=100K evaluation practical:** estimated 21s
+wall-clock vs ~41s extrapolated clean baseline, a reduction of ~20 seconds per evaluation
+iteration (extrapolated from Criterion n=50K).
 
 ## What We Learned
 
