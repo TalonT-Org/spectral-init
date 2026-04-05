@@ -10,7 +10,7 @@ license = "MIT"
 # Not part of the stable public API.
 testing = ["dep:serde"]
 # Enable CLI binary (trustworthiness) and .npy I/O support.
-cli = ["dep:ndarray-npy", "dep:pico-args", "dep:serde_json"]
+cli = ["dep:ndarray-npy", "dep:pico-args", "dep:serde_json", "dep:libc"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"], optional = true }
@@ -27,6 +27,7 @@ linfa-linalg = "0.2"        # pure-Rust LOBPCG; no LAPACK backend required
 log = "0.4"                 # logging facade for library diagnostics
 ndarray16 = { package = "ndarray", version = "0.16" }  # linfa-linalg uses ndarray 0.16; alias for bridging
 serde_json = { version = "1", optional = true }
+libc = { version = "0.2", optional = true }
 
 [dev-dependencies]
 ndarray-npy = "0.10"
