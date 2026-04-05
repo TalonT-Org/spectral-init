@@ -21,6 +21,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let output_path: std::path::PathBuf = pargs.value_from_str("--output")?;
     let k: usize = pargs.opt_value_from_str("--k")?.unwrap_or(15);
     let iters: usize = pargs.opt_value_from_str("--iters")?.unwrap_or(5);
+    if iters == 0 {
+        return Err("--iters must be > 0".into());
+    }
     let warmup: usize = pargs.opt_value_from_str("--warmup")?.unwrap_or(2);
     let stderr_capture: Option<std::path::PathBuf> = pargs.opt_value_from_str("--stderr-capture")?;
 
@@ -85,6 +88,7 @@ fn round_to(val: f64, decimals: u32) -> f64 {
     (val * factor).round() / factor
 }
 
+#[cfg(unix)]
 fn redirect_stderr(path: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
     use std::os::unix::io::IntoRawFd;
     let file = std::fs::File::create(path)
@@ -93,11 +97,18 @@ fn redirect_stderr(path: &std::path::Path) -> Result<(), Box<dyn std::error::Err
     // SAFETY: dup2 is a POSIX syscall; fd is valid (just opened) and 2 is stderr.
     let ret = unsafe { libc::dup2(fd, 2) };
     if ret == -1 {
+        // Close fd before returning to avoid a file descriptor leak.
+        unsafe { libc::close(fd) };
         return Err(format!("dup2 failed: {}", std::io::Error::last_os_error()).into());
     }
     // Close the original fd since stderr now owns the file descriptor.
     unsafe { libc::close(fd) };
     Ok(())
+}
+
+#[cfg(not(unix))]
+fn redirect_stderr(_path: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
+    Err("--stderr-capture is only supported on Unix platforms".into())
 }
 
 fn parse_step_timing(
@@ -108,6 +119,7 @@ fn parse_step_timing(
         return timing;
     };
     // Flush stderr before reading the capture file.
+    #[cfg(unix)]
     let _ = unsafe { libc::fsync(2) };
     let Ok(content) = std::fs::read_to_string(path) else {
         return timing;
