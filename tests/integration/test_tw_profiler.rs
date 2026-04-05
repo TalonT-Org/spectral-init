@@ -11,7 +11,7 @@ fn generate_fixtures(dir: &std::path::Path, n: usize, d_x: usize, d_y: usize, se
 }
 
 #[test]
-fn tw_profiler_produces_valid_json() {
+fn t_profiler_01_produces_valid_json() {
     let tmp = std::env::temp_dir().join(format!("tw_profiler_test_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&tmp);
     std::fs::create_dir_all(&tmp).expect("create temp dir");
@@ -65,7 +65,7 @@ fn tw_profiler_produces_valid_json() {
 }
 
 #[test]
-fn tw_profiler_stderr_capture_writes_file() {
+fn t_profiler_02_stderr_capture_writes_file() {
     let tmp = std::env::temp_dir().join(format!("tw_profiler_stderr_test_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&tmp);
     std::fs::create_dir_all(&tmp).expect("create temp dir");
