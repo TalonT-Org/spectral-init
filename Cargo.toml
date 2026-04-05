@@ -10,7 +10,7 @@ license = "MIT"
 # Not part of the stable public API.
 testing = ["dep:serde"]
 # Enable CLI binary (trustworthiness) and .npy I/O support.
-cli = ["dep:ndarray-npy", "dep:pico-args"]
+cli = ["dep:ndarray-npy", "dep:pico-args", "dep:serde_json", "dep:libc"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"], optional = true }
@@ -26,6 +26,8 @@ thiserror = "2"
 linfa-linalg = "0.2"        # pure-Rust LOBPCG; no LAPACK backend required
 log = "0.4"                 # logging facade for library diagnostics
 ndarray16 = { package = "ndarray", version = "0.16" }  # linfa-linalg uses ndarray 0.16; alias for bridging
+serde_json = { version = "1", optional = true }
+libc = { version = "0.2", optional = true }
 
 [dev-dependencies]
 ndarray-npy = "0.10"
@@ -161,10 +163,20 @@ name = "trustworthiness"
 path = "src/bin/trustworthiness.rs"
 required-features = ["cli"]
 
+[[bin]]
+name = "tw_profiler"
+path = "src/bin/tw_profiler.rs"
+required-features = ["cli"]
+
 [[test]]
 name = "test_trustworthiness"
 path = "tests/integration/test_trustworthiness.rs"
 required-features = ["testing"]
+
+[[test]]
+name = "test_tw_profiler"
+path = "tests/integration/test_tw_profiler.rs"
+required-features = ["cli"]
 
 [[bench]]
 name = "spectral_bench"
@@ -178,5 +190,10 @@ required-features = ["testing"]
 
 [[bench]]
 name = "lobpcg_bench"
+harness = false
+required-features = ["testing"]
+
+[[bench]]
+name = "trustworthiness_bench"
 harness = false
 required-features = ["testing"]

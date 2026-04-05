@@ -374,13 +374,48 @@ pub fn eigenvalue_condition_number(eigenvalues: &Array1<f64>) -> f64 {
     }
 }
 
+// ─── AVX2+FMA squared-distance kernel ────────────────────────────────────────
+
+/// Squared Euclidean distance using AVX2+FMA intrinsics.
+///
+/// # Safety
+/// Both slices must have at least 10 elements (enforced by the `d_x >= 10` guard at the
+/// call site). Two 4-wide loads cover elements 0..8; a scalar tail handles 8..n.
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))]
+#[target_feature(enable = "avx2,fma")]
+unsafe fn dist_sq_avx2(xi: &[f64], xj: &[f64]) -> f64 {
+    use std::arch::x86_64::*;
+    let n = xi.len().min(xj.len());
+    unsafe {
+        let a0 = _mm256_loadu_pd(xi.as_ptr());
+        let b0 = _mm256_loadu_pd(xj.as_ptr());
+        let d0 = _mm256_sub_pd(a0, b0);
+        let mut acc = _mm256_mul_pd(d0, d0);
+        let a1 = _mm256_loadu_pd(xi.as_ptr().add(4));
+        let b1 = _mm256_loadu_pd(xj.as_ptr().add(4));
+        let d1 = _mm256_sub_pd(a1, b1);
+        acc = _mm256_fmadd_pd(d1, d1, acc);
+        let lo = _mm256_castpd256_pd128(acc);
+        let hi = _mm256_extractf128_pd(acc, 1);
+        let sum128 = _mm_add_pd(lo, hi);
+        let halved = _mm_hadd_pd(sum128, sum128);
+        let mut result = _mm_cvtsd_f64(halved);
+        for i in 8..n {
+            let d = xi[i] - xj[i];
+            result += d * d;
+        }
+        result
+    }
+}
+
 // ─── Trustworthiness metric ───────────────────────────────────────────────────
 
 /// Computes the trustworthiness metric T(k) — a measure of how well the k-nearest-neighbor
 /// structure of X (high-dimensional) is preserved in Y (embedding).
 ///
-/// Memory-efficient implementation: processes one row at a time with O(n) peak memory per
-/// iteration. No (n×n) matrix is materialized.
+/// Uses partial rank (introselect) for O(n)-average X-NN detection, thread-local
+/// scratch buffers to eliminate per-row allocations, and AVX2+FMA SIMD dispatch
+/// for X-distance computation when dimensionality >= 10.
 ///
 /// # Formula
 /// `T(k) = 1 − (2 / (n·k·(2n−3k−1))) · Σᵢ Σ_{j ∈ U_i(k)} (r(i,j) − k)`
@@ -395,6 +430,7 @@ pub fn eigenvalue_condition_number(eigenvalues: &Array1<f64>) -> f64 {
 /// The guard uses integer floor division (`n / 2`), matching sklearn's exact boundary
 /// condition (`n_neighbors >= n // 2` raises `ValueError` in sklearn).
 pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 {
+    use std::cell::RefCell;
     let n = x.nrows();
     assert_eq!(y.nrows(), n, "trustworthiness: x and y must have the same number of rows");
     assert!(k > 0, "trustworthiness: k must be > 0");
@@ -403,53 +439,86 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
         this constraint is required by the normalization denominator and matches sklearn's ValueError",
         n / 2);
 
+    #[cfg(target_arch = "x86_64")]
+    let use_avx2 = is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma");
+    #[cfg(not(target_arch = "x86_64"))]
+    let use_avx2 = false;
+    let d_x = x.ncols();
+
+    // Validate contiguity once before the parallel loop: SIMD dispatch requires C-contiguous rows.
+    #[cfg(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))]
+    if use_avx2 && d_x >= 10 {
+        assert!(x.is_standard_layout(),
+            "trustworthiness: x must be in C-contiguous (standard) layout for SIMD dispatch");
+    }
+
+    thread_local! {
+        static COMB_DIST_X:  RefCell<Vec<f64>>   = const { RefCell::new(Vec::new()) };
+        static COMB_INDICES: RefCell<Vec<usize>> = const { RefCell::new(Vec::new()) };
+    }
+
     let penalty_sum: f64 = (0..n).into_par_iter().map(|i| {
         let xi = x.row(i);
         let yi = y.row(i);
 
-        let mut dist_x: Vec<(f64, usize)> = (0..n)
-            .map(|j| {
-                let d: f64 = xi.iter().zip(x.row(j).iter()).map(|(&a, &b)| (a - b) * (a - b)).sum();
-                (d, j)
+        COMB_DIST_X.with(|dist_x_cell| {
+            COMB_INDICES.with(|indices_cell| {
+                let mut dist_x = dist_x_cell.borrow_mut();
+                let mut indices = indices_cell.borrow_mut();
+
+                dist_x.clear();
+                dist_x.resize(n, 0.0f64);
+                for j in 0..n {
+                    let xj = x.row(j);
+                    dist_x[j] = {
+                        #[cfg(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))]
+                        {
+                            if use_avx2 && d_x >= 10 {
+                                let si = xi.as_slice().expect("x row must be contiguous");
+                                let sj = xj.as_slice().expect("x row must be contiguous");
+                                // SAFETY: runtime + d_x check guarantees AVX2+FMA and >= 8 elements.
+                                unsafe { dist_sq_avx2(si, sj) }
+                            } else {
+                                xi.iter().zip(xj.iter()).map(|(&a, &b)| (a - b) * (a - b)).sum()
+                            }
+                        }
+                        #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma")))]
+                        {
+                            xi.iter().zip(xj.iter()).map(|(&a, &b)| (a - b) * (a - b)).sum()
+                        }
+                    };
+                }
+
+                indices.clear();
+                indices.extend(0..n);
+                indices.select_nth_unstable_by(k, |&a, &b| {
+                    dist_x[a].total_cmp(&dist_x[b]).then(a.cmp(&b))
+                });
+
+                let knn_x_set: HashSet<usize> =
+                    indices[..=k].iter().filter(|&&m| m != i).copied().collect();
+
+                let mut heap: BinaryHeap<(u64, usize)> = BinaryHeap::with_capacity(k + 1);
+                for j in 0..n {
+                    if j == i { continue; }
+                    let d: f64 = yi.iter().zip(y.row(j).iter()).map(|(&a, &b)| (a - b) * (a - b)).sum();
+                    heap.push((d.to_bits(), j));
+                    if heap.len() > k { heap.pop(); }
+                }
+
+                let mut row_penalty = 0u64;
+                for (_, j) in heap {
+                    if !knn_x_set.contains(&j) {
+                        let dj = dist_x[j];
+                        let rank: usize = (0..n)
+                            .filter(|&m| dist_x[m] < dj || (dist_x[m] == dj && m < j))
+                            .count();
+                        row_penalty += (rank - k) as u64;
+                    }
+                }
+                row_penalty as f64
             })
-            .collect();
-        // Sort by distance (ascending); ties broken by index for determinism
-        dist_x.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
-
-        // rank_x[j] = 0-indexed position of j in sorted order (rank 0 = self)
-        let mut rank_x = vec![0usize; n];
-        for (rank, &(_, j)) in dist_x.iter().enumerate() {
-            rank_x[j] = rank;
-        }
-
-        let knn_x_set: HashSet<usize> = dist_x[1..=k].iter().map(|&(_, j)| j).collect();
-
-        // Streaming max-heap over Y distances to find k-NN in Y.
-        // BinaryHeap<(bits, index)> acts as a max-heap; we keep only the k smallest.
-        // Using u64 bit representation of f64 for ordered comparison (valid for non-negative finite f64).
-        let mut heap: BinaryHeap<(u64, usize)> = BinaryHeap::with_capacity(k + 1);
-        for j in 0..n {
-            if j == i {
-                continue;
-            }
-            let d: f64 = yi.iter().zip(y.row(j).iter()).map(|(&a, &b)| (a - b) * (a - b)).sum();
-            debug_assert!(d.is_finite(), "trustworthiness: NaN/inf distance in Y at i={i} j={j}");
-            let bits = d.to_bits();
-            heap.push((bits, j));
-            if heap.len() > k {
-                heap.pop(); // discard farthest
-            }
-        }
-
-        let mut row_penalty = 0u64;
-        for (_, j) in heap {
-            if !knn_x_set.contains(&j) {
-                // rank_x[j] > k is guaranteed: j is in Y-NN but not X-NN, so X-rank > k
-                debug_assert!(rank_x[j] > k, "invariant violated: rank_x[{j}]={} <= k={k}", rank_x[j]);
-                row_penalty += (rank_x[j] - k) as u64;
-            }
-        }
-        row_penalty as f64
+        })
     }).sum();
 
     let denom = n as f64 * k as f64 * (2 * n).saturating_sub(3 * k + 1) as f64;
@@ -854,6 +923,125 @@ mod tests {
         let x = ndarray::Array2::zeros((n, 4));
         let y = ndarray::Array2::zeros((n, 2));
         let _ = trustworthiness(x.view(), y.view(), k);
+    }
+
+    #[cfg(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))]
+    #[test]
+    fn t_tw_06_avx2_kernel_matches_scalar() {
+        use rand::{SeedableRng, Rng};
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(42);
+        for len in [10, 16, 33, 100] {
+            let a: Vec<f64> = (0..len).map(|_| rng.random::<f64>()).collect();
+            let b: Vec<f64> = (0..len).map(|_| rng.random::<f64>()).collect();
+            let scalar: f64 = a.iter().zip(b.iter()).map(|(&x, &y)| (x - y) * (x - y)).sum();
+            let avx2 = unsafe { super::dist_sq_avx2(&a, &b) };
+            assert!((avx2 - scalar).abs() < 1e-10,
+                "dist_sq_avx2 mismatch at len={len}: avx2={avx2}, scalar={scalar}");
+        }
+    }
+
+    #[test]
+    fn t_tw_07_partial_rank_matches_full_sort() {
+        use rand::{SeedableRng, Rng};
+        use std::collections::HashSet;
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(77);
+        let n = 30;
+        let k = 5;
+        let x = ndarray::Array2::from_shape_fn((n, 4), |_| rng.random::<f64>());
+
+        for i in 0..n {
+            let xi = x.row(i);
+            let dist_x: Vec<f64> = (0..n)
+                .map(|j| xi.iter().zip(x.row(j).iter()).map(|(&a, &b)| (a - b) * (a - b)).sum())
+                .collect();
+
+            // Full-sort baseline: knn_x_set via sort + rank scatter
+            let mut sorted: Vec<(f64, usize)> = dist_x.iter().copied().zip(0..n).collect();
+            sorted.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+            let knn_baseline: HashSet<usize> = sorted[1..=k].iter().map(|&(_, j)| j).collect();
+
+            // Partial-rank approach: select_nth_unstable_by
+            let mut indices: Vec<usize> = (0..n).collect();
+            indices.select_nth_unstable_by(k, |&a, &b| {
+                dist_x[a].total_cmp(&dist_x[b]).then(a.cmp(&b))
+            });
+            let knn_partial: HashSet<usize> =
+                indices[..=k].iter().filter(|&&m| m != i).copied().collect();
+
+            assert_eq!(knn_baseline, knn_partial,
+                "knn_x_set mismatch at row {i}");
+
+            // Verify rank values for all non-knn points
+            let mut rank_x = vec![0usize; n];
+            for (rank, &(_, j)) in sorted.iter().enumerate() {
+                rank_x[j] = rank;
+            }
+            for j in 0..n {
+                if j == i || knn_baseline.contains(&j) { continue; }
+                let dj = dist_x[j];
+                let scan_rank: usize = (0..n)
+                    .filter(|&m| dist_x[m] < dj || (dist_x[m] == dj && m < j))
+                    .count();
+                assert_eq!(rank_x[j], scan_rank,
+                    "rank mismatch for point {j} from row {i}: sort={}, scan={scan_rank}", rank_x[j]);
+            }
+        }
+    }
+
+    /// Brute-force O(n²) reference: full-sort X distances, sort-based Y-kNN.
+    fn trustworthiness_brute_force(x: ndarray::ArrayView2<f64>, y: ndarray::ArrayView2<f64>, k: usize) -> f64 {
+        use std::collections::HashSet;
+        let n = x.nrows();
+        let penalty_sum: f64 = (0..n).map(|i| {
+            let xi = x.row(i);
+            let yi = y.row(i);
+
+            let mut dist_x: Vec<(f64, usize)> = (0..n).map(|j| {
+                let d: f64 = xi.iter().zip(x.row(j).iter()).map(|(&a, &b)| (a - b) * (a - b)).sum();
+                (d, j)
+            }).collect();
+            dist_x.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+            let knn_x: HashSet<usize> = dist_x[1..=k].iter().map(|&(_, j)| j).collect();
+            let mut rank_x = vec![0usize; n];
+            for (rank, &(_, j)) in dist_x.iter().enumerate() {
+                rank_x[j] = rank;
+            }
+
+            let mut dist_y: Vec<(f64, usize)> = (0..n).filter(|&j| j != i).map(|j| {
+                let d: f64 = yi.iter().zip(y.row(j).iter()).map(|(&a, &b)| (a - b) * (a - b)).sum();
+                (d, j)
+            }).collect();
+            dist_y.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+            let knn_y: HashSet<usize> = dist_y[..k].iter().map(|&(_, j)| j).collect();
+
+            let mut row_penalty = 0u64;
+            for j in &knn_y {
+                if !knn_x.contains(j) {
+                    row_penalty += (rank_x[*j] - k) as u64;
+                }
+            }
+            row_penalty as f64
+        }).sum();
+        let denom = n as f64 * k as f64 * (2 * n).saturating_sub(3 * k + 1) as f64;
+        1.0 - penalty_sum * 2.0 / denom
+    }
+
+    #[test]
+    fn t_tw_08_combined_matches_baseline() {
+        use rand::{SeedableRng, Rng};
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(123);
+        let n = 50;
+        let x = ndarray::Array2::from_shape_fn((n, 6), |_| rng.random::<f64>());
+        let y = ndarray::Array2::from_shape_fn((n, 2), |_| rng.random::<f64>());
+
+        for k in [3, 7] {
+            let t = trustworthiness(x.view(), y.view(), k);
+            let t_ref = trustworthiness_brute_force(x.view(), y.view(), k);
+            assert!(t.is_finite(), "T(k={k}) must be finite, got {t}");
+            assert!(t >= 0.0 && t <= 1.0, "T(k={k}) out of [0,1]: {t}");
+            assert!((t - t_ref).abs() < 1e-12,
+                "T(k={k}) combined={t} diverges from brute-force reference={t_ref}");
+        }
     }
 
     #[cfg(feature = "testing")]
