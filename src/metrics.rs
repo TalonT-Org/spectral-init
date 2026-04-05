@@ -7,6 +7,41 @@
 //! - Diagnostic functions (spectral gap, condition number, tolerance margin)
 //! - Data structures for structured metric reporting (behind `#[cfg(feature = "testing")]`)
 
+#[cfg(feature = "profiling")]
+pub mod step_timing {
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    pub static X_DIST_NS:       AtomicU64 = AtomicU64::new(0);
+    pub static X_SORT_NS:       AtomicU64 = AtomicU64::new(0);
+    pub static RANK_SCATTER_NS: AtomicU64 = AtomicU64::new(0);
+    pub static X_KNN_SET_NS:    AtomicU64 = AtomicU64::new(0);
+    pub static Y_HEAP_NS:       AtomicU64 = AtomicU64::new(0);
+    pub static PENALTY_NS:      AtomicU64 = AtomicU64::new(0);
+
+    /// Zero all step counters. Call immediately BEFORE the timed iteration.
+    pub fn reset() {
+        X_DIST_NS.store(0, Ordering::Release);
+        X_SORT_NS.store(0, Ordering::Release);
+        RANK_SCATTER_NS.store(0, Ordering::Release);
+        X_KNN_SET_NS.store(0, Ordering::Release);
+        Y_HEAP_NS.store(0, Ordering::Release);
+        PENALTY_NS.store(0, Ordering::Release);
+    }
+
+    /// Read all step counters. Call immediately AFTER the timed iteration.
+    /// Returns accumulated nanoseconds across all rows processed by rayon threads.
+    pub fn read() -> [(&'static str, u64); 6] {
+        [
+            ("x_dist",       X_DIST_NS.load(Ordering::Acquire)),
+            ("x_sort",       X_SORT_NS.load(Ordering::Acquire)),
+            ("rank_scatter", RANK_SCATTER_NS.load(Ordering::Acquire)),
+            ("x_knn_set",    X_KNN_SET_NS.load(Ordering::Acquire)),
+            ("y_heap",       Y_HEAP_NS.load(Ordering::Acquire)),
+            ("penalty",      PENALTY_NS.load(Ordering::Acquire)),
+        ]
+    }
+}
+
 use faer::{Mat as FaerMat, Side};
 use faer::linalg::solvers::SelfAdjointEigen;
 use ndarray::{Array1, Array2, ArrayView1, ArrayView2};
@@ -374,40 +409,6 @@ pub fn eigenvalue_condition_number(eigenvalues: &Array1<f64>) -> f64 {
     }
 }
 
-// ─── AVX2+FMA squared-distance kernel ────────────────────────────────────────
-
-/// Squared Euclidean distance using AVX2+FMA intrinsics.
-///
-/// # Safety
-/// Both slices must have at least 10 elements (enforced by the `d_x >= 10` guard at the
-/// call site). Two 4-wide loads cover elements 0..8; a scalar tail handles 8..n.
-#[cfg(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))]
-#[target_feature(enable = "avx2,fma")]
-unsafe fn dist_sq_avx2(xi: &[f64], xj: &[f64]) -> f64 {
-    use std::arch::x86_64::*;
-    let n = xi.len().min(xj.len());
-    unsafe {
-        let a0 = _mm256_loadu_pd(xi.as_ptr());
-        let b0 = _mm256_loadu_pd(xj.as_ptr());
-        let d0 = _mm256_sub_pd(a0, b0);
-        let mut acc = _mm256_mul_pd(d0, d0);
-        let a1 = _mm256_loadu_pd(xi.as_ptr().add(4));
-        let b1 = _mm256_loadu_pd(xj.as_ptr().add(4));
-        let d1 = _mm256_sub_pd(a1, b1);
-        acc = _mm256_fmadd_pd(d1, d1, acc);
-        let lo = _mm256_castpd256_pd128(acc);
-        let hi = _mm256_extractf128_pd(acc, 1);
-        let sum128 = _mm_add_pd(lo, hi);
-        let halved = _mm_hadd_pd(sum128, sum128);
-        let mut result = _mm_cvtsd_f64(halved);
-        for i in 8..n {
-            let d = xi[i] - xj[i];
-            result += d * d;
-        }
-        result
-    }
-}
-
 // ─── Trustworthiness metric ───────────────────────────────────────────────────
 
 /// Computes the trustworthiness metric T(k) — a measure of how well the k-nearest-neighbor
@@ -466,6 +467,8 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
                 let mut dist_x = dist_x_cell.borrow_mut();
                 let mut indices = indices_cell.borrow_mut();
 
+                #[cfg(feature = "profiling")]
+                let _t_prof = std::time::Instant::now();
                 dist_x.clear();
                 dist_x.resize(n, 0.0f64);
                 for j in 0..n {
@@ -488,16 +491,31 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
                         }
                     };
                 }
+                #[cfg(feature = "profiling")]
+                crate::metrics::step_timing::X_DIST_NS.fetch_add(
+                    _t_prof.elapsed().as_nanos() as u64, std::sync::atomic::Ordering::Relaxed);
 
+                #[cfg(feature = "profiling")]
+                let _t_prof = std::time::Instant::now();
                 indices.clear();
                 indices.extend(0..n);
                 indices.select_nth_unstable_by(k, |&a, &b| {
                     dist_x[a].total_cmp(&dist_x[b]).then(a.cmp(&b))
                 });
+                #[cfg(feature = "profiling")]
+                crate::metrics::step_timing::X_SORT_NS.fetch_add(
+                    _t_prof.elapsed().as_nanos() as u64, std::sync::atomic::Ordering::Relaxed);
 
+                #[cfg(feature = "profiling")]
+                let _t_prof = std::time::Instant::now();
                 let knn_x_set: HashSet<usize> =
                     indices[..=k].iter().filter(|&&m| m != i).copied().collect();
+                #[cfg(feature = "profiling")]
+                crate::metrics::step_timing::X_KNN_SET_NS.fetch_add(
+                    _t_prof.elapsed().as_nanos() as u64, std::sync::atomic::Ordering::Relaxed);
 
+                #[cfg(feature = "profiling")]
+                let _t_prof = std::time::Instant::now();
                 let mut heap: BinaryHeap<(u64, usize)> = BinaryHeap::with_capacity(k + 1);
                 for j in 0..n {
                     if j == i { continue; }
@@ -505,7 +523,12 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
                     heap.push((d.to_bits(), j));
                     if heap.len() > k { heap.pop(); }
                 }
+                #[cfg(feature = "profiling")]
+                crate::metrics::step_timing::Y_HEAP_NS.fetch_add(
+                    _t_prof.elapsed().as_nanos() as u64, std::sync::atomic::Ordering::Relaxed);
 
+                #[cfg(feature = "profiling")]
+                let _t_prof = std::time::Instant::now();
                 let mut row_penalty = 0u64;
                 for (_, j) in heap {
                     if !knn_x_set.contains(&j) {
@@ -516,6 +539,10 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
                         row_penalty += (rank - k) as u64;
                     }
                 }
+                #[cfg(feature = "profiling")]
+                crate::metrics::step_timing::PENALTY_NS.fetch_add(
+                    _t_prof.elapsed().as_nanos() as u64, std::sync::atomic::Ordering::Relaxed);
+
                 row_penalty as f64
             })
         })

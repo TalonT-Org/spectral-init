@@ -1,12 +1,23 @@
-//! CLI binary: profiling harness for the trustworthiness metric.
+//! CLI binary: profile trustworthiness variants with warmup and timed iterations.
 //!
 //! Usage:
-//!   tw_profiler --x X.npy --y Y.npy --output results.json [--k 15] [--iters 5] [--warmup 2] [--stderr-capture path]
+//!   tw_profiler --x X.npy --y Y.npy [--k 15] [--iters 5] [--warmup 2]
+//!               --variant baseline --output results.json
 //!
-//! Runs the trustworthiness function multiple times (after warmup iterations) and
-//! writes structured JSON with timing statistics.
+//! Requires features: cli, profiling
+//! Outputs a JSON file with variant, n, iters (per-iteration times), mean_s, std_s, warmup,
+//! and (when profiling feature is active) step_times_ns.
+
+/// Physical core count of the benchmark machine.
+/// Host: 1 socket × 8 cores × 2-way HT = 16 logical CPUs; pin to physical cores only.
+const N_THREADS: usize = 8;
 
 fn main() {
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(N_THREADS)
+        .build_global()
+        .unwrap();
+
     if let Err(e) = run() {
         eprintln!("Error: {e}");
         std::process::exit(1);
@@ -18,125 +29,78 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     let x_path: std::path::PathBuf = pargs.value_from_str("--x")?;
     let y_path: std::path::PathBuf = pargs.value_from_str("--y")?;
-    let output_path: std::path::PathBuf = pargs.value_from_str("--output")?;
     let k: usize = pargs.opt_value_from_str("--k")?.unwrap_or(15);
     let iters: usize = pargs.opt_value_from_str("--iters")?.unwrap_or(5);
-    if iters == 0 {
-        return Err("--iters must be > 0".into());
-    }
     let warmup: usize = pargs.opt_value_from_str("--warmup")?.unwrap_or(2);
-    let stderr_capture: Option<std::path::PathBuf> = pargs.opt_value_from_str("--stderr-capture")?;
-
-    // Set up stderr capture if requested.
-    if let Some(ref capture_path) = stderr_capture {
-        redirect_stderr(capture_path)?;
-    }
+    let variant: String = pargs.value_from_str("--variant")?;
+    let output: std::path::PathBuf = pargs.value_from_str("--output")?;
 
     let x: ndarray::Array2<f64> = ndarray_npy::read_npy(&x_path)
         .map_err(|e| format!("failed to load X from {}: {e}", x_path.display()))?;
     let y: ndarray::Array2<f64> = ndarray_npy::read_npy(&y_path)
         .map_err(|e| format!("failed to load Y from {}: {e}", y_path.display()))?;
-
-    // Warmup iterations (results discarded).
-    for _ in 0..warmup {
-        let _ = std::hint::black_box(spectral_init::trustworthiness(x.view(), y.view(), k));
-    }
-
-    // Timed iterations.
-    let mut times = Vec::with_capacity(iters);
-    let mut score = 0.0f64;
-    for _ in 0..iters {
-        let start = std::time::Instant::now();
-        score = spectral_init::trustworthiness(x.view(), y.view(), k);
-        let elapsed = start.elapsed().as_secs_f64();
-        times.push(elapsed);
-    }
-
     let n = x.nrows();
-    let mean_s = times.iter().sum::<f64>() / times.len() as f64;
-    let std_s = if times.len() > 1 {
-        let var = times.iter().map(|&t| (t - mean_s).powi(2)).sum::<f64>() / (times.len() - 1) as f64;
-        var.sqrt()
-    } else {
-        0.0
-    };
 
-    // Parse step_timing from captured stderr if available.
-    let step_timing = parse_step_timing(&stderr_capture);
-
-    // Build JSON output.
-    let mut result = serde_json::Map::new();
-    result.insert("n".into(), serde_json::Value::from(n));
-    result.insert("k".into(), serde_json::Value::from(k));
-    result.insert("iters".into(), serde_json::json!(times));
-    result.insert("mean_s".into(), serde_json::json!(round_to(mean_s, 6)));
-    result.insert("std_s".into(), serde_json::json!(round_to(std_s, 6)));
-    result.insert("warmup".into(), serde_json::Value::from(warmup));
-    result.insert("score".into(), serde_json::json!(score));
-    if !step_timing.is_empty() {
-        result.insert("step_timing".into(), serde_json::json!(step_timing));
-    }
-
-    let json = serde_json::to_string_pretty(&serde_json::Value::Object(result))?;
-    std::fs::write(&output_path, &json)?;
-
-    Ok(())
-}
-
-fn round_to(val: f64, decimals: u32) -> f64 {
-    let factor = 10f64.powi(decimals as i32);
-    (val * factor).round() / factor
-}
-
-#[cfg(unix)]
-fn redirect_stderr(path: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
-    use std::os::unix::io::IntoRawFd;
-    let file = std::fs::File::create(path)
-        .map_err(|e| format!("failed to create stderr capture file {}: {e}", path.display()))?;
-    let fd = file.into_raw_fd();
-    // SAFETY: dup2 is a POSIX syscall; fd is valid (just opened) and 2 is stderr.
-    let ret = unsafe { libc::dup2(fd, 2) };
-    if ret == -1 {
-        // Close fd before returning to avoid a file descriptor leak.
-        unsafe { libc::close(fd) };
-        return Err(format!("dup2 failed: {}", std::io::Error::last_os_error()).into());
-    }
-    // Close the original fd since stderr now owns the file descriptor.
-    let close_ret = unsafe { libc::close(fd) };
-    if close_ret == -1 {
-        eprintln!("warning: close(fd) after dup2 failed: {}", std::io::Error::last_os_error());
-    }
-    Ok(())
-}
-
-#[cfg(not(unix))]
-fn redirect_stderr(_path: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
-    Err("--stderr-capture is only supported on Unix platforms".into())
-}
-
-fn parse_step_timing(
-    stderr_capture: &Option<std::path::PathBuf>,
-) -> std::collections::HashMap<String, Vec<f64>> {
-    let mut timing: std::collections::HashMap<String, Vec<f64>> = std::collections::HashMap::new();
-    let Some(path) = stderr_capture else {
-        return timing;
-    };
-    // Flush stderr before reading the capture file.
-    #[cfg(unix)]
-    let _ = unsafe { libc::fsync(2) };
-    let Ok(content) = std::fs::read_to_string(path) else {
-        return timing;
-    };
-    for line in content.lines() {
-        if let Some(rest) = line.strip_prefix("[timing:")
-            && let Some(close) = rest.find(']')
-        {
-            let step = &rest[..close];
-            let val_str = rest[close + 1..].trim();
-            if let Ok(val) = val_str.parse::<f64>() {
-                timing.entry(step.to_string()).or_default().push(val);
-            }
+    let dispatch = |xv: ndarray::ArrayView2<f64>, yv: ndarray::ArrayView2<f64>, k: usize| -> f64 {
+        match variant.as_str() {
+            "baseline"      => spectral_init::trustworthiness(xv, yv, k),
+            "thread_local"  => spectral_init::trustworthiness_thread_local(xv, yv, k),
+            "partial_rank"  => spectral_init::trustworthiness_partial_rank(xv, yv, k),
+            "avx2_kernel"   => spectral_init::trustworthiness_avx2_kernel(xv, yv, k),
+            "avx512_kernel" => spectral_init::trustworthiness_avx512_kernel(xv, yv, k),
+            "combined"      => spectral_init::trustworthiness_combined(xv, yv, k),
+            other => panic!("unknown variant: {other}"),
         }
+    };
+
+    // Warmup iterations — discard result
+    for _ in 0..warmup {
+        let _ = std::hint::black_box(dispatch(x.view(), y.view(), k));
     }
-    timing
+
+    // Timed iterations
+    let mut iter_times: Vec<f64> = Vec::with_capacity(iters);
+    #[cfg(feature = "profiling")]
+    let mut step_times: Vec<[(&'static str, u64); 6]> = Vec::with_capacity(iters);
+
+    for _ in 0..iters {
+        #[cfg(feature = "profiling")]
+        spectral_init::metrics::step_timing::reset();
+
+        let t0 = std::time::Instant::now();
+        let _ = std::hint::black_box(dispatch(x.view(), y.view(), k));
+        iter_times.push(t0.elapsed().as_secs_f64());
+
+        #[cfg(feature = "profiling")]
+        step_times.push(spectral_init::metrics::step_timing::read());
+    }
+
+    let mean_s = iter_times.iter().sum::<f64>() / iters as f64;
+    let variance = iter_times.iter().map(|&t| (t - mean_s).powi(2)).sum::<f64>() / iters as f64;
+    let std_s = variance.sqrt();
+
+    let mut result = serde_json::json!({
+        "variant": variant,
+        "n": n,
+        "iters": iter_times,
+        "mean_s": mean_s,
+        "std_s": std_s,
+        "warmup": warmup
+    });
+
+    #[cfg(feature = "profiling")]
+    {
+        // step_times[iter][step] -> accumulated ns across all n rows
+        let step_summary: Vec<serde_json::Value> = step_times.iter().map(|steps| {
+            let obj: serde_json::Map<String, serde_json::Value> = steps.iter()
+                .map(|&(name, ns)| (name.to_string(), serde_json::json!(ns)))
+                .collect();
+            serde_json::Value::Object(obj)
+        }).collect();
+        result["step_times_ns"] = serde_json::json!(step_summary);
+    }
+
+    std::fs::write(&output, serde_json::to_string_pretty(&result)?)?;
+    eprintln!("Wrote {}", output.display());
+    Ok(())
 }

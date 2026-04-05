@@ -11,6 +11,7 @@ license = "MIT"
 testing = ["dep:serde"]
 # Enable CLI binary (trustworthiness) and .npy I/O support.
 cli = ["dep:ndarray-npy", "dep:pico-args", "dep:serde_json", "dep:libc"]
+profiling = []
 
 [dependencies]
 serde = { version = "1", features = ["derive"], optional = true }
@@ -166,6 +167,11 @@ required-features = ["cli"]
 [[bin]]
 name = "tw_profiler"
 path = "src/bin/tw_profiler.rs"
+required-features = ["cli", "profiling"]
+
+[[bin]]
+name = "tw_approx_runner"
+path = "src/bin/tw_approx_runner.rs"
 required-features = ["cli"]
 
 [[test]]
@@ -179,6 +185,30 @@ path = "tests/integration/test_tw_profiler.rs"
 required-features = ["cli"]
 
 [[bench]]
+name = "tw_baseline_bench"
+harness = false
+
+[[bench]]
+name = "tw_thread_local_bench"
+harness = false
+
+[[bench]]
+name = "tw_partial_rank_bench"
+harness = false
+
+[[bench]]
+name = "tw_avx2_bench"
+harness = false
+
+[[bench]]
+name = "tw_combined_bench"
+harness = false
+
+[[bench]]
+name = "tw_partial_rank_merfish_bench"
+harness = false
+
+[[bench]]
 name = "spectral_bench"
 harness = false
 required-features = ["testing"]
@@ -190,10 +220,5 @@ required-features = ["testing"]
 
 [[bench]]
 name = "lobpcg_bench"
-harness = false
-required-features = ["testing"]
-
-[[bench]]
-name = "trustworthiness_bench"
 harness = false
 required-features = ["testing"]
