@@ -176,7 +176,7 @@ required-features = ["testing"]
 [[test]]
 name = "test_tw_profiler"
 path = "tests/integration/test_tw_profiler.rs"
-required-features = ["cli", "testing"]
+required-features = ["cli"]
 
 [[bench]]
 name = "spectral_bench"
