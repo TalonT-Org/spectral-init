@@ -12,7 +12,7 @@ fn generate_fixtures(dir: &std::path::Path, n: usize, d_x: usize, d_y: usize, se
 
 #[test]
 fn tw_profiler_produces_valid_json() {
-    let tmp = std::env::temp_dir().join("tw_profiler_test");
+    let tmp = std::env::temp_dir().join(format!("tw_profiler_test_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&tmp);
     std::fs::create_dir_all(&tmp).expect("create temp dir");
 
@@ -66,7 +66,7 @@ fn tw_profiler_produces_valid_json() {
 
 #[test]
 fn tw_profiler_stderr_capture_writes_file() {
-    let tmp = std::env::temp_dir().join("tw_profiler_stderr_test");
+    let tmp = std::env::temp_dir().join(format!("tw_profiler_stderr_test_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&tmp);
     std::fs::create_dir_all(&tmp).expect("create temp dir");
 
@@ -98,6 +98,9 @@ fn tw_profiler_stderr_capture_writes_file() {
 
     assert!(status.success(), "tw_profiler exited with {:?}", status);
     assert!(stderr_path.exists(), "stderr capture file not created");
+    let meta = std::fs::metadata(&stderr_path)
+        .expect("stderr capture file exists but metadata unreadable");
+    assert!(meta.is_file(), "stderr capture path is not a regular file: {:?}", stderr_path);
 
     let _ = std::fs::remove_dir_all(&tmp);
 }
