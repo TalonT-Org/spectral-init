@@ -102,7 +102,10 @@ fn redirect_stderr(path: &std::path::Path) -> Result<(), Box<dyn std::error::Err
         return Err(format!("dup2 failed: {}", std::io::Error::last_os_error()).into());
     }
     // Close the original fd since stderr now owns the file descriptor.
-    unsafe { libc::close(fd) };
+    let close_ret = unsafe { libc::close(fd) };
+    if close_ret == -1 {
+        eprintln!("warning: close(fd) after dup2 failed: {}", std::io::Error::last_os_error());
+    }
     Ok(())
 }
 
