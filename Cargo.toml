@@ -10,10 +10,11 @@ license = "MIT"
 # Not part of the stable public API.
 testing = ["dep:serde"]
 # Enable CLI binary (trustworthiness) and .npy I/O support.
-cli = ["dep:ndarray-npy", "dep:pico-args"]
+cli = ["dep:ndarray-npy", "dep:pico-args", "dep:serde_json"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
 ndarray-npy = { version = "0.10", optional = true }
 pico-args = { version = "0.5", optional = true }
 sprs = "0.11"
@@ -161,10 +162,24 @@ name = "trustworthiness"
 path = "src/bin/trustworthiness.rs"
 required-features = ["cli"]
 
+[[bin]]
+name = "tw_profiler"
+path = "src/bin/tw_profiler.rs"
+required-features = ["testing", "cli"]
+
+[[bin]]
+name = "tw_approx_runner"
+path = "src/bin/tw_approx_runner.rs"
+required-features = ["cli"]
+
 [[test]]
 name = "test_trustworthiness"
 path = "tests/integration/test_trustworthiness.rs"
 required-features = ["testing"]
+
+[[bench]]
+name = "trustworthiness_bench"
+harness = false
 
 [[bench]]
 name = "spectral_bench"

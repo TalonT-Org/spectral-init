@@ -403,30 +403,52 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
         this constraint is required by the normalization denominator and matches sklearn's ValueError",
         n / 2);
 
+    #[cfg(feature = "testing")]
+    let t_total = std::time::Instant::now();
+
     let penalty_sum: f64 = (0..n).into_par_iter().map(|i| {
         let xi = x.row(i);
         let yi = y.row(i);
 
+        #[cfg(feature = "testing")]
+        let t_x_dist = std::time::Instant::now();
         let mut dist_x: Vec<(f64, usize)> = (0..n)
             .map(|j| {
                 let d: f64 = xi.iter().zip(x.row(j).iter()).map(|(&a, &b)| (a - b) * (a - b)).sum();
                 (d, j)
             })
             .collect();
+        #[cfg(feature = "testing")]
+        eprintln!("[timing:tw_x_dist] {}µs", t_x_dist.elapsed().as_micros());
+
         // Sort by distance (ascending); ties broken by index for determinism
+        #[cfg(feature = "testing")]
+        let t_x_sort = std::time::Instant::now();
         dist_x.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+        #[cfg(feature = "testing")]
+        eprintln!("[timing:tw_x_sort] {}µs", t_x_sort.elapsed().as_micros());
 
         // rank_x[j] = 0-indexed position of j in sorted order (rank 0 = self)
+        #[cfg(feature = "testing")]
+        let t_rank_scatter = std::time::Instant::now();
         let mut rank_x = vec![0usize; n];
         for (rank, &(_, j)) in dist_x.iter().enumerate() {
             rank_x[j] = rank;
         }
+        #[cfg(feature = "testing")]
+        eprintln!("[timing:tw_rank_scatter] {}µs", t_rank_scatter.elapsed().as_micros());
 
+        #[cfg(feature = "testing")]
+        let t_x_knn_set = std::time::Instant::now();
         let knn_x_set: HashSet<usize> = dist_x[1..=k].iter().map(|&(_, j)| j).collect();
+        #[cfg(feature = "testing")]
+        eprintln!("[timing:tw_x_knn_set] {}µs", t_x_knn_set.elapsed().as_micros());
 
         // Streaming max-heap over Y distances to find k-NN in Y.
         // BinaryHeap<(bits, index)> acts as a max-heap; we keep only the k smallest.
         // Using u64 bit representation of f64 for ordered comparison (valid for non-negative finite f64).
+        #[cfg(feature = "testing")]
+        let t_y_heap = std::time::Instant::now();
         let mut heap: BinaryHeap<(u64, usize)> = BinaryHeap::with_capacity(k + 1);
         for j in 0..n {
             if j == i {
@@ -440,7 +462,11 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
                 heap.pop(); // discard farthest
             }
         }
+        #[cfg(feature = "testing")]
+        eprintln!("[timing:tw_y_heap] {}µs", t_y_heap.elapsed().as_micros());
 
+        #[cfg(feature = "testing")]
+        let t_penalty = std::time::Instant::now();
         let mut row_penalty = 0u64;
         for (_, j) in heap {
             if !knn_x_set.contains(&j) {
@@ -449,8 +475,14 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
                 row_penalty += (rank_x[j] - k) as u64;
             }
         }
+        #[cfg(feature = "testing")]
+        eprintln!("[timing:tw_penalty] {}µs", t_penalty.elapsed().as_micros());
+
         row_penalty as f64
     }).sum();
+
+    #[cfg(feature = "testing")]
+    eprintln!("[timing:tw_total] {}µs", t_total.elapsed().as_micros());
 
     let denom = n as f64 * k as f64 * (2 * n).saturating_sub(3 * k + 1) as f64;
     1.0 - penalty_sum * 2.0 / denom

@@ -136,6 +136,9 @@ pub fn normalize_signs_pub(coords: &mut ndarray::Array2<f64>) {
     crate::scaling::normalize_signs(coords)
 }
 
+// trustworthiness is part of the stable public API and always available.
+pub use crate::metrics::trustworthiness;
+
 #[cfg(feature = "testing")]
 #[doc(hidden)]
 pub use crate::metrics::{
@@ -150,7 +153,6 @@ pub use crate::metrics::{
     tolerance_margin,
     spectral_gap,
     eigenvalue_condition_number,
-    trustworthiness,
     DENSE_EVD_QUALITY_THRESHOLD,
     LOBPCG_QUALITY_THRESHOLD,
     SINV_LOBPCG_QUALITY_THRESHOLD,
@@ -161,12 +163,6 @@ pub use crate::metrics::{
     ExperimentMetrics,
     MetricResult,
 };
-
-// Re-export trustworthiness for the CLI binary when built with the `cli` feature.
-// The `testing` block above already covers test builds; this separate cfg avoids
-// double-export when both features are active.
-#[cfg(all(feature = "cli", not(feature = "testing")))]
-pub use crate::metrics::trustworthiness;
 
 use ndarray::{Array2, ArrayView2};
 use sprs::CsMatI;
