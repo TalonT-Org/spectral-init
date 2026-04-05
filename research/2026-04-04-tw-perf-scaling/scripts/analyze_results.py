@@ -53,20 +53,22 @@ def speedup_float(baseline_data: dict | None, variant_data: dict | None) -> floa
     return b / v
 
 
-def parse_criterion_speedup(variant_name: str) -> str:
-    """Extract Criterion speedup at n=50K for a variant from criterion_output.json.
+def parse_criterion_speedup(variant_name: str, baseline_mean_s: float | None) -> str:
+    """Extract Criterion speedup at n=50K for a variant vs baseline from criterion_output.json.
 
     Criterion --message-format=json emits a stream of JSON objects. We look for
-    benchmark IDs matching the variant at n=50000 and extract the mean estimate.
-    Returns "N/A" if not parseable.
+    benchmark IDs matching the variant and baseline at n=50000 and compute the ratio.
+    Returns "N/A" if not parseable or if baseline_mean_s is not provided.
     """
+    if baseline_mean_s is None or baseline_mean_s <= 0:
+        return "N/A"
     crit_path = CRITERION_DIR / "criterion_output.json"
     if not crit_path.exists():
         return "N/A"
     try:
         content = crit_path.read_text()
         # Each line may be a separate JSON object (cargo criterion --message-format=json)
-        estimates: dict[str, float] = {}
+        variant_mean: float | None = None
         for line in content.splitlines():
             line = line.strip()
             if not line:
@@ -75,18 +77,14 @@ def parse_criterion_speedup(variant_name: str) -> str:
                 msg = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            # Criterion emits benchmark results in various formats.
-            # Look for messages with "id" containing the variant and n=50000.
             bench_id = msg.get("id", "")
-            if "50000" in bench_id or "50k" in bench_id.lower():
-                if variant_name in bench_id:
-                    # Mean estimate in seconds (Criterion reports nanoseconds or seconds)
-                    mean = msg.get("mean", {}).get("estimate")
-                    if mean is not None:
-                        estimates[bench_id] = float(mean)
-        if estimates:
-            # Return as N/A since we don't have the baseline for comparison here
-            return "N/A"
+            if ("50000" in bench_id or "50k" in bench_id.lower()) and variant_name in bench_id:
+                mean = msg.get("mean", {}).get("estimate")
+                if mean is not None:
+                    variant_mean = float(mean)
+                    break
+        if variant_mean is not None and variant_mean > 0:
+            return f"{baseline_mean_s / variant_mean:.2f}x"
     except Exception:
         pass
     return "N/A"
@@ -139,13 +137,23 @@ def analyze_h1(baseline_100k: dict | None) -> tuple[str, str]:
     return verdict, f"(x_sort+rank_scatter)/total = {pct:.1f}%"
 
 
-def analyze_h2(baseline_100k: dict | None, tl_100k: dict | None) -> tuple[str, str]:
-    """H2: Thread-local buffers speedup >= 1.5x."""
-    ratio = speedup_float(baseline_100k, tl_100k)
-    if ratio is None:
-        return "N/A", "timing data missing"
-    verdict = "GO" if ratio >= 1.5 else "NO-GO"
-    return verdict, f"{ratio:.2f}x speedup at n=100K"
+def analyze_h2(
+    baseline_100k: dict | None,
+    tl_100k: dict | None,
+    criterion_speedup_50k: float | None = None,
+) -> tuple[str, str]:
+    """H2: Thread-local buffers speedup >= 1.5x.
+
+    Uses Criterion n=50K speedup for the GO/NO-GO gate when available.
+    tw_profiler baseline is contaminated by #[cfg(feature="testing")] overhead
+    and must NOT be used for baseline-relative ratios.
+    """
+    if criterion_speedup_50k is not None:
+        verdict = "GO" if criterion_speedup_50k >= 1.5 else "NO-GO"
+        return verdict, f"{criterion_speedup_50k:.2f}x Criterion speedup at n=50K (authoritative)"
+    # Variant-vs-variant comparison is valid; baseline-relative is not.
+    ratio = speedup_float(tl_100k, baseline_100k)  # reversed: we have no clean baseline
+    return "N/A", "Criterion data unavailable; tw_profiler baseline contaminated — cannot evaluate"
 
 
 def analyze_h3() -> tuple[str, str]:
@@ -181,13 +189,21 @@ def analyze_h5() -> tuple[str, str]:
     return verdict, f"delta = {delta:.6f} (threshold: |delta| < 0.001)"
 
 
-def analyze_h6(baseline_100k: dict | None, combined_100k: dict | None) -> tuple[str, str]:
-    """H6: Combined optimization speedup >= 3x."""
-    ratio = speedup_float(baseline_100k, combined_100k)
-    if ratio is None:
-        return "N/A", "timing data missing"
-    verdict = "GO" if ratio >= 3.0 else "NO-GO"
-    return verdict, f"{ratio:.2f}x speedup at n=100K"
+def analyze_h6(
+    baseline_100k: dict | None,
+    combined_100k: dict | None,
+    criterion_speedup_50k: float | None = None,
+) -> tuple[str, str]:
+    """H6: Combined optimization speedup >= 3x.
+
+    Uses Criterion n=50K speedup for the GO/NO-GO gate when available.
+    tw_profiler baseline is contaminated by #[cfg(feature="testing")] overhead
+    and must NOT be used for baseline-relative ratios.
+    """
+    if criterion_speedup_50k is not None:
+        verdict = "GO" if criterion_speedup_50k >= 3.0 else "NO-GO"
+        return verdict, f"{criterion_speedup_50k:.2f}x Criterion speedup at n=50K (authoritative)"
+    return "N/A", "Criterion data unavailable; tw_profiler baseline contaminated — cannot evaluate"
 
 
 def build_report() -> str:
@@ -199,44 +215,68 @@ def build_report() -> str:
     avx512_100k = load_timing("avx512_kernel", 100000)
     combined_100k = load_timing("combined", 100000)
 
+    # Criterion n=50K baseline (clean; no --features testing contamination).
+    # Parsed from criterion_output.json if available; fall back to None.
+    # NOTE: tw_profiler baseline is contaminated by #[cfg(feature="testing")]
+    # eprintln! overhead (~6.25x at n=100K). Do NOT use for baseline-relative ratios.
+    baseline_50k_criterion = load_timing("baseline", 50000)
+    baseline_criterion_mean: float | None = (
+        baseline_50k_criterion.get("mean_s") if baseline_50k_criterion else None
+    )
+
     # Run analyses
     h0_detail = analyze_h0(baseline_100k)
     h1_verdict, h1_detail = analyze_h1(baseline_100k)
-    h2_verdict, h2_detail = analyze_h2(baseline_100k, tl_100k)
+    # H2/H6: pass Criterion speedup from criterion_output.json when available;
+    # fall back to None so functions return N/A rather than using contaminated baseline.
+    tl_crit_speedup = parse_criterion_speedup("thread_local", baseline_criterion_mean)
+    combined_crit_speedup_str = parse_criterion_speedup("combined", baseline_criterion_mean)
+    tl_crit_float = (
+        float(tl_crit_speedup.rstrip("x")) if tl_crit_speedup != "N/A" else None
+    )
+    combined_crit_float = (
+        float(combined_crit_speedup_str.rstrip("x")) if combined_crit_speedup_str != "N/A" else None
+    )
+    h2_verdict, h2_detail = analyze_h2(baseline_100k, tl_100k, criterion_speedup_50k=tl_crit_float)
     h3_raw, _ = analyze_h3()
     h4_verdict, h4_detail = analyze_h4(avx2_100k, avx512_100k)
     h5_verdict, h5_detail = analyze_h5()
-    h6_verdict, h6_detail = analyze_h6(baseline_100k, combined_100k)
+    h6_verdict, h6_detail = analyze_h6(
+        baseline_100k, combined_100k, criterion_speedup_50k=combined_crit_float
+    )
 
     # Derive per-row verdicts for the table
-    # Thread-local (H2)
-    tl_speedup_100k = speedup(baseline_100k, tl_100k)
-    tl_speedup_50k = parse_criterion_speedup("thread_local")
+    # Thread-local (H2) — contaminated baseline; show variant-vs-variant comparison only
+    tl_speedup_100k = speedup(combined_100k, tl_100k)  # valid: variant-vs-variant
+    tl_speedup_50k = tl_crit_speedup
     tl_go = h2_verdict
 
-    # Partial-rank (H1) — use same 1.5x gate at n=100K
-    pr_speedup_100k = speedup(baseline_100k, pr_100k)
-    pr_speedup_50k = parse_criterion_speedup("partial_rank")
-    pr_ratio = speedup_float(baseline_100k, pr_100k)
-    if pr_ratio is None:
-        pr_go = "N/A"
+    # Partial-rank (H1) — use same 1.5x gate; contaminated baseline, use Criterion if available
+    pr_speedup_50k = parse_criterion_speedup("partial_rank", baseline_criterion_mean)
+    pr_speedup_100k = speedup(combined_100k, pr_100k)  # valid: variant-vs-variant
+    pr_crit_float = (
+        float(pr_speedup_50k.rstrip("x")) if pr_speedup_50k != "N/A" else None
+    )
+    if pr_crit_float is not None:
+        pr_go = "GO" if pr_crit_float >= 1.5 else "NO-GO"
     else:
-        pr_go = "GO" if pr_ratio >= 1.5 else "NO-GO"
+        pr_go = "N/A (Criterion data unavailable)"
 
     # Auto-vectorized (H3 confirmed)
     h3_auto = "AUTO-VECTORIZED" in h3_raw
     avx2_auto_go = "CONFIRMED (no action)" if h3_auto else "N/A"
 
     # Manual AVX2 (H3 inverted)
-    avx2_speedup_100k = speedup(baseline_100k, avx2_100k)
-    avx2_speedup_50k = parse_criterion_speedup("avx2_kernel")
+    avx2_speedup_50k = parse_criterion_speedup("avx2_kernel", baseline_criterion_mean)
+    avx2_speedup_100k = speedup(combined_100k, avx2_100k)  # valid: variant-vs-variant
+    avx2_crit_float = (
+        float(avx2_speedup_50k.rstrip("x")) if avx2_speedup_50k != "N/A" else None
+    )
     if "NOT AUTO-VECTORIZED" in h3_raw:
-        # Can proceed; check if we have speedup data
-        avx2_ratio = speedup_float(baseline_100k, avx2_100k)
-        if avx2_ratio is None:
-            avx2_go = "GO (implement — H3 not auto-vectorized)"
+        if avx2_crit_float is not None:
+            avx2_go = "GO" if avx2_crit_float >= 1.5 else "NO-GO"
         else:
-            avx2_go = f"GO" if avx2_ratio >= 1.5 else "NO-GO"
+            avx2_go = "GO (implement — H3 not auto-vectorized; Criterion data unavailable)"
     elif "AUTO-VECTORIZED" in h3_raw:
         avx2_go = "NO-GO (compiler already auto-vectorizes)"
     else:
@@ -250,8 +290,8 @@ def build_report() -> str:
     h5_go = h5_verdict
 
     # Combined (H6)
-    combined_speedup_100k = speedup(baseline_100k, combined_100k)
-    combined_speedup_50k = parse_criterion_speedup("combined")
+    combined_speedup_100k = speedup(tl_100k, combined_100k)  # valid: variant-vs-variant
+    combined_speedup_50k = combined_crit_speedup_str
     h6_go = h6_verdict
 
     # Build markdown table
