@@ -447,8 +447,8 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
     let d_x = x.ncols();
 
     thread_local! {
-        static COMB_DIST_X:  RefCell<Vec<f64>>   = RefCell::new(Vec::new());
-        static COMB_INDICES: RefCell<Vec<usize>> = RefCell::new(Vec::new());
+        static COMB_DIST_X:  RefCell<Vec<f64>>   = const { RefCell::new(Vec::new()) };
+        static COMB_INDICES: RefCell<Vec<usize>> = const { RefCell::new(Vec::new()) };
     }
 
     let penalty_sum: f64 = (0..n).into_par_iter().map(|i| {

@@ -64,7 +64,7 @@ fn dense_n_threshold() -> usize {
 /// `tests/generate_fixtures.py` and extends it to the upper bound.
 fn enforce_psd_contract(result: EigenResult) -> EigenResult {
     let (eigenvalues, eigenvectors) = result;
-    let clamped = eigenvalues.mapv(|lambda| lambda.max(0.0).min(2.0));
+    let clamped = eigenvalues.mapv(|lambda| lambda.clamp(0.0, 2.0));
     (clamped, eigenvectors)
 }
 
@@ -267,16 +267,13 @@ pub(crate) fn solve_eigenproblem_simd(
         let _l0_result = dense_evd(laplacian, n_components + 1);
         #[cfg(feature = "testing")]
         eprintln!("[timing:simd:level_0] {}µs", _t0.elapsed().as_micros());
-        match _l0_result {
-            Ok((eigs, vecs)) => {
-                let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
-                if quality < DENSE_EVD_QUALITY_THRESHOLD {
-                    #[cfg(feature = "testing")]
-                    eprintln!("[timing:simd:level_total] {}µs", _t_solve.elapsed().as_micros());
-                    return (enforce_psd_contract((eigs, vecs)), 0);
-                }
+        if let Ok((eigs, vecs)) = _l0_result {
+            let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
+            if quality < DENSE_EVD_QUALITY_THRESHOLD {
+                #[cfg(feature = "testing")]
+                eprintln!("[timing:simd:level_total] {}µs", _t_solve.elapsed().as_micros());
+                return (enforce_psd_contract((eigs, vecs)), 0);
             }
-            Err(_) => {}
         }
     }
 

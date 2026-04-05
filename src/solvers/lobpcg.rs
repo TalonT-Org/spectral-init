@@ -378,15 +378,15 @@ pub fn lobpcg_solve<O: LinearOperator>(
         // If no primary result is available, attempt a warm restart with partial eigvecs
         // before giving up (addresses the silent-discard bug in comment 2971872705).
         if raw_opt.is_none() {
-            if restart < MAX_WARM_RESTARTS {
-                if let Some(seed) = partial_seed {
-                    log::debug!(
-                        "[lobpcg] rnorm gate failed at restart {restart}/{MAX_WARM_RESTARTS}; \
-                         seeding next restart with partial eigvecs"
-                    );
-                    x_init_opt = Some(to_nd16_array2(seed));
-                    continue;
-                }
+            if restart < MAX_WARM_RESTARTS
+                && let Some(seed) = partial_seed
+            {
+                log::debug!(
+                    "[lobpcg] rnorm gate failed at restart {restart}/{MAX_WARM_RESTARTS}; \
+                     seeding next restart with partial eigvecs"
+                );
+                x_init_opt = Some(to_nd16_array2(seed));
+                continue;
             }
             // No eigvecs to seed the next restart, or restarts exhausted:
             // returning last_result is a partial fallback if any prior restart succeeded,

@@ -113,13 +113,13 @@ fn parse_step_timing(
         return timing;
     };
     for line in content.lines() {
-        if let Some(rest) = line.strip_prefix("[timing:") {
-            if let Some(close) = rest.find(']') {
-                let step = &rest[..close];
-                let val_str = rest[close + 1..].trim();
-                if let Ok(val) = val_str.parse::<f64>() {
-                    timing.entry(step.to_string()).or_default().push(val);
-                }
+        if let Some(rest) = line.strip_prefix("[timing:")
+            && let Some(close) = rest.find(']')
+        {
+            let step = &rest[..close];
+            let val_str = rest[close + 1..].trim();
+            if let Ok(val) = val_str.parse::<f64>() {
+                timing.entry(step.to_string()).or_default().push(val);
             }
         }
     }
