@@ -36,11 +36,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let t_exact = spectral_init::trustworthiness(x.view(), y.view(), k);
     let wall_exact_s = t0.elapsed().as_secs_f64();
 
-    // Approximate T — stub, completed in groupB
+    // Approximate T
     let t1 = std::time::Instant::now();
-    let t_approx: f64 = 0.0; // TODO(groupB): implement row-subsampled approximation
-    let _ = seed; // used by groupB for RNG initialization
-    let _ = sample; // used by groupB for sample size
+    let t_approx = spectral_init::trustworthiness_approx(x.view(), y.view(), k, sample, seed);
     let wall_approx_s = t1.elapsed().as_secs_f64();
 
     let delta = t_approx - t_exact;

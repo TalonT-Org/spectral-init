@@ -33,10 +33,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     let dispatch = |xv: ndarray::ArrayView2<f64>, yv: ndarray::ArrayView2<f64>, k: usize| -> f64 {
         match variant.as_str() {
-            "baseline" => spectral_init::trustworthiness(xv, yv, k),
-            "thread_local" | "partial_rank" | "avx2_kernel" | "avx512_kernel" | "combined" => {
-                panic!("variant not yet implemented")
-            }
+            "baseline"     => spectral_init::trustworthiness(xv, yv, k),
+            "thread_local" => spectral_init::trustworthiness_thread_local(xv, yv, k),
+            "partial_rank" => spectral_init::trustworthiness_partial_rank(xv, yv, k),
+            "avx2_kernel"  => spectral_init::trustworthiness_avx2_kernel(xv, yv, k),
+            "avx512_kernel" => spectral_init::trustworthiness_avx512_kernel(xv, yv, k),
+            "combined"     => spectral_init::trustworthiness_combined(xv, yv, k),
             other => panic!("unknown variant: {other}"),
         }
     };
