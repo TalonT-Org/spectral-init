@@ -919,6 +919,85 @@ mod tests {
         let _ = trustworthiness(x.view(), y.view(), k);
     }
 
+    #[cfg(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))]
+    #[test]
+    fn t_tw_06_avx2_kernel_matches_scalar() {
+        use rand::{SeedableRng, Rng};
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(42);
+        for len in [10, 16, 33, 100] {
+            let a: Vec<f64> = (0..len).map(|_| rng.random::<f64>()).collect();
+            let b: Vec<f64> = (0..len).map(|_| rng.random::<f64>()).collect();
+            let scalar: f64 = a.iter().zip(b.iter()).map(|(&x, &y)| (x - y) * (x - y)).sum();
+            let avx2 = unsafe { super::dist_sq_avx2(&a, &b) };
+            assert!((avx2 - scalar).abs() < 1e-10,
+                "dist_sq_avx2 mismatch at len={len}: avx2={avx2}, scalar={scalar}");
+        }
+    }
+
+    #[test]
+    fn t_tw_07_partial_rank_matches_full_sort() {
+        use rand::{SeedableRng, Rng};
+        use std::collections::HashSet;
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(77);
+        let n = 30;
+        let k = 5;
+        let x = ndarray::Array2::from_shape_fn((n, 4), |_| rng.random::<f64>());
+
+        for i in 0..n {
+            let xi = x.row(i);
+            let dist_x: Vec<f64> = (0..n)
+                .map(|j| xi.iter().zip(x.row(j).iter()).map(|(&a, &b)| (a - b) * (a - b)).sum())
+                .collect();
+
+            // Full-sort baseline: knn_x_set via sort + rank scatter
+            let mut sorted: Vec<(f64, usize)> = dist_x.iter().copied().zip(0..n).collect();
+            sorted.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+            let knn_baseline: HashSet<usize> = sorted[1..=k].iter().map(|&(_, j)| j).collect();
+
+            // Partial-rank approach: select_nth_unstable_by
+            let mut indices: Vec<usize> = (0..n).collect();
+            indices.select_nth_unstable_by(k, |&a, &b| {
+                dist_x[a].total_cmp(&dist_x[b]).then(a.cmp(&b))
+            });
+            let knn_partial: HashSet<usize> =
+                indices[..=k].iter().filter(|&&m| m != i).copied().collect();
+
+            assert_eq!(knn_baseline, knn_partial,
+                "knn_x_set mismatch at row {i}");
+
+            // Verify rank values for an arbitrary non-knn point
+            let mut rank_x = vec![0usize; n];
+            for (rank, &(_, j)) in sorted.iter().enumerate() {
+                rank_x[j] = rank;
+            }
+            for j in 0..n {
+                if j == i || knn_baseline.contains(&j) { continue; }
+                let dj = dist_x[j];
+                let scan_rank: usize = (0..n)
+                    .filter(|&m| dist_x[m] < dj || (dist_x[m] == dj && m < j))
+                    .count();
+                assert_eq!(rank_x[j], scan_rank,
+                    "rank mismatch for point {j} from row {i}: sort={}, scan={scan_rank}", rank_x[j]);
+                break;
+            }
+        }
+    }
+
+    #[test]
+    fn t_tw_08_combined_matches_baseline() {
+        use rand::{SeedableRng, Rng};
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(123);
+        let n = 50;
+        let x = ndarray::Array2::from_shape_fn((n, 6), |_| rng.random::<f64>());
+        let y = ndarray::Array2::from_shape_fn((n, 2), |_| rng.random::<f64>());
+
+        for k in [3, 7] {
+            let t = trustworthiness(x.view(), y.view(), k);
+            assert!(t.is_finite(), "T(k={k}) must be finite, got {t}");
+            assert!(t >= 0.0 && t <= 1.0, "T(k={k}) out of [0,1]: {t}");
+        }
+    }
+
     #[cfg(feature = "testing")]
     #[test]
     fn t_serde_01_round_trip_metric_result() {
