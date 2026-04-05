@@ -1048,7 +1048,7 @@ pub fn trustworthiness_approx(
         row_penalty as f64
     }).sum();
 
-    let denom = sample as f64 * k as f64 * (2 * n).saturating_sub(3 * k + 1) as f64;
+    let denom = n as f64 * k as f64 * (2 * n).saturating_sub(3 * k + 1) as f64;
     1.0 - penalty_sum * 2.0 / denom
 }
 
