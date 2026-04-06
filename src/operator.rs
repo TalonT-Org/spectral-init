@@ -232,10 +232,28 @@ impl<'a> LinearOperator for CsrOperator<'a> {
 /// SIMD-accelerated variant of `CsrOperator`. Routes k=1 through
 /// `spmv_avx2_gather_inner` (AVX2 gather kernel); k>1 falls back to `csr_mulacc_dense_rowmaj`.
 ///
-/// Only available on x86/x86_64. Callers must ensure AVX2 and FMA are present at runtime
-/// before constructing this operator (use `is_x86_feature_detected!`).
+/// Only available on x86/x86_64. Construct via [`CsrOperatorSimd::new`], which panics if
+/// AVX2 or FMA are not available at runtime, ensuring the `unsafe` SIMD kernel in `apply`
+/// is never invoked on unsupported hardware.
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-pub struct CsrOperatorSimd<'a>(pub &'a CsMatI<f64, usize>);
+pub struct CsrOperatorSimd<'a>(&'a CsMatI<f64, usize>);
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+impl<'a> CsrOperatorSimd<'a> {
+    /// Constructs a `CsrOperatorSimd` operator.
+    ///
+    /// # Panics
+    ///
+    /// Panics if AVX2 or FMA CPU features are not available at runtime.
+    pub fn new(mat: &'a CsMatI<f64, usize>) -> Self {
+        assert!(
+            is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma"),
+            "CsrOperatorSimd requires AVX2 and FMA CPU features; \
+             check is_x86_feature_detected!(\"avx2\") && is_x86_feature_detected!(\"fma\") before constructing"
+        );
+        Self(mat)
+    }
+}
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 impl<'a> LinearOperator for CsrOperatorSimd<'a> {
@@ -265,8 +283,9 @@ impl<'a> LinearOperator for CsrOperatorSimd<'a> {
             };
             match y.column_mut(0).as_slice_mut() {
                 Some(y_col) => {
-                    // SAFETY: CsrOperatorSimd is only constructed in solve_eigenproblem when
-                    // is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") are true.
+                    // SAFETY: AVX2+FMA availability is enforced at construction time by
+                    // `CsrOperatorSimd::new()`, which panics if either feature is absent.
+                    // The private field prevents bypassing the constructor.
                     unsafe {
                         spmv_avx2_gather_inner(
                             mat.indptr().raw_storage(),
@@ -279,8 +298,9 @@ impl<'a> LinearOperator for CsrOperatorSimd<'a> {
                 }
                 None => {
                     let mut y_col = vec![0.0_f64; mat.rows()];
-                    // SAFETY: CsrOperatorSimd is only constructed in solve_eigenproblem when
-                    // is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") are true.
+                    // SAFETY: AVX2+FMA availability is enforced at construction time by
+                    // `CsrOperatorSimd::new()`, which panics if either feature is absent.
+                    // The private field prevents bypassing the constructor.
                     unsafe {
                         spmv_avx2_gather_inner(
                             mat.indptr().raw_storage(),

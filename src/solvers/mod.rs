@@ -263,7 +263,7 @@ pub(crate) fn solve_eigenproblem(
         && is_x86_feature_detected!("fma")
     {
         use crate::operator::CsrOperatorSimd;
-        let op = CsrOperatorSimd(laplacian);
+        let op = CsrOperatorSimd::new(laplacian);
         return solve_eigenproblem_with_op(laplacian, op, n_components, seed, sqrt_deg);
     }
     let op = CsrOperator(laplacian);
