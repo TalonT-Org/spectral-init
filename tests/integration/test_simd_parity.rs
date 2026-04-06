@@ -121,6 +121,15 @@ fn test_spmv_divergence() {
 
 #[test]
 fn test_solver_divergence() {
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
+        eprintln!(
+            "test_solver_divergence: skipping — AVX2/FMA not available; \
+             ComputeMode::RustNative falls back to scalar, making the SIMD comparison vacuous"
+        );
+        return;
+    }
+
     let results_dir = results_dir();
     std::fs::create_dir_all(&results_dir).expect("cannot create RESULTS_DIR");
     std::fs::create_dir_all(results_dir.join("eigenvectors"))
