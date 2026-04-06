@@ -135,6 +135,9 @@ pub use crate::metrics::{
     spectral_gap,
     eigenvalue_condition_number,
     trustworthiness,
+    trustworthiness_heap_reuse,
+    trustworthiness_flat_partial,
+    trustworthiness_flat_simd,
     DENSE_EVD_QUALITY_THRESHOLD,
     LOBPCG_QUALITY_THRESHOLD,
     SINV_LOBPCG_QUALITY_THRESHOLD,
@@ -146,11 +149,16 @@ pub use crate::metrics::{
     MetricResult,
 };
 
-// Re-export trustworthiness for the CLI binary when built with the `cli` feature.
-// The `testing` block above already covers test builds; this separate cfg avoids
-// double-export when both features are active.
+// Re-export trustworthiness and variants for the CLI binary when built with the `cli` feature.
+// The `testing` block above already covers test builds (via `pub use crate::metrics::*`);
+// this separate cfg avoids double-export when both features are active.
 #[cfg(all(feature = "cli", not(feature = "testing")))]
-pub use crate::metrics::trustworthiness;
+pub use crate::metrics::{
+    trustworthiness,
+    trustworthiness_heap_reuse,
+    trustworthiness_flat_partial,
+    trustworthiness_flat_simd,
+};
 
 use ndarray::{Array2, ArrayView2};
 use sprs::CsMatI;

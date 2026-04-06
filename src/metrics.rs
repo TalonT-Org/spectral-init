@@ -458,6 +458,17 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
         static COMB_INDICES: RefCell<Vec<usize>> = const { RefCell::new(Vec::new()) };
     }
 
+    #[cfg(feature = "profiling")]
+    use std::sync::atomic::{AtomicU64, Ordering};
+    #[cfg(feature = "profiling")]
+    let t_x_dist_ns  = AtomicU64::new(0);
+    #[cfg(feature = "profiling")]
+    let t_x_sort_ns  = AtomicU64::new(0);
+    #[cfg(feature = "profiling")]
+    let t_y_heap_ns  = AtomicU64::new(0);
+    #[cfg(feature = "profiling")]
+    let t_penalty_ns = AtomicU64::new(0);
+
     let penalty_sum: f64 = (0..n).into_par_iter().map(|i| {
         let xi = x.row(i);
         let yi = y.row(i);
@@ -466,6 +477,9 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
             COMB_INDICES.with(|indices_cell| {
                 let mut dist_x = dist_x_cell.borrow_mut();
                 let mut indices = indices_cell.borrow_mut();
+
+                #[cfg(feature = "profiling")]
+                let t0 = std::time::Instant::now();
 
                 dist_x.clear();
                 dist_x.resize(n, 0.0f64);
@@ -490,6 +504,11 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
                     };
                 }
 
+                #[cfg(feature = "profiling")]
+                t_x_dist_ns.fetch_add(t0.elapsed().as_nanos() as u64, Ordering::Relaxed);
+                #[cfg(feature = "profiling")]
+                let t1 = std::time::Instant::now();
+
                 indices.clear();
                 indices.extend(0..n);
                 indices.select_nth_unstable_by(k, |&a, &b| {
@@ -499,6 +518,11 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
                 let knn_x_set: HashSet<usize> =
                     indices[..=k].iter().filter(|&&m| m != i).copied().collect();
 
+                #[cfg(feature = "profiling")]
+                t_x_sort_ns.fetch_add(t1.elapsed().as_nanos() as u64, Ordering::Relaxed);
+                #[cfg(feature = "profiling")]
+                let t2 = std::time::Instant::now();
+
                 let mut heap: BinaryHeap<(u64, usize)> = BinaryHeap::with_capacity(k + 1);
                 for j in 0..n {
                     if j == i { continue; }
@@ -506,6 +530,11 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
                     heap.push((d.to_bits(), j));
                     if heap.len() > k { heap.pop(); }
                 }
+
+                #[cfg(feature = "profiling")]
+                t_y_heap_ns.fetch_add(t2.elapsed().as_nanos() as u64, Ordering::Relaxed);
+                #[cfg(feature = "profiling")]
+                let t3 = std::time::Instant::now();
 
                 let mut row_penalty = 0u64;
                 for (_, j) in heap {
@@ -517,10 +546,560 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
                         row_penalty += (rank - k) as u64;
                     }
                 }
+
+                #[cfg(feature = "profiling")]
+                t_penalty_ns.fetch_add(t3.elapsed().as_nanos() as u64, Ordering::Relaxed);
+
                 row_penalty as f64
             })
         })
     }).sum();
+
+    #[cfg(feature = "profiling")]
+    {
+        eprintln!("[timing:x_dist] {}",  t_x_dist_ns.load(Ordering::Relaxed));
+        eprintln!("[timing:x_sort] {}",  t_x_sort_ns.load(Ordering::Relaxed));
+        eprintln!("[timing:y_heap] {}",  t_y_heap_ns.load(Ordering::Relaxed));
+        eprintln!("[timing:penalty] {}", t_penalty_ns.load(Ordering::Relaxed));
+    }
+
+    let denom = n as f64 * k as f64 * (2 * n).saturating_sub(3 * k + 1) as f64;
+    1.0 - penalty_sum * 2.0 / denom
+}
+
+/// Variant of [`trustworthiness`] that reuses a thread-local `BinaryHeap` allocation across rows.
+///
+/// Identical algorithm to the baseline, but the per-row Y heap is cleared in-place rather than
+/// re-allocated on each row. This eliminates the `BinaryHeap::with_capacity(k+1)` allocation
+/// per row, reducing allocator pressure in the Y-neighbor step.
+pub fn trustworthiness_heap_reuse(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 {
+    use std::cell::RefCell;
+    let n = x.nrows();
+    assert_eq!(y.nrows(), n, "trustworthiness_heap_reuse: x and y must have the same number of rows");
+    assert!(k > 0, "trustworthiness_heap_reuse: k must be > 0");
+    assert!(k < n / 2,
+        "trustworthiness_heap_reuse: k must be < n/2 (got k={k}, n={n}, n/2={})",
+        n / 2);
+
+    #[cfg(target_arch = "x86_64")]
+    let use_avx2 = is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma");
+    #[cfg(not(target_arch = "x86_64"))]
+    let use_avx2 = false;
+    let d_x = x.ncols();
+
+    #[cfg(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))]
+    if use_avx2 && d_x >= 10 {
+        assert!(x.is_standard_layout(),
+            "trustworthiness_heap_reuse: x must be in C-contiguous layout for SIMD dispatch");
+    }
+
+    thread_local! {
+        static HR_DIST_X:  RefCell<Vec<f64>>                      = const { RefCell::new(Vec::new()) };
+        static HR_INDICES: RefCell<Vec<usize>>                     = const { RefCell::new(Vec::new()) };
+        static HR_Y_HEAP:  RefCell<BinaryHeap<(u64, usize)>>      = const { RefCell::new(BinaryHeap::new()) };
+    }
+
+    #[cfg(feature = "profiling")]
+    use std::sync::atomic::{AtomicU64, Ordering};
+    #[cfg(feature = "profiling")]
+    let t_x_dist_ns  = AtomicU64::new(0);
+    #[cfg(feature = "profiling")]
+    let t_x_sort_ns  = AtomicU64::new(0);
+    #[cfg(feature = "profiling")]
+    let t_y_heap_ns  = AtomicU64::new(0);
+    #[cfg(feature = "profiling")]
+    let t_penalty_ns = AtomicU64::new(0);
+
+    let penalty_sum: f64 = (0..n).into_par_iter().map(|i| {
+        let xi = x.row(i);
+        let yi = y.row(i);
+
+        HR_DIST_X.with(|dist_x_cell| {
+            HR_INDICES.with(|indices_cell| {
+                HR_Y_HEAP.with(|heap_cell| {
+                    let mut dist_x = dist_x_cell.borrow_mut();
+                    let mut indices = indices_cell.borrow_mut();
+                    let mut heap = heap_cell.borrow_mut();
+
+                    #[cfg(feature = "profiling")]
+                    let t0 = std::time::Instant::now();
+
+                    dist_x.clear();
+                    dist_x.resize(n, 0.0f64);
+                    for j in 0..n {
+                        let xj = x.row(j);
+                        dist_x[j] = {
+                            #[cfg(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))]
+                            {
+                                if use_avx2 && d_x >= 10 {
+                                    let si = xi.as_slice().expect("x row must be contiguous");
+                                    let sj = xj.as_slice().expect("x row must be contiguous");
+                                    unsafe { dist_sq_avx2(si, sj) }
+                                } else {
+                                    xi.iter().zip(xj.iter()).map(|(&a, &b)| (a - b) * (a - b)).sum()
+                                }
+                            }
+                            #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma")))]
+                            {
+                                xi.iter().zip(xj.iter()).map(|(&a, &b)| (a - b) * (a - b)).sum()
+                            }
+                        };
+                    }
+
+                    #[cfg(feature = "profiling")]
+                    t_x_dist_ns.fetch_add(t0.elapsed().as_nanos() as u64, Ordering::Relaxed);
+                    #[cfg(feature = "profiling")]
+                    let t1 = std::time::Instant::now();
+
+                    indices.clear();
+                    indices.extend(0..n);
+                    indices.select_nth_unstable_by(k, |&a, &b| {
+                        dist_x[a].total_cmp(&dist_x[b]).then(a.cmp(&b))
+                    });
+
+                    let knn_x_set: HashSet<usize> =
+                        indices[..=k].iter().filter(|&&m| m != i).copied().collect();
+
+                    #[cfg(feature = "profiling")]
+                    t_x_sort_ns.fetch_add(t1.elapsed().as_nanos() as u64, Ordering::Relaxed);
+                    #[cfg(feature = "profiling")]
+                    let t2 = std::time::Instant::now();
+
+                    // Reuse the thread-local heap: grow capacity if needed, then clear in-place.
+                    let cap = heap.capacity();
+                    if cap < k + 1 {
+                        heap.reserve(k + 1 - cap);
+                    }
+                    heap.clear();
+
+                    for j in 0..n {
+                        if j == i { continue; }
+                        let d: f64 = yi.iter().zip(y.row(j).iter())
+                            .map(|(&a, &b)| (a - b) * (a - b)).sum();
+                        heap.push((d.to_bits(), j));
+                        if heap.len() > k { heap.pop(); }
+                    }
+
+                    #[cfg(feature = "profiling")]
+                    t_y_heap_ns.fetch_add(t2.elapsed().as_nanos() as u64, Ordering::Relaxed);
+                    #[cfg(feature = "profiling")]
+                    let t3 = std::time::Instant::now();
+
+                    let knn_y_set: HashSet<usize> = heap.iter().map(|&(_, j)| j).collect();
+
+                    let mut row_penalty = 0u64;
+                    for j in &knn_y_set {
+                        if !knn_x_set.contains(j) {
+                            let dj = dist_x[*j];
+                            let rank: usize = (0..n)
+                                .filter(|&m| dist_x[m] < dj || (dist_x[m] == dj && m < *j))
+                                .count();
+                            row_penalty += (rank - k) as u64;
+                        }
+                    }
+
+                    #[cfg(feature = "profiling")]
+                    t_penalty_ns.fetch_add(t3.elapsed().as_nanos() as u64, Ordering::Relaxed);
+
+                    row_penalty as f64
+                })
+            })
+        })
+    }).sum();
+
+    #[cfg(feature = "profiling")]
+    {
+        eprintln!("[timing:x_dist] {}",  t_x_dist_ns.load(Ordering::Relaxed));
+        eprintln!("[timing:x_sort] {}",  t_x_sort_ns.load(Ordering::Relaxed));
+        eprintln!("[timing:y_heap] {}",  t_y_heap_ns.load(Ordering::Relaxed));
+        eprintln!("[timing:penalty] {}", t_penalty_ns.load(Ordering::Relaxed));
+    }
+
+    let denom = n as f64 * k as f64 * (2 * n).saturating_sub(3 * k + 1) as f64;
+    1.0 - penalty_sum * 2.0 / denom
+}
+
+/// Variant of [`trustworthiness`] that replaces the Y `BinaryHeap` with a flat Vec +
+/// `select_nth_unstable_by` (introselect) for the k-nearest-neighbor step in Y.
+///
+/// Uses thread-local scratch buffers for both Y distances and Y indices. Self-exclusion is
+/// handled by setting `dist_y[i] = f64::INFINITY` before the partial sort.
+pub fn trustworthiness_flat_partial(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 {
+    use std::cell::RefCell;
+    let n = x.nrows();
+    assert_eq!(y.nrows(), n, "trustworthiness_flat_partial: x and y must have the same number of rows");
+    assert!(k > 0, "trustworthiness_flat_partial: k must be > 0");
+    assert!(k < n / 2,
+        "trustworthiness_flat_partial: k must be < n/2 (got k={k}, n={n}, n/2={})",
+        n / 2);
+
+    #[cfg(target_arch = "x86_64")]
+    let use_avx2 = is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma");
+    #[cfg(not(target_arch = "x86_64"))]
+    let use_avx2 = false;
+    let d_x = x.ncols();
+
+    #[cfg(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))]
+    if use_avx2 && d_x >= 10 {
+        assert!(x.is_standard_layout(),
+            "trustworthiness_flat_partial: x must be in C-contiguous layout for SIMD dispatch");
+    }
+
+    thread_local! {
+        static FP_DIST_X:    RefCell<Vec<f64>>   = const { RefCell::new(Vec::new()) };
+        static FP_INDICES:   RefCell<Vec<usize>> = const { RefCell::new(Vec::new()) };
+        static FP_DIST_Y:    RefCell<Vec<f64>>   = const { RefCell::new(Vec::new()) };
+        static FP_INDICES_Y: RefCell<Vec<usize>> = const { RefCell::new(Vec::new()) };
+    }
+
+    #[cfg(feature = "profiling")]
+    use std::sync::atomic::{AtomicU64, Ordering};
+    #[cfg(feature = "profiling")]
+    let t_x_dist_ns  = AtomicU64::new(0);
+    #[cfg(feature = "profiling")]
+    let t_x_sort_ns  = AtomicU64::new(0);
+    #[cfg(feature = "profiling")]
+    let t_y_heap_ns  = AtomicU64::new(0);
+    #[cfg(feature = "profiling")]
+    let t_penalty_ns = AtomicU64::new(0);
+
+    let penalty_sum: f64 = (0..n).into_par_iter().map(|i| {
+        let xi = x.row(i);
+        let yi = y.row(i);
+
+        FP_DIST_X.with(|dist_x_cell| {
+            FP_INDICES.with(|indices_cell| {
+                FP_DIST_Y.with(|dist_y_cell| {
+                    FP_INDICES_Y.with(|indices_y_cell| {
+                        let mut dist_x = dist_x_cell.borrow_mut();
+                        let mut indices = indices_cell.borrow_mut();
+                        let mut dist_y = dist_y_cell.borrow_mut();
+                        let mut indices_y = indices_y_cell.borrow_mut();
+
+                        #[cfg(feature = "profiling")]
+                        let t0 = std::time::Instant::now();
+
+                        dist_x.clear();
+                        dist_x.resize(n, 0.0f64);
+                        for j in 0..n {
+                            let xj = x.row(j);
+                            dist_x[j] = {
+                                #[cfg(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))]
+                                {
+                                    if use_avx2 && d_x >= 10 {
+                                        let si = xi.as_slice().expect("x row must be contiguous");
+                                        let sj = xj.as_slice().expect("x row must be contiguous");
+                                        unsafe { dist_sq_avx2(si, sj) }
+                                    } else {
+                                        xi.iter().zip(xj.iter()).map(|(&a, &b)| (a - b) * (a - b)).sum()
+                                    }
+                                }
+                                #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma")))]
+                                {
+                                    xi.iter().zip(xj.iter()).map(|(&a, &b)| (a - b) * (a - b)).sum()
+                                }
+                            };
+                        }
+
+                        #[cfg(feature = "profiling")]
+                        t_x_dist_ns.fetch_add(t0.elapsed().as_nanos() as u64, Ordering::Relaxed);
+                        #[cfg(feature = "profiling")]
+                        let t1 = std::time::Instant::now();
+
+                        indices.clear();
+                        indices.extend(0..n);
+                        indices.select_nth_unstable_by(k, |&a, &b| {
+                            dist_x[a].total_cmp(&dist_x[b]).then(a.cmp(&b))
+                        });
+
+                        let knn_x_set: HashSet<usize> =
+                            indices[..=k].iter().filter(|&&m| m != i).copied().collect();
+
+                        #[cfg(feature = "profiling")]
+                        t_x_sort_ns.fetch_add(t1.elapsed().as_nanos() as u64, Ordering::Relaxed);
+                        #[cfg(feature = "profiling")]
+                        let t2 = std::time::Instant::now();
+
+                        // Y k-NN via flat introselect — no heap allocation.
+                        dist_y.clear();
+                        dist_y.resize(n, 0.0f64);
+                        for j in 0..n {
+                            dist_y[j] = yi.iter().zip(y.row(j).iter())
+                                .map(|(&a, &b)| (a - b) * (a - b)).sum();
+                        }
+                        dist_y[i] = f64::INFINITY; // self-exclusion
+
+                        indices_y.clear();
+                        indices_y.extend(0..n);
+                        // Ascending distance, ascending index on ties — replicates BinaryHeap
+                        // eviction order (max-heap pops highest (bits, j); on equal dist highest j
+                        // is evicted, so lowest j is retained).
+                        // Use select_nth_unstable_by(k, ...) so positions [..k] hold the k
+                        // closest points. Self has dist_y[i] = INFINITY so it is never in [..k].
+                        indices_y.select_nth_unstable_by(k, |&a, &b| {
+                            dist_y[a].total_cmp(&dist_y[b]).then(a.cmp(&b))
+                        });
+
+                        // [..k] = k nearest non-self Y neighbors (matching baseline heap size k).
+                        let knn_y_partition = &indices_y[..k];
+
+                        #[cfg(feature = "profiling")]
+                        t_y_heap_ns.fetch_add(t2.elapsed().as_nanos() as u64, Ordering::Relaxed);
+                        #[cfg(feature = "profiling")]
+                        let t3 = std::time::Instant::now();
+
+                        let mut row_penalty = 0u64;
+                        for &j in knn_y_partition {
+                            if !knn_x_set.contains(&j) {
+                                let dj = dist_x[j];
+                                let rank: usize = (0..n)
+                                    .filter(|&m| dist_x[m] < dj || (dist_x[m] == dj && m < j))
+                                    .count();
+                                row_penalty += (rank - k) as u64;
+                            }
+                        }
+
+                        #[cfg(feature = "profiling")]
+                        t_penalty_ns.fetch_add(t3.elapsed().as_nanos() as u64, Ordering::Relaxed);
+
+                        row_penalty as f64
+                    })
+                })
+            })
+        })
+    }).sum();
+
+    #[cfg(feature = "profiling")]
+    {
+        eprintln!("[timing:x_dist] {}",  t_x_dist_ns.load(Ordering::Relaxed));
+        eprintln!("[timing:x_sort] {}",  t_x_sort_ns.load(Ordering::Relaxed));
+        eprintln!("[timing:y_heap] {}",  t_y_heap_ns.load(Ordering::Relaxed));
+        eprintln!("[timing:penalty] {}", t_penalty_ns.load(Ordering::Relaxed));
+    }
+
+    let denom = n as f64 * k as f64 * (2 * n).saturating_sub(3 * k + 1) as f64;
+    1.0 - penalty_sum * 2.0 / denom
+}
+
+/// AVX2 batch squared-distance kernel for 2D Y embeddings.
+///
+/// Computes `out[j] = ||yi − y[j]||²` for all `j` in `0..n`, processing two target points
+/// per iteration using 256-bit YMM registers and `_mm256_hadd_pd`.
+///
+/// # Safety
+/// Caller must ensure AVX2 is available at runtime (checked via `is_x86_feature_detected!`
+/// before the call site), and that `y_flat` has at least `n * 2` elements.
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+#[target_feature(enable = "avx2")]
+unsafe fn dist_sq_2d_avx2_batch(
+    yi: &[f64],      // query row: exactly 2 elements
+    y_flat: &[f64],  // full Y matrix, row-major, stride 2
+    n: usize,
+    out: &mut [f64], // output: n distances
+) {
+    use std::arch::x86_64::*;
+    // Broadcast query point: [yi[1], yi[0], yi[1], yi[0]] in register (args are e3,e2,e1,e0).
+    let yi_bc = _mm256_set_pd(yi[1], yi[0], yi[1], yi[0]);
+
+    let mut j = 0usize;
+    while j + 1 < n {
+        unsafe {
+            // Load 2 target points: [y[j+1][1], y[j+1][0], y[j][1], y[j][0]]
+            let yj_pair = _mm256_loadu_pd(y_flat.as_ptr().add(j * 2));
+            let diff = _mm256_sub_pd(yi_bc, yj_pair);
+            let sq   = _mm256_mul_pd(diff, diff);
+            // hadd: lower 128b → sq[0]+sq[1] (dist_j); upper 128b → sq[2]+sq[3] (dist_{j+1})
+            let hadd = _mm256_hadd_pd(sq, sq);
+            out[j]     = _mm_cvtsd_f64(_mm256_castpd256_pd128(hadd));
+            out[j + 1] = _mm_cvtsd_f64(_mm256_extractf128_pd(hadd, 1));
+        }
+        j += 2;
+    }
+    // Scalar tail for odd n
+    while j < n {
+        out[j] = yi.iter()
+            .zip(y_flat[j * 2..j * 2 + 2].iter())
+            .map(|(&a, &b)| (a - b) * (a - b))
+            .sum();
+        j += 1;
+    }
+}
+
+/// Variant of [`trustworthiness_flat_partial`] with an AVX2 kernel for the Y-distance fill
+/// step when `d_y == 2` and the Y matrix is in standard (C-contiguous) layout.
+///
+/// Falls back to scalar computation on non-x86_64 targets or when the conditions are not met.
+pub fn trustworthiness_flat_simd(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 {
+    use std::cell::RefCell;
+    let n = x.nrows();
+    assert_eq!(y.nrows(), n, "trustworthiness_flat_simd: x and y must have the same number of rows");
+    assert!(k > 0, "trustworthiness_flat_simd: k must be > 0");
+    assert!(k < n / 2,
+        "trustworthiness_flat_simd: k must be < n/2 (got k={k}, n={n}, n/2={})",
+        n / 2);
+
+    #[cfg(target_arch = "x86_64")]
+    let use_avx2_x = is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma");
+    #[cfg(not(target_arch = "x86_64"))]
+    let use_avx2_x = false;
+    let d_x = x.ncols();
+
+    #[cfg(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))]
+    if use_avx2_x && d_x >= 10 {
+        assert!(x.is_standard_layout(),
+            "trustworthiness_flat_simd: x must be in C-contiguous layout for SIMD dispatch");
+    }
+
+    let d_y = y.ncols();
+    #[cfg(target_arch = "x86_64")]
+    let use_avx2_y = is_x86_feature_detected!("avx2") && d_y == 2 && y.is_standard_layout();
+    #[cfg(not(target_arch = "x86_64"))]
+    let use_avx2_y = false;
+
+    thread_local! {
+        static FS_DIST_X:    RefCell<Vec<f64>>   = const { RefCell::new(Vec::new()) };
+        static FS_INDICES:   RefCell<Vec<usize>> = const { RefCell::new(Vec::new()) };
+        static FS_DIST_Y:    RefCell<Vec<f64>>   = const { RefCell::new(Vec::new()) };
+        static FS_INDICES_Y: RefCell<Vec<usize>> = const { RefCell::new(Vec::new()) };
+    }
+
+    #[cfg(feature = "profiling")]
+    use std::sync::atomic::{AtomicU64, Ordering};
+    #[cfg(feature = "profiling")]
+    let t_x_dist_ns  = AtomicU64::new(0);
+    #[cfg(feature = "profiling")]
+    let t_x_sort_ns  = AtomicU64::new(0);
+    #[cfg(feature = "profiling")]
+    let t_y_heap_ns  = AtomicU64::new(0);
+    #[cfg(feature = "profiling")]
+    let t_penalty_ns = AtomicU64::new(0);
+
+    let penalty_sum: f64 = (0..n).into_par_iter().map(|i| {
+        let xi = x.row(i);
+        let yi = y.row(i);
+
+        FS_DIST_X.with(|dist_x_cell| {
+            FS_INDICES.with(|indices_cell| {
+                FS_DIST_Y.with(|dist_y_cell| {
+                    FS_INDICES_Y.with(|indices_y_cell| {
+                        let mut dist_x = dist_x_cell.borrow_mut();
+                        let mut indices = indices_cell.borrow_mut();
+                        let mut dist_y = dist_y_cell.borrow_mut();
+                        let mut indices_y = indices_y_cell.borrow_mut();
+
+                        #[cfg(feature = "profiling")]
+                        let t0 = std::time::Instant::now();
+
+                        dist_x.clear();
+                        dist_x.resize(n, 0.0f64);
+                        for j in 0..n {
+                            let xj = x.row(j);
+                            dist_x[j] = {
+                                #[cfg(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))]
+                                {
+                                    if use_avx2_x && d_x >= 10 {
+                                        let si = xi.as_slice().expect("x row must be contiguous");
+                                        let sj = xj.as_slice().expect("x row must be contiguous");
+                                        unsafe { dist_sq_avx2(si, sj) }
+                                    } else {
+                                        xi.iter().zip(xj.iter()).map(|(&a, &b)| (a - b) * (a - b)).sum()
+                                    }
+                                }
+                                #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma")))]
+                                {
+                                    xi.iter().zip(xj.iter()).map(|(&a, &b)| (a - b) * (a - b)).sum()
+                                }
+                            };
+                        }
+
+                        #[cfg(feature = "profiling")]
+                        t_x_dist_ns.fetch_add(t0.elapsed().as_nanos() as u64, Ordering::Relaxed);
+                        #[cfg(feature = "profiling")]
+                        let t1 = std::time::Instant::now();
+
+                        indices.clear();
+                        indices.extend(0..n);
+                        indices.select_nth_unstable_by(k, |&a, &b| {
+                            dist_x[a].total_cmp(&dist_x[b]).then(a.cmp(&b))
+                        });
+
+                        let knn_x_set: HashSet<usize> =
+                            indices[..=k].iter().filter(|&&m| m != i).copied().collect();
+
+                        #[cfg(feature = "profiling")]
+                        t_x_sort_ns.fetch_add(t1.elapsed().as_nanos() as u64, Ordering::Relaxed);
+                        #[cfg(feature = "profiling")]
+                        let t2 = std::time::Instant::now();
+
+                        // Y distances: AVX2 batch kernel for d_y==2 standard-layout, else scalar.
+                        dist_y.clear();
+                        dist_y.resize(n, 0.0f64);
+
+                        #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+                        if use_avx2_y {
+                            let y_flat = y.as_slice().unwrap(); // safe: standard_layout checked
+                            let yi_slice = &y_flat[i * 2..(i + 1) * 2];
+                            unsafe { dist_sq_2d_avx2_batch(yi_slice, y_flat, n, &mut dist_y); }
+                        } else {
+                            for j in 0..n {
+                                dist_y[j] = yi.iter().zip(y.row(j).iter())
+                                    .map(|(&a, &b)| (a - b) * (a - b)).sum();
+                            }
+                        }
+                        #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+                        {
+                            for j in 0..n {
+                                dist_y[j] = yi.iter().zip(y.row(j).iter())
+                                    .map(|(&a, &b)| (a - b) * (a - b)).sum();
+                            }
+                        }
+
+                        dist_y[i] = f64::INFINITY; // self-exclusion
+
+                        indices_y.clear();
+                        indices_y.extend(0..n);
+                        // Use select_nth_unstable_by(k, ...) so positions [..k] hold the k
+                        // closest points. Self has dist_y[i] = INFINITY so it is never in [..k].
+                        indices_y.select_nth_unstable_by(k, |&a, &b| {
+                            dist_y[a].total_cmp(&dist_y[b]).then(a.cmp(&b))
+                        });
+
+                        // [..k] = k nearest non-self Y neighbors (matching baseline heap size k).
+                        let knn_y_partition = &indices_y[..k];
+
+                        #[cfg(feature = "profiling")]
+                        t_y_heap_ns.fetch_add(t2.elapsed().as_nanos() as u64, Ordering::Relaxed);
+                        #[cfg(feature = "profiling")]
+                        let t3 = std::time::Instant::now();
+
+                        let mut row_penalty = 0u64;
+                        for &j in knn_y_partition {
+                            if !knn_x_set.contains(&j) {
+                                let dj = dist_x[j];
+                                let rank: usize = (0..n)
+                                    .filter(|&m| dist_x[m] < dj || (dist_x[m] == dj && m < j))
+                                    .count();
+                                row_penalty += (rank - k) as u64;
+                            }
+                        }
+
+                        #[cfg(feature = "profiling")]
+                        t_penalty_ns.fetch_add(t3.elapsed().as_nanos() as u64, Ordering::Relaxed);
+
+                        row_penalty as f64
+                    })
+                })
+            })
+        })
+    }).sum();
+
+    #[cfg(feature = "profiling")]
+    {
+        eprintln!("[timing:x_dist] {}",  t_x_dist_ns.load(Ordering::Relaxed));
+        eprintln!("[timing:x_sort] {}",  t_x_sort_ns.load(Ordering::Relaxed));
+        eprintln!("[timing:y_heap] {}",  t_y_heap_ns.load(Ordering::Relaxed));
+        eprintln!("[timing:penalty] {}", t_penalty_ns.load(Ordering::Relaxed));
+    }
 
     let denom = n as f64 * k as f64 * (2 * n).saturating_sub(3 * k + 1) as f64;
     1.0 - penalty_sum * 2.0 / denom
@@ -1104,5 +1683,248 @@ mod tests {
         assert_eq!(e2.generated_at, e.generated_at);
         assert_eq!(e2.datasets.len(), 1);
         assert_eq!(e2.datasets[0].dataset, "iris");
+    }
+
+    // ── Variant correctness test helpers ─────────────────────────────────────
+
+    /// Case 01: perfect preservation — 20-point grid, k=5 (from t_tw_01).
+    fn tw_case_01() -> (ndarray::Array2<f64>, ndarray::Array2<f64>, usize) {
+        let x = ndarray::Array2::from_shape_fn((20, 4), |(i, d)| (i * 4 + d) as f64);
+        let y = x.slice(ndarray::s![.., ..2]).to_owned();
+        (x, y, 5)
+    }
+
+    /// Case 02: random n=20 k=5, seed 99 (from t_tw_02).
+    fn tw_case_02() -> (ndarray::Array2<f64>, ndarray::Array2<f64>, usize) {
+        use rand::{SeedableRng, Rng};
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(99);
+        let x = ndarray::Array2::from_shape_fn((20, 10), |_| rng.random::<f64>());
+        let y = ndarray::Array2::from_shape_fn((20, 2), |_| rng.random::<f64>());
+        (x, y, 5)
+    }
+
+    /// Case 03: 4-point hand check, k=1 (from t_tw_03).
+    fn tw_case_03() -> (ndarray::Array2<f64>, ndarray::Array2<f64>, usize) {
+        let x = ndarray::Array2::from_shape_vec(
+            (4, 2),
+            vec![0.0f64, 0.0, 1.0, 0.0, 0.0, 1.5, 0.0, 100.0],
+        ).unwrap();
+        let y = ndarray::Array2::from_shape_vec(
+            (4, 2),
+            vec![0.0f64, 0.0, 1.0, 0.0, 0.0, 0.5, 0.0, 100.0],
+        ).unwrap();
+        (x, y, 1)
+    }
+
+    /// Case 04: n=20 k=9 (max k = n/2-1) (from t_tw_04).
+    fn tw_case_04() -> (ndarray::Array2<f64>, ndarray::Array2<f64>, usize) {
+        use rand::{SeedableRng, Rng};
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(7);
+        let n = 20usize;
+        let k = n / 2 - 1; // 9
+        let x = ndarray::Array2::from_shape_fn((n, 4), |_| rng.random::<f64>());
+        let y = ndarray::Array2::from_shape_fn((n, 2), |_| rng.random::<f64>());
+        (x, y, k)
+    }
+
+    /// Case 05: n=30 k=5 (from t_tw_07).
+    fn tw_case_05() -> (ndarray::Array2<f64>, ndarray::Array2<f64>, usize) {
+        use rand::{SeedableRng, Rng};
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(77);
+        let x = ndarray::Array2::from_shape_fn((30, 4), |_| rng.random::<f64>());
+        let y = ndarray::Array2::from_shape_fn((30, 2), |_| rng.random::<f64>());
+        (x, y, 5)
+    }
+
+    /// Case 06: n=50 k=3 (from t_tw_08, first k).
+    fn tw_case_06() -> (ndarray::Array2<f64>, ndarray::Array2<f64>, usize) {
+        use rand::{SeedableRng, Rng};
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(123);
+        let x = ndarray::Array2::from_shape_fn((50, 6), |_| rng.random::<f64>());
+        let y = ndarray::Array2::from_shape_fn((50, 2), |_| rng.random::<f64>());
+        (x, y, 3)
+    }
+
+    /// Case 07: n=50 k=7 (from t_tw_08, second k).
+    fn tw_case_07() -> (ndarray::Array2<f64>, ndarray::Array2<f64>, usize) {
+        use rand::{SeedableRng, Rng};
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(123);
+        let x = ndarray::Array2::from_shape_fn((50, 6), |_| rng.random::<f64>());
+        let y = ndarray::Array2::from_shape_fn((50, 2), |_| rng.random::<f64>());
+        (x, y, 7)
+    }
+
+    // ── heap_reuse correctness (7 cases) ─────────────────────────────────────
+
+    #[test]
+    fn t_tw_heap_reuse_01() {
+        let (x, y, k) = tw_case_01();
+        let delta = (trustworthiness_heap_reuse(x.view(), y.view(), k)
+                   - trustworthiness(x.view(), y.view(), k)).abs();
+        assert!(delta < 1e-12, "heap_reuse 01: |ΔT| = {delta} ≥ 1e-12");
+    }
+
+    #[test]
+    fn t_tw_heap_reuse_02() {
+        let (x, y, k) = tw_case_02();
+        let delta = (trustworthiness_heap_reuse(x.view(), y.view(), k)
+                   - trustworthiness(x.view(), y.view(), k)).abs();
+        assert!(delta < 1e-12, "heap_reuse 02: |ΔT| = {delta} ≥ 1e-12");
+    }
+
+    #[test]
+    fn t_tw_heap_reuse_03() {
+        let (x, y, k) = tw_case_03();
+        let delta = (trustworthiness_heap_reuse(x.view(), y.view(), k)
+                   - trustworthiness(x.view(), y.view(), k)).abs();
+        assert!(delta < 1e-12, "heap_reuse 03: |ΔT| = {delta} ≥ 1e-12");
+    }
+
+    #[test]
+    fn t_tw_heap_reuse_04() {
+        let (x, y, k) = tw_case_04();
+        let delta = (trustworthiness_heap_reuse(x.view(), y.view(), k)
+                   - trustworthiness(x.view(), y.view(), k)).abs();
+        assert!(delta < 1e-12, "heap_reuse 04: |ΔT| = {delta} ≥ 1e-12");
+    }
+
+    #[test]
+    fn t_tw_heap_reuse_05() {
+        let (x, y, k) = tw_case_05();
+        let delta = (trustworthiness_heap_reuse(x.view(), y.view(), k)
+                   - trustworthiness(x.view(), y.view(), k)).abs();
+        assert!(delta < 1e-12, "heap_reuse 05: |ΔT| = {delta} ≥ 1e-12");
+    }
+
+    #[test]
+    fn t_tw_heap_reuse_06() {
+        let (x, y, k) = tw_case_06();
+        let delta = (trustworthiness_heap_reuse(x.view(), y.view(), k)
+                   - trustworthiness(x.view(), y.view(), k)).abs();
+        assert!(delta < 1e-12, "heap_reuse 06: |ΔT| = {delta} ≥ 1e-12");
+    }
+
+    #[test]
+    fn t_tw_heap_reuse_07() {
+        let (x, y, k) = tw_case_07();
+        let delta = (trustworthiness_heap_reuse(x.view(), y.view(), k)
+                   - trustworthiness(x.view(), y.view(), k)).abs();
+        assert!(delta < 1e-12, "heap_reuse 07: |ΔT| = {delta} ≥ 1e-12");
+    }
+
+    // ── flat_partial correctness (7 cases) ───────────────────────────────────
+
+    #[test]
+    fn t_tw_flat_partial_01() {
+        let (x, y, k) = tw_case_01();
+        let delta = (trustworthiness_flat_partial(x.view(), y.view(), k)
+                   - trustworthiness(x.view(), y.view(), k)).abs();
+        assert!(delta < 1e-12, "flat_partial 01: |ΔT| = {delta} ≥ 1e-12");
+    }
+
+    #[test]
+    fn t_tw_flat_partial_02() {
+        let (x, y, k) = tw_case_02();
+        let delta = (trustworthiness_flat_partial(x.view(), y.view(), k)
+                   - trustworthiness(x.view(), y.view(), k)).abs();
+        assert!(delta < 1e-12, "flat_partial 02: |ΔT| = {delta} ≥ 1e-12");
+    }
+
+    #[test]
+    fn t_tw_flat_partial_03() {
+        let (x, y, k) = tw_case_03();
+        let delta = (trustworthiness_flat_partial(x.view(), y.view(), k)
+                   - trustworthiness(x.view(), y.view(), k)).abs();
+        assert!(delta < 1e-12, "flat_partial 03: |ΔT| = {delta} ≥ 1e-12");
+    }
+
+    #[test]
+    fn t_tw_flat_partial_04() {
+        let (x, y, k) = tw_case_04();
+        let delta = (trustworthiness_flat_partial(x.view(), y.view(), k)
+                   - trustworthiness(x.view(), y.view(), k)).abs();
+        assert!(delta < 1e-12, "flat_partial 04: |ΔT| = {delta} ≥ 1e-12");
+    }
+
+    #[test]
+    fn t_tw_flat_partial_05() {
+        let (x, y, k) = tw_case_05();
+        let delta = (trustworthiness_flat_partial(x.view(), y.view(), k)
+                   - trustworthiness(x.view(), y.view(), k)).abs();
+        assert!(delta < 1e-12, "flat_partial 05: |ΔT| = {delta} ≥ 1e-12");
+    }
+
+    #[test]
+    fn t_tw_flat_partial_06() {
+        let (x, y, k) = tw_case_06();
+        let delta = (trustworthiness_flat_partial(x.view(), y.view(), k)
+                   - trustworthiness(x.view(), y.view(), k)).abs();
+        assert!(delta < 1e-12, "flat_partial 06: |ΔT| = {delta} ≥ 1e-12");
+    }
+
+    #[test]
+    fn t_tw_flat_partial_07() {
+        let (x, y, k) = tw_case_07();
+        let delta = (trustworthiness_flat_partial(x.view(), y.view(), k)
+                   - trustworthiness(x.view(), y.view(), k)).abs();
+        assert!(delta < 1e-12, "flat_partial 07: |ΔT| = {delta} ≥ 1e-12");
+    }
+
+    // ── flat_simd correctness (7 cases) ──────────────────────────────────────
+
+    #[test]
+    fn t_tw_flat_simd_01() {
+        let (x, y, k) = tw_case_01();
+        let delta = (trustworthiness_flat_simd(x.view(), y.view(), k)
+                   - trustworthiness(x.view(), y.view(), k)).abs();
+        assert!(delta < 1e-12, "flat_simd 01: |ΔT| = {delta} ≥ 1e-12");
+    }
+
+    #[test]
+    fn t_tw_flat_simd_02() {
+        let (x, y, k) = tw_case_02();
+        let delta = (trustworthiness_flat_simd(x.view(), y.view(), k)
+                   - trustworthiness(x.view(), y.view(), k)).abs();
+        assert!(delta < 1e-12, "flat_simd 02: |ΔT| = {delta} ≥ 1e-12");
+    }
+
+    #[test]
+    fn t_tw_flat_simd_03() {
+        let (x, y, k) = tw_case_03();
+        let delta = (trustworthiness_flat_simd(x.view(), y.view(), k)
+                   - trustworthiness(x.view(), y.view(), k)).abs();
+        assert!(delta < 1e-12, "flat_simd 03: |ΔT| = {delta} ≥ 1e-12");
+    }
+
+    #[test]
+    fn t_tw_flat_simd_04() {
+        let (x, y, k) = tw_case_04();
+        let delta = (trustworthiness_flat_simd(x.view(), y.view(), k)
+                   - trustworthiness(x.view(), y.view(), k)).abs();
+        assert!(delta < 1e-12, "flat_simd 04: |ΔT| = {delta} ≥ 1e-12");
+    }
+
+    #[test]
+    fn t_tw_flat_simd_05() {
+        let (x, y, k) = tw_case_05();
+        let delta = (trustworthiness_flat_simd(x.view(), y.view(), k)
+                   - trustworthiness(x.view(), y.view(), k)).abs();
+        assert!(delta < 1e-12, "flat_simd 05: |ΔT| = {delta} ≥ 1e-12");
+    }
+
+    #[test]
+    fn t_tw_flat_simd_06() {
+        let (x, y, k) = tw_case_06();
+        let delta = (trustworthiness_flat_simd(x.view(), y.view(), k)
+                   - trustworthiness(x.view(), y.view(), k)).abs();
+        assert!(delta < 1e-12, "flat_simd 06: |ΔT| = {delta} ≥ 1e-12");
+    }
+
+    #[test]
+    fn t_tw_flat_simd_07() {
+        let (x, y, k) = tw_case_07();
+        let delta = (trustworthiness_flat_simd(x.view(), y.view(), k)
+                   - trustworthiness(x.view(), y.view(), k)).abs();
+        assert!(delta < 1e-12, "flat_simd 07: |ΔT| = {delta} ≥ 1e-12");
     }
 }

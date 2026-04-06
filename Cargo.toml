@@ -9,6 +9,8 @@ license = "MIT"
 # Expose internal solver functions for integration tests.
 # Not part of the stable public API.
 testing = ["dep:serde"]
+# Enable step-timing instrumentation in trustworthiness functions.
+profiling = []
 # Enable CLI binary (trustworthiness) and .npy I/O support.
 cli = ["dep:ndarray-npy", "dep:pico-args", "dep:serde_json", "dep:libc"]
 

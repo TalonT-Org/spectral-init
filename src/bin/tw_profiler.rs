@@ -25,6 +25,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         return Err("--iters must be > 0".into());
     }
     let warmup: usize = pargs.opt_value_from_str("--warmup")?.unwrap_or(2);
+    let variant: String = pargs.opt_value_from_str("--variant")?.unwrap_or_else(|| "baseline".to_string());
     let stderr_capture: Option<std::path::PathBuf> = pargs.opt_value_from_str("--stderr-capture")?;
 
     // Set up stderr capture if requested.
@@ -37,9 +38,21 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let y: ndarray::Array2<f64> = ndarray_npy::read_npy(&y_path)
         .map_err(|e| format!("failed to load Y from {}: {e}", y_path.display()))?;
 
+    macro_rules! call_variant {
+        ($fn:expr) => {
+            std::hint::black_box($fn(x.view(), y.view(), k))
+        };
+    }
+
     // Warmup iterations (results discarded).
     for _ in 0..warmup {
-        let _ = std::hint::black_box(spectral_init::trustworthiness(x.view(), y.view(), k));
+        match variant.as_str() {
+            "baseline"     => { call_variant!(spectral_init::trustworthiness); }
+            "heap_reuse"   => { call_variant!(spectral_init::trustworthiness_heap_reuse); }
+            "flat_partial" => { call_variant!(spectral_init::trustworthiness_flat_partial); }
+            "flat_simd"    => { call_variant!(spectral_init::trustworthiness_flat_simd); }
+            other => return Err(format!("unknown variant: {other}").into()),
+        }
     }
 
     // Timed iterations.
@@ -47,7 +60,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut score = 0.0f64;
     for _ in 0..iters {
         let start = std::time::Instant::now();
-        score = spectral_init::trustworthiness(x.view(), y.view(), k);
+        score = match variant.as_str() {
+            "baseline"     => spectral_init::trustworthiness(x.view(), y.view(), k),
+            "heap_reuse"   => spectral_init::trustworthiness_heap_reuse(x.view(), y.view(), k),
+            "flat_partial" => spectral_init::trustworthiness_flat_partial(x.view(), y.view(), k),
+            "flat_simd"    => spectral_init::trustworthiness_flat_simd(x.view(), y.view(), k),
+            other => return Err(format!("unknown variant: {other}").into()),
+        };
         let elapsed = start.elapsed().as_secs_f64();
         times.push(elapsed);
     }
@@ -68,6 +87,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut result = serde_json::Map::new();
     result.insert("n".into(), serde_json::Value::from(n));
     result.insert("k".into(), serde_json::Value::from(k));
+    result.insert("variant".into(), serde_json::Value::from(variant.as_str()));
     result.insert("iters".into(), serde_json::json!(times));
     result.insert("mean_s".into(), serde_json::json!(round_to(mean_s, 6)));
     result.insert("std_s".into(), serde_json::json!(round_to(std_s, 6)));
