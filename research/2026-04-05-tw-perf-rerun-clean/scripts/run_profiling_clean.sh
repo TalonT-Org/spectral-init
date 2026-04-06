@@ -12,8 +12,8 @@ EXP_DIR="$REPO_ROOT/research/2026-04-05-tw-perf-rerun-clean"
 DATA_DIR="$EXP_DIR/data/gaussian"
 RESULTS_DIR="$EXP_DIR/results/step_timing"
 BINARY="$REPO_ROOT/target/release/tw_profiler"
-X="$DATA_DIR/gaussian_n40000_x.npy"
-Y="$DATA_DIR/gaussian_n40000_y.npy"
+X="$DATA_DIR/gaussian_n10000_x.npy"
+Y="$DATA_DIR/gaussian_n10000_y.npy"
 K=15
 WARMUP=5
 ITERS=30
@@ -24,10 +24,10 @@ echo "=== Building tw_profiler (features: cli,profiling) ==="
 echo "Build complete: $BINARY"
 
 echo ""
-echo "=== Step-Timing: 5 Gaussian Variants at n=40K ==="
+echo "=== Step-Timing: 5 Gaussian Variants at n=10K ==="
 VARIANTS=(baseline thread_local partial_rank avx2_kernel combined)
 for VARIANT in "${VARIANTS[@]}"; do
-    OUT="$RESULTS_DIR/gaussian_n40000_${VARIANT}.json"
+    OUT="$RESULTS_DIR/gaussian_n10000_${VARIANT}.json"
     echo "  Running variant: $VARIANT"
     "$BINARY" \
         --x "$X" \

@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, SamplingMode};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use ndarray::Array2;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -21,7 +21,7 @@ fn bench_tw_thread_local(c: &mut Criterion) {
     group.warm_up_time(Duration::from_secs(10));
     group.measurement_time(Duration::from_secs(60));
 
-    for n in [1000usize, 5000, 10000, 25000, 50000] {
+    for n in [1000usize, 5000, 10000] {
         let x: Array2<f64> = ndarray_npy::read_npy(data_dir.join(format!("gaussian_n{n}_x.npy")))
             .unwrap_or_else(|e| panic!("failed to load gaussian_n{n}_x.npy: {e}"));
         let y: Array2<f64> = ndarray_npy::read_npy(data_dir.join(format!("gaussian_n{n}_y.npy")))
@@ -30,20 +30,6 @@ fn bench_tw_thread_local(c: &mut Criterion) {
             b.iter(|| spectral_init::trustworthiness_thread_local(black_box(x.view()), black_box(y.view()), black_box(k)))
         });
     }
-
-    group.sampling_mode(SamplingMode::Flat);
-    group.sample_size(63);
-    group.warm_up_time(Duration::from_secs(30));
-    group.measurement_time(Duration::from_secs(1500));
-
-    let n = 40_000usize;
-    let x: Array2<f64> = ndarray_npy::read_npy(data_dir.join(format!("gaussian_n{n}_x.npy")))
-        .unwrap_or_else(|e| panic!("failed to load gaussian_n{n}_x.npy: {e}"));
-    let y: Array2<f64> = ndarray_npy::read_npy(data_dir.join(format!("gaussian_n{n}_y.npy")))
-        .unwrap_or_else(|e| panic!("failed to load gaussian_n{n}_y.npy: {e}"));
-    group.bench_with_input(BenchmarkId::new("thread_local", n), &n, |b, _| {
-        b.iter(|| spectral_init::trustworthiness_thread_local(black_box(x.view()), black_box(y.view()), black_box(k)))
-    });
 
     group.finish();
 }
