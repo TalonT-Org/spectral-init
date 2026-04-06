@@ -6,12 +6,10 @@ use rand::SeedableRng;
 use rand::rngs::StdRng;
 use rand_distr::{Distribution, StandardNormal};
 use serde_json::json;
-use spectral_init::{normalize_signs_pub, scale_and_add_noise_pub, solve_eigenproblem_pub};
+use spectral_init::{normalize_signs_pub, scale_and_add_noise_pub, solve_eigenproblem_pub, ComputeMode};
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 use spectral_init::operator::spmv_avx2_gather_pub;
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-use spectral_init::solve_eigenproblem_simd_pub;
 
 use spectral_init::operator::spmv_csr;
 
@@ -136,14 +134,14 @@ fn test_solver_divergence() {
         let n = laplacian.rows();
 
         let ((_, eigvec_scalar), solver_level_scalar) =
-            solve_eigenproblem_pub(&laplacian, 2, 42);
+            solve_eigenproblem_pub(&laplacian, 2, 42, ComputeMode::PythonCompat);
 
         // x86_64 path: run SIMD solver and compare.
         #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
         let record = {
             let mut eigvec_scalar = eigvec_scalar; // rebind as mut — normalize_signs_pub needs &mut
             let ((_, mut eigvec_avx2), solver_level_avx2) =
-                solve_eigenproblem_simd_pub(&laplacian, 2, 42);
+                solve_eigenproblem_pub(&laplacian, 2, 42, ComputeMode::RustNative);
 
             normalize_signs_pub(&mut eigvec_scalar); // match production E.5
             normalize_signs_pub(&mut eigvec_avx2); // match production E.5

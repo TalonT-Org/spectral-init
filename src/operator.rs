@@ -230,15 +230,14 @@ impl<'a> LinearOperator for CsrOperator<'a> {
 // ─── CsrOperatorSimd ─────────────────────────────────────────────────────────
 
 /// SIMD-accelerated variant of `CsrOperator`. Routes k=1 through
-/// `spmv_avx2_gather_pub`; k>1 falls back to `csr_mulacc_dense_rowmaj`.
+/// `spmv_avx2_gather_inner` (AVX2 gather kernel); k>1 falls back to `csr_mulacc_dense_rowmaj`.
 ///
-/// Under `#[cfg(all(feature = "testing", any(target_arch = "x86", target_arch = "x86_64")))]`
-/// only — not part of the stable public API.
-#[cfg(all(feature = "testing", any(target_arch = "x86", target_arch = "x86_64")))]
-#[doc(hidden)]
+/// Only available on x86/x86_64. Callers must ensure AVX2 and FMA are present at runtime
+/// before constructing this operator (use `is_x86_feature_detected!`).
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 pub struct CsrOperatorSimd<'a>(pub &'a CsMatI<f64, usize>);
 
-#[cfg(all(feature = "testing", any(target_arch = "x86", target_arch = "x86_64")))]
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 impl<'a> LinearOperator for CsrOperatorSimd<'a> {
     fn apply(&self, x: ArrayView2<f64>, y: &mut Array2<f64>) {
         debug_assert_eq!(
@@ -266,23 +265,31 @@ impl<'a> LinearOperator for CsrOperatorSimd<'a> {
             };
             match y.column_mut(0).as_slice_mut() {
                 Some(y_col) => {
-                    spmv_avx2_gather_pub(
-                        mat.indptr().raw_storage(),
-                        mat.indices(),
-                        mat.data(),
-                        x_col,
-                        y_col,
-                    );
+                    // SAFETY: CsrOperatorSimd is only constructed in solve_eigenproblem when
+                    // is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") are true.
+                    unsafe {
+                        spmv_avx2_gather_inner(
+                            mat.indptr().raw_storage(),
+                            mat.indices(),
+                            mat.data(),
+                            x_col,
+                            y_col,
+                        );
+                    }
                 }
                 None => {
                     let mut y_col = vec![0.0_f64; mat.rows()];
-                    spmv_avx2_gather_pub(
-                        mat.indptr().raw_storage(),
-                        mat.indices(),
-                        mat.data(),
-                        x_col,
-                        &mut y_col,
-                    );
+                    // SAFETY: CsrOperatorSimd is only constructed in solve_eigenproblem when
+                    // is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") are true.
+                    unsafe {
+                        spmv_avx2_gather_inner(
+                            mat.indptr().raw_storage(),
+                            mat.indices(),
+                            mat.data(),
+                            x_col,
+                            &mut y_col,
+                        );
+                    }
                     for (i, v) in y_col.into_iter().enumerate() {
                         y[[i, 0]] = v;
                     }
@@ -546,7 +553,7 @@ mod tests {
         }
     }
 
-    #[cfg(all(feature = "testing", any(target_arch = "x86", target_arch = "x86_64")))]
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     #[test]
     fn test_csr_operator_simd_single_vector_matches_scalar() {
         if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
@@ -569,7 +576,7 @@ mod tests {
         }
     }
 
-    #[cfg(all(feature = "testing", any(target_arch = "x86", target_arch = "x86_64")))]
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     #[test]
     fn test_csr_operator_simd_block_matches_sequential() {
         if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {

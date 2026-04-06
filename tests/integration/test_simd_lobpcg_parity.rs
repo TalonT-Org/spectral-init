@@ -8,12 +8,10 @@ use serde_json::json;
 use spectral_init::{
     normalize_signs_pub,
     solve_eigenproblem_pub,
+    ComputeMode,
     DEGENERATE_GAP_THRESHOLD,
 };
 use std::fs;
-
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-use spectral_init::solve_eigenproblem_simd_pub;
 
 const SIMD_PARITY_F32_THRESHOLD: f64 = 4.0 * f32::EPSILON as f64;
 const SUBSPACE_ANGLE_SENSITIVITY_RAD: f64 = 1e-6;
@@ -155,9 +153,9 @@ fn measure_solver_pair(
 
     // --- Solver invocations ---
     let ((eigenvalues_s, eigvecs_s_raw), level_s) =
-        solve_eigenproblem_pub(laplacian, 2, seed);
+        solve_eigenproblem_pub(laplacian, 2, seed, ComputeMode::PythonCompat);
     let ((eigenvalues_x, eigvecs_x_raw), level_x) =
-        solve_eigenproblem_simd_pub(laplacian, 2, seed);
+        solve_eigenproblem_pub(laplacian, 2, seed, ComputeMode::RustNative);
 
     // --- Residuals (pre-normalization, per Davis-Kahan definition) ---
     let residual_scalar = max_eigenpair_residual(laplacian, &eigenvalues_s, &eigvecs_s_raw);
@@ -270,8 +268,8 @@ fn test_solver_level_parity() {
     let n = cluster_size();
     for &w in BRIDGE_WEIGHTS.iter() {
         let laplacian = large_epsilon_bridge_laplacian(n, w);
-        let ((eigenvalues_s, _), level_s) = solve_eigenproblem_pub(&laplacian, 2, 42);
-        let (_, level_x) = solve_eigenproblem_simd_pub(&laplacian, 2, 42);
+        let ((eigenvalues_s, _), level_s) = solve_eigenproblem_pub(&laplacian, 2, 42, ComputeMode::PythonCompat);
+        let (_, level_x) = solve_eigenproblem_pub(&laplacian, 2, 42, ComputeMode::RustNative);
 
         let approx_gap = (eigenvalues_s[1] - eigenvalues_s[0]).max(0.0);
         let is_degenerate = approx_gap < DEGENERATE_GAP_THRESHOLD;

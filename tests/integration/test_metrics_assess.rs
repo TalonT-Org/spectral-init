@@ -296,7 +296,7 @@ fn assess_accuracy() {
         // Connected dataset path
         let laplacian = common::load_sparse_csr(&base.join("comp_b_laplacian.npz"));
         let ((eigenvalues, eigenvectors), solver_level) =
-            solve_eigenproblem_pub(&laplacian, n_components_dim, 42);
+            solve_eigenproblem_pub(&laplacian, n_components_dim, 42, ComputeMode::PythonCompat);
 
         let residual = max_eigenpair_residual(&laplacian, &eigenvalues, &eigenvectors);
         let ortho = orthogonality_error(&eigenvectors);
@@ -442,7 +442,7 @@ fn assess_parity() {
         let n_components_dim = ref_eigenvalues.len() - 1;
 
         let ((eigenvalues, eigenvectors), solver_level) =
-            solve_eigenproblem_pub(&laplacian, n_components_dim, 42);
+            solve_eigenproblem_pub(&laplacian, n_components_dim, 42, ComputeMode::PythonCompat);
 
         let abs_errors: Array1<f64> = eigenvalue_abs_errors(&eigenvalues, &ref_eigenvalues);
         let max_abs_err = abs_errors.iter().cloned().fold(0.0f64, f64::max);

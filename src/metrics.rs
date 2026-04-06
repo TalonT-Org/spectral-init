@@ -27,18 +27,19 @@ pub const RSVD_QUALITY_THRESHOLD: f64 = 1e-2;
 pub const DENSE_EVD_QUALITY_THRESHOLD: f64 = 1e-6;
 
 /// Maximum acceptable max-residual from LOBPCG (Levels 1 and 3).
-/// Set to 1e-5 (Issue #92 REQ-TOL-002): matches the solver's `tol = 1e-5` and is
-/// consistently achievable with ChFSI preconditioning, while being tighter than rSVD (1e-2).
-pub const LOBPCG_QUALITY_THRESHOLD: f64 = 1e-5;
+/// Set to 2e-5: provides ≥2× safety margin for the tightest observed fixture
+/// (blobs_connected_2000 at 9.097e-6, margin = 2.20×). Tighter than rSVD (1e-2).
+pub const LOBPCG_QUALITY_THRESHOLD: f64 = 2e-5;
 
 /// Maximum acceptable max-residual from shift-and-invert LOBPCG (Level 2).
 /// Sinv achieves near-exact results (like dense EVD); 1e-6 accepts all
 /// well-converged results while correctly escalating pathological graphs.
 pub const SINV_LOBPCG_QUALITY_THRESHOLD: f64 = 1e-6;
 
-/// LOBPCG internal per-vector convergence tolerance.
-/// Set to 1e-5 (Issue #92 REQ-TOL-003): matches the solver's `tol` and is achievable
-/// with ChFSI-filtered starting subspace for well-conditioned graphs.
+/// LOBPCG internal per-vector convergence tolerance (linfa-linalg `tol` argument).
+/// Remains at 1e-5 — this is independent of `LOBPCG_QUALITY_THRESHOLD`: the former
+/// controls the iterative solver's per-step stopping criterion; the latter is the
+/// post-solve acceptance gate applied to the returned residuals.
 pub const LOBPCG_ACCEPT_TOL: f64 = 1e-5;
 
 /// Linfa-linalg internal convergence tolerance for shift-invert LOBPCG.
@@ -573,7 +574,7 @@ mod tests {
     #[test]
     fn t_const_01_all_7_constants_have_required_values() {
         assert_eq!(DENSE_EVD_QUALITY_THRESHOLD, 1e-6_f64);
-        assert_eq!(LOBPCG_QUALITY_THRESHOLD, 1e-5_f64);
+        assert_eq!(LOBPCG_QUALITY_THRESHOLD, 2e-5_f64);
         assert_eq!(SINV_LOBPCG_QUALITY_THRESHOLD, 1e-6_f64);
         assert_eq!(RSVD_QUALITY_THRESHOLD, 1e-2_f64);
         assert_eq!(LOBPCG_ACCEPT_TOL, 1e-5_f64);

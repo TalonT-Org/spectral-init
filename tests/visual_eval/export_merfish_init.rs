@@ -47,7 +47,7 @@ fn export_merfish_init_10k() {
         .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
         .collect();
     let lap = build_normalized_laplacian(&graph, &inv_sqrt_deg);
-    let (_, solver_level) = solve_eigenproblem_pub(&lap, 2, 42);
+    let (_, solver_level) = solve_eigenproblem_pub(&lap, 2, 42, ComputeMode::PythonCompat);
     println!("SOLVER_LEVEL={}", solver_level);
 
     let start = Instant::now();
@@ -105,7 +105,7 @@ fn export_merfish_init_20k() {
         .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
         .collect();
     let lap = build_normalized_laplacian(&graph, &inv_sqrt_deg);
-    let (_, solver_level) = solve_eigenproblem_pub(&lap, 2, 42);
+    let (_, solver_level) = solve_eigenproblem_pub(&lap, 2, 42, ComputeMode::PythonCompat);
     println!("SOLVER_LEVEL={}", solver_level);
 
     let start = Instant::now();
@@ -183,7 +183,7 @@ fn export_merfish_init_100k() {
         .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
         .collect();
     let lap = build_normalized_laplacian(&graph, &inv_sqrt_deg);
-    let (_, solver_level) = solve_eigenproblem_pub(&lap, 2, 42);
+    let (_, solver_level) = solve_eigenproblem_pub(&lap, 2, 42, ComputeMode::PythonCompat);
     println!("SOLVER_LEVEL={}", solver_level);
 
     let start = Instant::now();
@@ -256,7 +256,7 @@ fn export_merfish_init_250k() {
         .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
         .collect();
     let lap = build_normalized_laplacian(&graph, &inv_sqrt_deg);
-    let (_, solver_level) = solve_eigenproblem_pub(&lap, 2, 42);
+    let (_, solver_level) = solve_eigenproblem_pub(&lap, 2, 42, ComputeMode::PythonCompat);
     println!("SOLVER_LEVEL={}", solver_level);
 
     let start = Instant::now();

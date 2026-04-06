@@ -16,6 +16,7 @@ pub use dense::dense_evd;
 
 use ndarray::{Array1, Array2};
 use sprs::CsMatI;
+use crate::config::ComputeMode;
 use crate::operator::CsrOperator;
 use crate::metrics::{
     max_eigenpair_residual,
@@ -68,14 +69,14 @@ fn enforce_psd_contract(result: EigenResult) -> EigenResult {
     (clamped, eigenvectors)
 }
 
-/// Solver escalation chain. Tries six levels in order, advancing only on failure.
+/// Core solver escalation chain, parameterized over the `LinearOperator` used for LOBPCG.
 ///
 /// Returns `n_components+1` eigenpairs (including the trivial λ≈0 vector at index 0)
 /// so that the caller can apply `select_eigenvectors` uniformly across all solver paths.
 ///
 /// Level 0: Dense EVD (n < 2000, O(n³)).
 /// Level 1: LOBPCG without regularization.
-/// Level 2: Shift-and-invert LOBPCG via sparse Cholesky (new).
+/// Level 2: Shift-and-invert LOBPCG via sparse Cholesky.
 /// Level 3: LOBPCG with ε·I regularization.
 /// Level 4: Randomized SVD via 2I-L trick.
 /// Level 5: Forced dense EVD (nuclear option, cannot fail).
@@ -84,8 +85,9 @@ fn enforce_psd_contract(result: EigenResult) -> EigenResult {
 ///
 /// Panics at Level 5 exhaustion — this represents a bug, not a user error.
 /// The spectral theorem guarantees eigenvectors exist for any symmetric PSD matrix.
-pub(crate) fn solve_eigenproblem(
+fn solve_eigenproblem_with_op<O: crate::operator::LinearOperator>(
     laplacian: &CsMatI<f64, usize>,
+    op: O,
     n_components: usize,
     seed: u64,
     sqrt_deg: &ndarray::Array1<f64>,
@@ -94,7 +96,6 @@ pub(crate) fn solve_eigenproblem(
     let _t_solve = std::time::Instant::now();
 
     let n = laplacian.rows();
-    let op = CsrOperator(laplacian);
 
     // Level 0: Dense EVD — exact, used for small n where O(n³) is acceptable.
     if n < dense_n_threshold() {
@@ -240,114 +241,33 @@ pub(crate) fn solve_eigenproblem(
     (enforce_psd_contract(result), 5)
 }
 
-/// SIMD variant of `solve_eigenproblem`: identical escalation chain but uses
-/// `CsrOperatorSimd` for LOBPCG levels 1 and 3 to exercise the AVX2 SpMV path.
+/// Solver escalation chain with runtime operator dispatch.
 ///
-/// Under `#[cfg(all(feature = "testing", any(target_arch = "x86", target_arch = "x86_64")))]`
-/// only — not part of the stable public API.
-#[cfg(all(feature = "testing", any(target_arch = "x86", target_arch = "x86_64")))]
-pub(crate) fn solve_eigenproblem_simd(
+/// On x86/x86_64, `ComputeMode::RustNative` with AVX2+FMA available routes LOBPCG
+/// levels through `CsrOperatorSimd`; all other configurations use scalar `CsrOperator`.
+/// `ComputeMode::PythonCompat` always uses the scalar path regardless of CPU features.
+///
+/// # Panics
+///
+/// Panics at Level 5 exhaustion — this represents a bug, not a user error.
+pub(crate) fn solve_eigenproblem(
     laplacian: &CsMatI<f64, usize>,
     n_components: usize,
     seed: u64,
     sqrt_deg: &ndarray::Array1<f64>,
+    compute_mode: ComputeMode,
 ) -> (EigenResult, u8) {
-    use crate::operator::CsrOperatorSimd;
-
-    #[cfg(feature = "testing")]
-    let _t_solve = std::time::Instant::now();
-
-    let n = laplacian.rows();
-    let op = CsrOperatorSimd(laplacian);
-
-    // Level 0: Dense EVD (unchanged — does not use the LinearOperator)
-    if n < dense_n_threshold() {
-        #[cfg(feature = "testing")]
-        let _t0 = std::time::Instant::now();
-        let l0_result = dense_evd(laplacian, n_components + 1);
-        #[cfg(feature = "testing")]
-        eprintln!("[timing:simd:level_0] {}µs", _t0.elapsed().as_micros());
-        if let Ok((eigs, vecs)) = l0_result {
-            let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
-            if quality < DENSE_EVD_QUALITY_THRESHOLD {
-                #[cfg(feature = "testing")]
-                eprintln!("[timing:simd:level_total] {}µs", _t_solve.elapsed().as_micros());
-                return (enforce_psd_contract((eigs, vecs)), 0);
-            }
-        }
-    }
-
-    // Level 1: LOBPCG via CsrOperatorSimd
-    #[cfg(feature = "testing")]
-    let _t1 = std::time::Instant::now();
-    let _l1 = lobpcg::lobpcg_solve(&op, n_components, seed, false, sqrt_deg);
-    #[cfg(feature = "testing")]
-    eprintln!("[timing:simd:level_1] {}µs", _t1.elapsed().as_micros());
-    if let Some(((eigs, vecs), _)) = _l1 {
-        let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
-        if quality < LOBPCG_QUALITY_THRESHOLD {
-            #[cfg(feature = "testing")]
-            eprintln!("[timing:simd:level_total] {}µs", _t_solve.elapsed().as_micros());
-            return (enforce_psd_contract((eigs, vecs)), 1);
-        }
-    }
-
-    // Level 2: Shift-and-invert LOBPCG (unchanged — does not use LinearOperator)
-    #[cfg(feature = "testing")]
-    let _t2 = std::time::Instant::now();
-    let _l2 = sinv::lobpcg_sinv_solve(laplacian, n_components, seed, sqrt_deg);
-    #[cfg(feature = "testing")]
-    eprintln!("[timing:simd:level_2] {}µs", _t2.elapsed().as_micros());
-    if let Some((eigs, vecs)) = _l2 {
-        let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
-        if quality < SINV_LOBPCG_QUALITY_THRESHOLD {
-            #[cfg(feature = "testing")]
-            eprintln!("[timing:simd:level_total] {}µs", _t_solve.elapsed().as_micros());
-            return (enforce_psd_contract((eigs, vecs)), 2);
-        }
-    }
-
-    // Level 3: LOBPCG+reg via CsrOperatorSimd
-    #[cfg(feature = "testing")]
-    let _t3 = std::time::Instant::now();
-    let _l3 = lobpcg::lobpcg_solve(&op, n_components, seed, true, sqrt_deg);
-    #[cfg(feature = "testing")]
-    eprintln!("[timing:simd:level_3] {}µs", _t3.elapsed().as_micros());
-    if let Some(((eigs, vecs), _)) = _l3 {
-        let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
-        if quality < LOBPCG_QUALITY_THRESHOLD {
-            #[cfg(feature = "testing")]
-            eprintln!("[timing:simd:level_total] {}µs", _t_solve.elapsed().as_micros());
-            return (enforce_psd_contract((eigs, vecs)), 3);
-        }
-    }
-
-    // Level 4: rSVD (unchanged — does not use LinearOperator)
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    if matches!(compute_mode, ComputeMode::RustNative)
+        && is_x86_feature_detected!("avx2")
+        && is_x86_feature_detected!("fma")
     {
-        #[cfg(feature = "testing")]
-        let _t4 = std::time::Instant::now();
-        let (eigs, vecs) = rsvd::rsvd_solve(laplacian, n_components, seed);
-        #[cfg(feature = "testing")]
-        eprintln!("[timing:simd:level_4] {}µs", _t4.elapsed().as_micros());
-        let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
-        if quality < RSVD_QUALITY_THRESHOLD {
-            #[cfg(feature = "testing")]
-            eprintln!("[timing:simd:level_total] {}µs", _t_solve.elapsed().as_micros());
-            return (enforce_psd_contract((eigs, vecs)), 4);
-        }
+        use crate::operator::CsrOperatorSimd;
+        let op = CsrOperatorSimd(laplacian);
+        return solve_eigenproblem_with_op(laplacian, op, n_components, seed, sqrt_deg);
     }
-
-    // Level 5: Forced dense EVD (unchanged)
-    #[cfg(feature = "testing")]
-    let _t5 = std::time::Instant::now();
-    let result = dense_evd(laplacian, n_components + 1).expect(
-        "solve_eigenproblem_simd: Level 5 forced dense EVD failed — bug",
-    );
-    #[cfg(feature = "testing")]
-    eprintln!("[timing:simd:level_5] {}µs", _t5.elapsed().as_micros());
-    #[cfg(feature = "testing")]
-    eprintln!("[timing:simd:level_total] {}µs", _t_solve.elapsed().as_micros());
-    (enforce_psd_contract(result), 5)
+    let op = CsrOperator(laplacian);
+    solve_eigenproblem_with_op(laplacian, op, n_components, seed, sqrt_deg)
 }
 
 // ─── Unit Tests ──────────────────────────────────────────────────────────────
@@ -392,7 +312,7 @@ mod tests {
     #[test]
     fn solve_eigenproblem_eigenvalues_nonneg_and_sorted() {
         let laplacian = path_graph_laplacian_6();
-        let ((eigvals, _), _) = solve_eigenproblem(&laplacian, 2, 42, &ndarray::Array1::ones(6));
+        let ((eigvals, _), _) = solve_eigenproblem(&laplacian, 2, 42, &ndarray::Array1::ones(6), ComputeMode::PythonCompat);
 
         // All eigenvalues must be non-negative
         for &v in eigvals.iter() {
@@ -412,7 +332,7 @@ mod tests {
     #[test]
     fn solve_eigenproblem_returns_k_plus_one_pairs() {
         // 6-node path graph (n=6 < 2000 → Level 0 dense EVD)
-        let ((eigs, vecs), _) = solve_eigenproblem(&path_graph_laplacian_6(), 2, 42, &ndarray::Array1::ones(6));
+        let ((eigs, vecs), _) = solve_eigenproblem(&path_graph_laplacian_6(), 2, 42, &ndarray::Array1::ones(6), ComputeMode::PythonCompat);
         assert_eq!(eigs.len(), 3, "expected n_components+1=3 eigenvalues");
         assert_eq!(vecs.shape(), &[6, 3], "expected [n, n_components+1] = [6, 3] eigenvectors");
     }
@@ -438,7 +358,7 @@ mod tests {
         let n_components = 2;
         let laplacian = diagonal_laplacian(n);
 
-        let ((eigvals, eigvecs), _) = solve_eigenproblem(&laplacian, n_components, 42, &ndarray::Array1::ones(n));
+        let ((eigvals, eigvecs), _) = solve_eigenproblem(&laplacian, n_components, 42, &ndarray::Array1::ones(n), ComputeMode::PythonCompat);
 
         assert_eq!(eigvals.len(), n_components + 1, "expected n_components+1 eigenvalues");
         assert_eq!(eigvecs.shape(), &[n, n_components + 1], "expected [n, n_components+1] shape");
@@ -455,7 +375,7 @@ mod tests {
         // For a well-conditioned diagonal Laplacian, Level 1 (plain LOBPCG) succeeds.
         let n = 2001;
         let laplacian = diagonal_laplacian(n);
-        let (_, level) = solve_eigenproblem(&laplacian, 2, 42, &ndarray::Array1::ones(n));
+        let (_, level) = solve_eigenproblem(&laplacian, 2, 42, &ndarray::Array1::ones(n), ComputeMode::PythonCompat);
         assert!(
             level >= 1 && level <= 5,
             "expected level in {{1,2,3,4,5}}, got {level}"
@@ -521,7 +441,7 @@ mod tests {
     fn level0_result_passes_dense_evd_quality_gate() {
         // 6-node path graph, n=6 < 2000 → Level 0 dense EVD.
         let laplacian = path_graph_laplacian_6();
-        let ((eigs, vecs), _) = solve_eigenproblem(&laplacian, 2, 42, &ndarray::Array1::ones(6));
+        let ((eigs, vecs), _) = solve_eigenproblem(&laplacian, 2, 42, &ndarray::Array1::ones(6), ComputeMode::PythonCompat);
         let residual = max_eigenpair_residual(&laplacian, &eigs, &vecs);
         assert!(
             residual < DENSE_EVD_QUALITY_THRESHOLD,
