@@ -1,0 +1,29 @@
+{
+  "iters": [
+    0.00484533,
+    0.004182991
+  ],
+  "mean_s": 0.0045141604999999994,
+  "n": 1000,
+  "std_s": 0.00033116950000000025,
+  "step_times_ns": [
+    {
+      "penalty": 1762215,
+      "rank_scatter": 0,
+      "x_dist": 3660436,
+      "x_knn_set": 620654,
+      "x_sort": 2958744,
+      "y_heap": 17873115
+    },
+    {
+      "penalty": 1751095,
+      "rank_scatter": 0,
+      "x_dist": 3568926,
+      "x_knn_set": 658927,
+      "x_sort": 2904968,
+      "y_heap": 17434086
+    }
+  ],
+  "variant": "baseline",
+  "warmup": 1
+}

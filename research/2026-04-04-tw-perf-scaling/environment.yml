@@ -1,0 +1,12 @@
+name: tw-perf-scaling
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy=2.2.6
+  - scipy=1.15.2
+  - scikit-learn=1.8
+  - pip
+# Rust toolchain: nightly-2026-03-26 (rustc 1.96.0-nightly, 23903d01c)
+# Pin via rust-toolchain.toml in this directory or run:
+#   rustup override set nightly-2026-03-26

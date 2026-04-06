@@ -1,0 +1,44 @@
+=== Hardware Profile: tw-perf-rerun-clean ===
+Date: 2026-04-05T22:53:10Z
+
+--- CPU ---
+Model name:                           AMD Ryzen 7 9800X3D 8-Core Processor
+Thread(s) per core:                   2
+Core(s) per socket:                   8
+Socket(s):                            1
+
+--- Cache ---
+L1d cache:                            384 KiB (8 instances)
+L1i cache:                            256 KiB (8 instances)
+L2 cache:                             8 MiB (8 instances)
+L3 cache:                             96 MiB (1 instance)
+
+--- RAM ---
+Mem:            49Gi        12Gi       4.1Gi       4.2Gi        36Gi        36Gi
+
+--- NUMA ---
+numactl not available; single NUMA node assumed
+
+--- N_THREADS constant ---
+/home/talon/projects/worktrees/research-20260405-tw-perf-rerun-clean/src/bin/tw_profiler.rs:13:const N_THREADS: usize = 8;
+/home/talon/projects/worktrees/research-20260405-tw-perf-rerun-clean/src/bin/tw_profiler.rs:17:        .num_threads(N_THREADS)
+/home/talon/projects/worktrees/research-20260405-tw-perf-rerun-clean/benches/tw_partial_rank_merfish_bench.rs:7:const N_THREADS: usize = 8;
+/home/talon/projects/worktrees/research-20260405-tw-perf-rerun-clean/benches/tw_partial_rank_merfish_bench.rs:11:        .num_threads(N_THREADS)
+/home/talon/projects/worktrees/research-20260405-tw-perf-rerun-clean/benches/tw_combined_bench.rs:7:const N_THREADS: usize = 8;
+/home/talon/projects/worktrees/research-20260405-tw-perf-rerun-clean/benches/tw_combined_bench.rs:11:        .num_threads(N_THREADS)
+/home/talon/projects/worktrees/research-20260405-tw-perf-rerun-clean/benches/tw_partial_rank_bench.rs:7:const N_THREADS: usize = 8;
+/home/talon/projects/worktrees/research-20260405-tw-perf-rerun-clean/benches/tw_partial_rank_bench.rs:11:        .num_threads(N_THREADS)
+/home/talon/projects/worktrees/research-20260405-tw-perf-rerun-clean/benches/tw_avx2_bench.rs:7:const N_THREADS: usize = 8;
+/home/talon/projects/worktrees/research-20260405-tw-perf-rerun-clean/benches/tw_avx2_bench.rs:11:        .num_threads(N_THREADS)
+/home/talon/projects/worktrees/research-20260405-tw-perf-rerun-clean/benches/tw_baseline_bench.rs:9:const N_THREADS: usize = 8;
+/home/talon/projects/worktrees/research-20260405-tw-perf-rerun-clean/benches/tw_baseline_bench.rs:13:        .num_threads(N_THREADS)
+/home/talon/projects/worktrees/research-20260405-tw-perf-rerun-clean/benches/tw_thread_local_bench.rs:7:const N_THREADS: usize = 8;
+/home/talon/projects/worktrees/research-20260405-tw-perf-rerun-clean/benches/tw_thread_local_bench.rs:11:        .num_threads(N_THREADS)
+
+--- Rust toolchain ---
+rustc 1.96.0-nightly (80d0e4be6 2026-03-25)
+cargo 1.96.0-nightly (e84cb639e 2026-03-21)
+
+--- OS / Kernel ---
+Linux DESKTOP-RHCLCT5 6.6.87.2-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Thu Jun  5 18:30:46 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
+PRETTY_NAME="Ubuntu 24.04.4 LTS"

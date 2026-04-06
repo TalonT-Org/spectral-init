@@ -1,0 +1,281 @@
+{
+  "iters": [
+    0.379228731,
+    0.39371363,
+    0.362036668,
+    0.376988659,
+    0.388497998,
+    0.334763976,
+    0.336051607,
+    0.36829415,
+    0.350378581,
+    0.345892415,
+    0.358974883,
+    0.351627077,
+    0.327223202,
+    0.347397714,
+    0.351669297,
+    0.338621386,
+    0.350893115,
+    0.331548492,
+    0.321246076,
+    0.337340625,
+    0.344407835,
+    0.331012519,
+    0.32449246,
+    0.320137166,
+    0.312454615,
+    0.306700898,
+    0.327833605,
+    0.342117937,
+    0.348172674,
+    0.334284272
+  ],
+  "mean_s": 0.34480007543333335,
+  "n": 10000,
+  "std_s": 0.02095994216600173,
+  "step_times_ns": [
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    }
+  ],
+  "variant": "combined",
+  "warmup": 5
+}
