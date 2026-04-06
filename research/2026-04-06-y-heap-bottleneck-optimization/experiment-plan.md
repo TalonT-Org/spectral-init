@@ -1,23 +1,25 @@
-# Implementation Plan: groupA — y_heap Workspace Setup and Prior Failure Investigation
+# Implementation Plan: groupB — Y-Heap Bottleneck Optimization Variants
 
 ## Summary
 
-This plan establishes the complete workspace for the y_heap bottleneck experiment before any
-Rust code is written. It delivers three things in sequence: (1) a documented root cause
-analysis of the 2× slowdown from the 2026-04-05 rerun-clean thread_local experiment, which
-gates groupB implementation; (2) the experiment directory tree with all required subdirectories,
-config files, and gitkeeps; (3) the six synthetic `.npy` data files produced by `gen_data.py`
-and the verification record that confirms their correctness.
+Implements all Rust code changes for the heap bottleneck experiment:
 
-**No Rust code changes in this plan.** All deliverables are directory structure, TOML/YAML
-config files, a Python data-generation script, and a written analysis document.
+1. `profiling = []` feature flag in `Cargo.toml`
+2. Step-timing instrumentation (`x_dist`, `x_sort`, `y_heap`, `penalty`) gated on `#[cfg(feature = "profiling")]` inside `trustworthiness()` and all three variant functions
+3. Three variant functions in `src/metrics.rs`: `trustworthiness_heap_reuse`, `trustworthiness_flat_partial`, `trustworthiness_flat_simd`
+4. A `dist_sq_2d_avx2_batch` kernel (d_y=2 specialization) for the flat_simd variant
+5. Extended `lib.rs` exports so variant functions are accessible under `--features cli,profiling`
+6. `--variant` flag in `src/bin/tw_profiler.rs` dispatching to any of the four implementations
+7. Correctness tests in `src/metrics.rs` asserting `|ΔT| < 1e-12` for all variants across 7 data scenarios
+
+`cargo test --features testing` must pass all new and existing tests before this group is considered complete.
 
 ---
 
 ## Proposed Architecture
 
 ```mermaid
-%%{init: {'flowchart': {'nodeSpacing': 40, 'rankSpacing': 55, 'curve': 'basis'}}}%%
+%%{init: {'flowchart': {'nodeSpacing': 45, 'rankSpacing': 55, 'curve': 'basis'}}}%%
 flowchart TB
     %% CLASS DEFINITIONS %%
     classDef cli fill:#1a237e,stroke:#7986cb,stroke-width:2px,color:#fff;
@@ -29,471 +31,520 @@ flowchart TB
     classDef detector fill:#b71c1c,stroke:#ef5350,stroke-width:2px,color:#fff;
     classDef terminal fill:#1a237e,stroke:#7986cb,stroke-width:2px,color:#fff;
 
-    %% TERMINALS %%
-    START([START: groupA begins])
-    COMPLETE([COMPLETE: groupA done — groupB gate open])
-    ERROR([ERROR: escalate to researcher])
+    START([START: tw_profiler invocation])
 
-    subgraph Phase0 ["Phase 0 — Prior Failure Investigation (RT-I Gate)"]
+    subgraph CLI ["● tw_profiler.rs — CLI Layer"]
         direction TB
-        P0A["DELIV-0-1: Locate prior worktree<br/>━━━━━━━━━━<br/>git worktree list<br/>grep rerun-clean/tw-perf branches<br/>reads: research-20260405-tw-perf-rerun-clean/"]
-        P0B{"Source accessible?<br/>━━━━━━━━━━<br/>worktree or branch found?"}
-        P0C["Read src/metrics.rs (prior)<br/>━━━━━━━━━━<br/>Identify: COMB_DIST_Y presence<br/>sort vs select_nth_unstable_by<br/>y_heap reuse vs fresh alloc"]
-        P0D["DELIV-0-2: prior_failure_analysis.md<br/>━━━━━━━━━━<br/>★ results/prior_failure_analysis.md<br/>Root cause + evidence<br/>Implication for variants"]
-        P0GATE{"RT-I Gate passed?<br/>━━━━━━━━━━<br/>≥1 candidate + evidence?"}
+        VarFlag["★ --variant flag<br/>━━━━━━━━━━<br/>baseline | heap_reuse<br/>flat_partial | flat_simd"]
+        Dispatch{"★ variant match<br/>━━━━━━━━━━<br/>select fn to call"}
     end
 
-    subgraph Phase1 ["Phase 1 — Workspace Scaffolding"]
-        direction TB
-        P1A["DELIV-1-1: Create directory tree<br/>━━━━━━━━━━<br/>★ scripts/ data/ results/<br/>results/criterion/ results/profiler/<br/>results/analysis/  (+ .gitkeep files)"]
-        P1B["DELIV-1-2: rust-toolchain.toml<br/>━━━━━━━━━━<br/>★ rust-toolchain.toml<br/>channel = nightly-2026-03-26"]
-        P1C["DELIV-1-3: environment.yml<br/>━━━━━━━━━━<br/>★ environment.yml<br/>name: y-heap-bench<br/>python=3.11 numpy=2.2 scipy=1.15 matplotlib=3.10"]
-        P1D{"envs/spectral-test available?<br/>━━━━━━━━━━<br/>python -c 'import numpy,scipy,matplotlib'"}
-        P1E["DELIV-1-4: Record env verification<br/>━━━━━━━━━━<br/>★ results/data_verification.txt header<br/>env path + import result"]
+    subgraph Baseline ["trustworthiness() — Baseline"]
+        direction LR
+        B_XD["● x_dist<br/>━━━━━━━━━━<br/>COMB_DIST_X fill<br/>AVX2 dispatch"]
+        B_XS["● x_sort<br/>━━━━━━━━━━<br/>select_nth_unstable_by(k)<br/>knn_x_set HashSet"]
+        B_YH["● y_heap<br/>━━━━━━━━━━<br/>BinaryHeap::with_capacity(k+1)<br/>per-row alloc+fill+pop"]
+        B_P["● penalty<br/>━━━━━━━━━━<br/>rank accumulation u64<br/>row penalty sum"]
+        B_XD --> B_XS --> B_YH --> B_P
     end
 
-    subgraph Phase2 ["Phase 2 — Data Generation"]
-        direction TB
-        P2A["DELIV-2-1: Write gen_data.py<br/>━━━━━━━━━━<br/>★ scripts/gen_data.py<br/>RNG seed=42, --out-dir arg<br/>n∈{1000,5000,10000}, d_x=10 d_y=2<br/>saves X (n×10) + Y (n×2) .npy files<br/>verifies shape/dtype/finite/range"]
-        P2B["DELIV-2-2: Run gen_data.py<br/>━━━━━━━━━━<br/>python scripts/gen_data.py --out-dir data/<br/>tee results/data_verification.txt<br/>produces 6 .npy files"]
-        P2C{"DELIV-2-3: All 6 files valid?<br/>━━━━━━━━━━<br/>shapes correct? dtype=f64?<br/>no NaN/Inf? max-min > 0.01?"}
-        P2D["★ data_verification.txt complete<br/>━━━━━━━━━━<br/>6 lines, all checks PASS<br/>written by tee during run"]
+    subgraph HeapReuse ["★ trustworthiness_heap_reuse()"]
+        direction LR
+        HR_XD["x_dist (identical)"]
+        HR_XS["x_sort (identical)"]
+        HR_YH["★ y_heap reuse<br/>━━━━━━━━━━<br/>thread_local BinaryHeap<br/>clear() — no realloc"]
+        HR_P["penalty (identical)"]
+        HR_XD --> HR_XS --> HR_YH --> HR_P
     end
 
-    %% FLOW %%
-    START --> P0A
-    P0A --> P0B
-    P0B -->|"yes — worktree accessible"| P0C
-    P0B -->|"no — source unavailable"| P0D
-    P0C --> P0D
-    P0D --> P0GATE
-    P0GATE -->|"PASS: ≥1 hypothesis + evidence"| P1A
-    P0GATE -->|"FAIL: no evidence at all"| ERROR
+    subgraph FlatPartial ["★ trustworthiness_flat_partial()"]
+        direction LR
+        FP_XD["x_dist (identical)"]
+        FP_XS["x_sort (identical)"]
+        FP_YH["★ y_flat introselect<br/>━━━━━━━━━━<br/>thread_local Vec dist+idx<br/>select_nth_unstable_by(k)"]
+        FP_P["penalty (identical)"]
+        FP_XD --> FP_XS --> FP_YH --> FP_P
+    end
 
-    P1A --> P1B
-    P1B --> P1C
-    P1C --> P1D
-    P1D -->|"env found — import OK"| P1E
-    P1D -->|"env absent — document mamba cmd"| P1E
-    P1E --> P2A
+    subgraph FlatSimd ["★ trustworthiness_flat_simd()"]
+        direction LR
+        FS_XD["x_dist (identical)"]
+        FS_XS["x_sort (identical)"]
+        FS_K{"AVX2 + d_y==2<br/>+ standard_layout?"}
+        FS_AVX["★ dist_sq_2d_avx2_batch<br/>━━━━━━━━━━<br/>2 pts/iter YMM registers<br/>_mm256_hadd_pd"]
+        FS_SC["scalar fallback"]
+        FS_YH["★ y_flat introselect<br/>━━━━━━━━━━<br/>select_nth_unstable_by(k)"]
+        FS_P["penalty (identical)"]
+        FS_XD --> FS_XS --> FS_K
+        FS_K -->|"yes"| FS_AVX --> FS_YH
+        FS_K -->|"no"| FS_SC --> FS_YH
+        FS_YH --> FS_P
+    end
 
-    P2A --> P2B
-    P2B --> P2C
-    P2C -->|"all PASS"| P2D
-    P2C -->|"any FAIL"| ERROR
-    P2D --> COMPLETE
+    subgraph Profiling ["★ #[cfg(feature = profiling)] instrumentation"]
+        TIM["eprintln!(\"[timing:{step}] {ns}\")<br/>━━━━━━━━━━<br/>Instant::now() + elapsed().as_nanos()<br/>emitted once per fn call after parallel section"]
+    end
 
-    %% CLASS ASSIGNMENTS %%
+    subgraph Output ["Output"]
+        JSON["profiler JSON output<br/>━━━━━━━━━━<br/>step_timing map<br/>parsed by parse_step_timing()"]
+    end
+
+    COMPLETE([COMPLETE])
+
+    START --> VarFlag --> Dispatch
+    Dispatch -->|"baseline"| Baseline
+    Dispatch -->|"heap_reuse"| HeapReuse
+    Dispatch -->|"flat_partial"| FlatPartial
+    Dispatch -->|"flat_simd"| FlatSimd
+    Baseline --> Profiling
+    HeapReuse --> Profiling
+    FlatPartial --> Profiling
+    FlatSimd --> Profiling
+    Profiling --> JSON --> COMPLETE
+
     class START,COMPLETE terminal;
-    class ERROR detector;
-    class P0A,P0C handler;
-    class P0D,P2A newComponent;
-    class P0B,P0GATE,P1D,P2C stateNode;
-    class P1A,P1B,P1C,P1E phase;
-    class P2B handler;
-    class P2D output;
+    class VarFlag newComponent;
+    class Dispatch newComponent;
+    class B_XD,B_XS,B_YH,B_P handler;
+    class HR_XD,HR_XS,HR_YH,HR_P handler;
+    class FP_XD,FP_XS,FP_YH,FP_P handler;
+    class FS_XD,FS_XS,FS_YH,FS_P handler;
+    class FS_K stateNode;
+    class FS_AVX,FS_SC newComponent;
+    class HR_YH,FP_YH newComponent;
+    class TIM newComponent;
+    class JSON output;
 ```
+
+**Lens Used:** Process Flow — The plan centers on runtime dispatch through four algorithm paths sharing a common phase structure, with a new decision point (`--variant`) and new per-path execution branches.
 
 **Color Legend:**
 | Color | Category | Description |
 |-------|----------|-------------|
-| Dark Blue | Terminal | Start, complete, and error terminals |
-| Orange | Handler | Read/investigate actions on existing system |
-| Green | New Component | Files being created (analysis doc, gen_data.py) |
-| Teal | State | Decision gates and conditional checks |
-| Purple | Phase | Workspace scaffolding steps (dirs, config files) |
-| Dark Teal | Output | Written artifact: data_verification.txt |
-| Red | Detector | Error / escalation states |
-
-**Lens Used:** Process Flow — chosen because groupA is a phased sequential workflow with a hard
-RT-I gate that blocks forward progress, two conditional branches (source accessible / env
-available), and a terminal validation step for the data pipeline.
+| Dark Blue | Terminal | Start and end states |
+| Green | New Component | ★ New functions, kernels, flags, instrumentation |
+| Orange | Handler | Existing processing steps (unchanged logic) |
+| Teal | State | Decision points and routing |
+| Dark Teal | Output | JSON profiler output artifact |
 
 ---
 
 ## Tests
 
-No automated tests apply to groupA (no Rust code, no unit tests). Verification is by file
-inspection and script output.
+These tests must be written first. They will fail until the variant functions are implemented. All run under `cargo test --features testing`.
 
-**Manual verification checklist (run at end of each step):**
+### Test data helpers (in `src/metrics.rs` `#[cfg(test)]` module)
 
-1. `results/prior_failure_analysis.md` exists and contains at least one of the three root cause
-   candidates with supporting evidence (or all three with the heap_reuse gate note).
-2. All six directories exist under `research/2026-04-06-y-heap-bottleneck-optimization/`:
-   `scripts/`, `data/`, `results/`, `results/criterion/`, `results/profiler/`, `results/analysis/`.
-3. `.gitkeep` files present in `data/`, `results/`, `results/criterion/`, `results/profiler/`,
-   `results/analysis/`.
-4. `rust-toolchain.toml` contains `channel = "nightly-2026-03-26"` exactly.
-5. `environment.yml` contains `name: y-heap-bench` and all four dependency pins.
-6. `results/data_verification.txt` exists, contains a header line, and then six data lines
-   each reporting filename, shape, dtype=float64, NaN/Inf=False, max−min > 0.01.
-7. `data/gaussian_n1000_x.npy`, `data/gaussian_n1000_y.npy`, `data/gaussian_n5000_x.npy`,
-   `data/gaussian_n5000_y.npy`, `data/gaussian_n10000_x.npy`, `data/gaussian_n10000_y.npy`
-   all exist.
+Extract repeated data construction into private helper functions:
+
+```rust
+fn tw_data_perfect_preservation() -> (Array2<f64>, Array2<f64>, usize) { /* from t_tw_01 */ }
+fn tw_data_random_n20_k5(seed: u64) -> (Array2<f64>, Array2<f64>, usize) { /* from t_tw_02 */ }
+fn tw_data_hand_check_4pt() -> (Array2<f64>, Array2<f64>, usize) { /* from t_tw_03 */ }
+fn tw_data_max_k_n20() -> (Array2<f64>, Array2<f64>, usize) { /* from t_tw_04, k=n/2-1 */ }
+fn tw_data_n30_k5(seed: u64) -> (Array2<f64>, Array2<f64>, usize) { /* from t_tw_07 */ }
+fn tw_data_n50_k3(seed: u64) -> (Array2<f64>, Array2<f64>, usize) { /* n=50, k=3, from t_tw_08 */ }
+fn tw_data_n50_k7(seed: u64) -> (Array2<f64>, Array2<f64>, usize) { /* n=50, k=7, from t_tw_08 */ }
+```
+
+### Correctness tests (21 tests: 7 per variant)
+
+```rust
+// heap_reuse
+#[test] fn t_tw_heap_reuse_01() { let (x,y,k) = tw_data_perfect_preservation();
+    assert!((trustworthiness_heap_reuse(x.view(),y.view(),k) - trustworthiness(x.view(),y.view(),k)).abs() < 1e-12); }
+#[test] fn t_tw_heap_reuse_02() { /* random_n20_k5 */ }
+#[test] fn t_tw_heap_reuse_03() { /* hand_check_4pt */ }
+#[test] fn t_tw_heap_reuse_04() { /* max_k_n20 */ }
+#[test] fn t_tw_heap_reuse_05() { /* n30_k5 */ }
+#[test] fn t_tw_heap_reuse_06() { /* n50_k3 */ }
+#[test] fn t_tw_heap_reuse_07() { /* n50_k7 */ }
+
+// flat_partial (same 7 data scenarios, different fn)
+#[test] fn t_tw_flat_partial_01() { ... }  // through _07
+
+// flat_simd (same 7 data scenarios, different fn)
+#[test] fn t_tw_flat_simd_01() { ... }  // through _07
+```
 
 ---
 
 ## Implementation Steps
 
-All paths are relative to `research/2026-04-06-y-heap-bottleneck-optimization/` unless otherwise
-noted. Run commands from the repo root (`/home/talon/projects/spectral-init` or the active
-worktree root).
+### Step 1 — Add `profiling` feature to `Cargo.toml`
 
----
-
-### Step 1 — DELIV-0-1: Investigate the prior rerun-clean worktree
-
-The `research-20260405-tw-perf-rerun-clean` git worktree is present at
-`/home/talon/projects/worktrees/research-20260405-tw-perf-rerun-clean`. Read
-`src/metrics.rs` in that worktree. Focus on:
-
-- Is there a `COMB_DIST_Y: RefCell<Vec<f64>>` thread-local (i.e., was y_heap distance
-  buffered and reused)?
-- Does the thread_local variant use `sort_unstable_by` (O(n log n)) or
-  `select_nth_unstable_by` (O(n)) for X-NN detection?
-- Is the y_heap allocation `BinaryHeap::with_capacity(k+1)` done fresh per row or reused
-  via `clear()`?
-
-**From direct reading (already completed during planning):**
-- `trustworthiness_thread_local` at line 637 uses `TL_DIST_X: RefCell<Vec<(f64, usize)>>`
-  storing 16-byte tuples — 160KB per thread at n=10K — and `TL_RANK_X: RefCell<Vec<usize>>`
-  — 80KB per thread.
-- It calls `dist_x.sort_unstable_by(...)` (O(n log n)) not `select_nth_unstable_by`.
-- The y_heap (`BinaryHeap::with_capacity(k+1)`) is **freshly allocated per row** — unchanged
-  from the original baseline.
-- There is **no COMB_DIST_Y** in the rerun-clean worktree. The prior experiment never
-  tested y_heap reuse.
-
-This reading is the supporting evidence for DELIV-0-2.
-
----
-
-### Step 2 — DELIV-0-2: Write `results/prior_failure_analysis.md`
-
-Create `research/2026-04-06-y-heap-bottleneck-optimization/results/prior_failure_analysis.md`
-with the following content:
-
-```markdown
-# Prior Failure Analysis: thread_local 2× Slowdown (2026-04-05-tw-perf-rerun-clean)
-
-## Observed Failure
-
-The `trustworthiness_thread_local` variant measured 0.634s mean wall-clock vs 0.313s for
-baseline at n=10K, k=15 — a 2.03× regression. Source: step_timing JSON files in
-`research/2026-04-05-tw-perf-rerun-clean/results/step_timing/`.
-
-## Root Cause: O(n log n) Sort Regression in X-NN Detection
-
-**Primary cause (confirmed from source):** The thread_local variant replaced the O(n)
-`select_nth_unstable_by` (already in production) with an O(n log n) `sort_unstable_by`.
-At n=10,000:
-- `select_nth_unstable_by(k=15)`: ~O(n) ≈ 10,000 comparisons average
-- `sort_unstable_by`: ~O(n log n) ≈ 133,000 comparisons
-
-This 13× increase in X-sort comparison work would increase x_sort thread-work from ~245M ns
-(baseline) to ~3.3B ns — larger than the entire baseline invocation (2.49B ns thread-work).
-
-**Supporting evidence:** The thread_local step_timing JSON shows all zeros because the
-`#[cfg(feature = "profiling")]` guards were not active for that variant. However, the
-algorithm difference is confirmed by reading `src/metrics.rs` in the rerun-clean worktree
-(line 670: `dist_x.sort_unstable_by(...)`).
-
-**Secondary factor:** `TL_DIST_X` stored `(f64, usize)` tuples (16 bytes/element) vs
-the baseline's separate 8-byte f64 buffer. At n=10K: 160KB per thread vs 80KB. The
-additional `TL_RANK_X` buffer (80KB) brings total per-thread allocation to 240KB.
-While this is within Zen 5's per-core 1MB L2, the doubled memory footprint increases
-cache pressure relative to baseline.
-
-**Critical finding: y_heap was NOT modified.** The prior experiment did not test y_heap
-allocation reuse (`clear()` instead of fresh `BinaryHeap::with_capacity(k+1)`). The
-2× slowdown was entirely from X-side regressions. The y_heap step remained identical
-to baseline throughout the rerun-clean experiment.
-
-## Three Candidate Hypotheses for Remaining y_heap Cost
-
-1. **Malloc cost per row** (`heap_reuse` target): Each row allocates a fresh
-   `BinaryHeap::with_capacity(k+1)` via the system allocator. At n=10K with 8 threads,
-   this is 10,000 malloc+free pairs per invocation. The `heap_reuse` variant isolates this
-   cost by pre-allocating per thread and calling `clear()` per row.
-
-2. **Introselect locality disadvantage** (`flat_partial` target): The heap's push/evict
-   pattern accesses memory indirectly and maintains a k-element priority queue with
-   pointer chasing. A flat Vec<f64> + `select_nth_unstable_by` operates on a contiguous
-   array with sequential write followed by a single cache-local introselect pass.
-
-3. **AVX2 throughput gap** (`flat_simd` target): The y_heap loop computes 2D squared
-   distances as scalar f64 operations. A 256-bit AVX2 kernel processing 2 Y-rows per lane
-   can theoretically compute 4 distances per cycle vs 1 scalar. This is independent of
-   the data structure choice.
-
-## Implication for Variant Selection
-
-All three variants (`heap_reuse`, `flat_partial`, `flat_simd`) remain worth testing because
-the prior experiment provided no evidence for or against any of them. The prior "thread_local"
-experiment was a regression caused by algorithm complexity change in the X-side, not by
-y_heap optimization. The current experiment starts fresh with a correctly isolated y_heap
-investigation.
-
-**RT-I gate status:** Satisfied. Root cause identified as O(n log n) sort regression in
-x_dist/x_sort steps, confirmed by reading `src/metrics.rs` in worktree
-`research-20260405-tw-perf-rerun-clean` (line 670).
-```
-
----
-
-### Step 3 — DELIV-1-1: Create the experiment directory tree
-
-Create the following directories under
-`research/2026-04-06-y-heap-bottleneck-optimization/`:
-
-```
-scripts/
-data/
-results/
-results/criterion/
-results/profiler/
-results/analysis/
-```
-
-Place `.gitkeep` files in `data/`, `results/`, `results/criterion/`, `results/profiler/`,
-`results/analysis/`. The `scripts/` directory needs no `.gitkeep` (it will contain files
-after Step 5).
-
-Commands (run from repo root):
-```bash
-cd research/2026-04-06-y-heap-bottleneck-optimization
-mkdir -p scripts data results/criterion results/profiler results/analysis
-touch data/.gitkeep results/.gitkeep results/criterion/.gitkeep \
-      results/profiler/.gitkeep results/analysis/.gitkeep
-```
-
-Note: `results/prior_failure_analysis.md` (Step 2) satisfies `results/`'s tracked presence;
-the `.gitkeep` in `results/` is still required by DELIV-1-1 for symmetry with the spec.
-
----
-
-### Step 4 — DELIV-1-2: Create `rust-toolchain.toml`
-
-Create `research/2026-04-06-y-heap-bottleneck-optimization/rust-toolchain.toml`:
+In `Cargo.toml` `[features]` section, add one line after `testing`:
 
 ```toml
-[toolchain]
-channel = "nightly-2026-03-26"
+[features]
+testing  = ["dep:serde"]
+profiling = []
+cli      = ["dep:ndarray-npy", "dep:pico-args", "dep:serde_json", "dep:libc"]
+```
+
+Verify all three check passes:
+```
+cargo check
+cargo check --features testing
+cargo check --features profiling
 ```
 
 ---
 
-### Step 5 — DELIV-1-3: Create `environment.yml`
+### Step 2 — Add step-timing instrumentation to `trustworthiness()` in `src/metrics.rs`
 
-Create `research/2026-04-06-y-heap-bottleneck-optimization/environment.yml`:
+Add timing captures around each of the four steps, gated on `#[cfg(feature = "profiling")]`. The timing is recorded **after** the Rayon parallel section completes (one emit per call, not per thread).
 
-```yaml
-name: y-heap-bench
-channels:
-  - conda-forge
-dependencies:
-  - python=3.11.*
-  - numpy=2.2.*
-  - scipy=1.15.*
-  - matplotlib=3.10.*
+Emit format must match `tw_profiler.rs::parse_step_timing` exactly: `[timing:<step>] <ns>`.
+
+Pattern for each step boundary:
+
+```rust
+#[cfg(feature = "profiling")]
+let t_start = std::time::Instant::now();
+
+// ... the step's parallel work ...
+
+#[cfg(feature = "profiling")]
+eprintln!("[timing:x_dist] {}", t_start.elapsed().as_nanos());
 ```
 
-Note per DELIV-1-3: the existing `envs/spectral-test/` prefix satisfies all these
-dependencies. This file is documentation of requirements, not a directive to create a
-new environment.
+Steps to instrument in `trustworthiness()`:
+- `x_dist` — after the COMB_DIST_X fill parallel section
+- `x_sort` — after the `select_nth_unstable_by` + `knn_x_set` parallel section
+- `y_heap` — after the BinaryHeap fill parallel section
+- `penalty` — after the penalty accumulation parallel section (before the final normalization)
+
+**Do not change any logic, signatures, or existing behavior.** Only add/remove `#[cfg(feature = "profiling")]` blocks.
 
 ---
 
-### Step 6 — DELIV-1-4: Verify Python environment
+### Step 3 — Implement `trustworthiness_heap_reuse` in `src/metrics.rs`
 
-Run from the repo root (not from within the experiment directory, to avoid activating the
-experiment's `rust-toolchain.toml`):
+Location: immediately after `trustworthiness()` closes.
 
-```bash
-envs/spectral-test/bin/python -c "import numpy, scipy, matplotlib; print('OK')"
-```
-
-Write `research/2026-04-06-y-heap-bottleneck-optimization/results/data_verification.txt`
-with a header line. The exact content depends on outcome:
-
-- **If `OK` is printed:** Header line:
+Key differences from baseline:
+- Declare a module-level (inside the variant function body) `thread_local!` for the heap:
+  ```rust
+  thread_local! {
+      static Y_HEAP: RefCell<BinaryHeap<(u64, usize)>> =
+          const { RefCell::new(BinaryHeap::new()) };
+  }
   ```
-  # env: envs/spectral-test/bin/python — numpy scipy matplotlib import OK
+- Inside the parallel map closure for the y_heap step:
+  ```rust
+  Y_HEAP.with(|cell| {
+      let mut heap = cell.borrow_mut();
+      if heap.capacity() < k + 1 {
+          heap.reserve(k + 1 - heap.capacity());
+      }
+      heap.clear(); // No reallocation — preserves allocation
+      for j in 0..n {
+          if j == i { continue; }
+          let d: f64 = yi.iter().zip(y.row(j).iter())
+              .map(|(&a, &b)| (a - b) * (a - b)).sum();
+          heap.push((d.to_bits(), j));
+          if heap.len() > k { heap.pop(); }
+      }
+      // Collect neighbors WITHOUT draining (preserves allocation for next row)
+      let knn_y_set: HashSet<usize> = heap.iter().map(|&(_, j)| j).collect();
+      // ... identical penalty accumulation ...
+  })
   ```
+- x_dist, x_sort, penalty steps: **identical** to baseline.
+- Profiling instrumentation: identical step names, same emit pattern.
 
-- **If import fails:** Header line documenting the fallback:
-  ```
-  # env: spectral-test absent — create with: mamba env create -f environment.yml
-  ```
-
-The data file lines from Step 8 will be appended by `tee` — do not truncate the file
-when running Step 8.
+Self-exclusion is identical to baseline: `if j == i { continue; }` in the heap fill loop.
 
 ---
 
-### Step 7 — DELIV-2-1: Write `scripts/gen_data.py`
+### Step 4 — Implement `trustworthiness_flat_partial` in `src/metrics.rs`
 
-Create `research/2026-04-06-y-heap-bottleneck-optimization/scripts/gen_data.py`:
+Location: immediately after `trustworthiness_heap_reuse()` closes.
 
-```python
-#!/usr/bin/env python3
-"""Generate synthetic benchmark data for y_heap bottleneck experiment.
+Declare two thread-locals inside the function body:
+```rust
+thread_local! {
+    static COMB_DIST_Y:    RefCell<Vec<f64>>   = const { RefCell::new(Vec::new()) };
+    static COMB_INDICES_Y: RefCell<Vec<usize>> = const { RefCell::new(Vec::new()) };
+}
+```
 
-Produces gaussian_n{n}_x.npy (shape n×10, float64) and gaussian_n{n}_y.npy
-(shape n×2, float64) for n in {1000, 5000, 10000}. Values drawn from uniform[0,1]
-using numpy.random.default_rng(seed=42).
-"""
+Inside the parallel map closure, the y_heap step becomes:
+```rust
+COMB_DIST_Y.with(|cd| {
+    let mut dist_y = cd.borrow_mut();
+    dist_y.clear();
+    dist_y.resize(n, 0.0);
+    let yi = y.row(i);
+    for j in 0..n {
+        dist_y[j] = yi.iter().zip(y.row(j).iter())
+            .map(|(&a, &b)| (a - b) * (a - b)).sum();
+    }
+    dist_y[i] = f64::INFINITY;  // self-exclusion
 
-import argparse
-import sys
-from pathlib import Path
+    COMB_INDICES_Y.with(|ci| {
+        let mut indices_y = ci.borrow_mut();
+        indices_y.clear();
+        indices_y.extend(0..n);
 
-import numpy as np
+        // RT-G: comparator must replicate BinaryHeap tie-breaking exactly.
+        // Lowest distance wins; on equal distance, lowest index wins.
+        // (BinaryHeap pops max: highest (d.to_bits(), j) → on equal d, highest j evicted → lowest j retained)
+        indices_y.select_nth_unstable_by(k, |&a, &b| {
+            dist_y[a].total_cmp(&dist_y[b]).then(a.cmp(&b))
+        });
 
+        // indices_y[..=k]: k+1 partition. Self (dist=∞) is past position k.
+        let knn_y_partition = &indices_y[..=k];
+        // ... penalty accumulation using knn_y_partition ...
+    });
+});
+```
 
-def generate_and_verify(out_dir: Path, n: int, rng: np.random.Generator) -> None:
-    for tag, shape in [("x", (n, 10)), ("y", (n, 2))]:
-        fname = out_dir / f"gaussian_n{n}_{tag}.npy"
-        arr = rng.uniform(0.0, 1.0, size=shape)
-        np.save(fname, arr)
+x_dist and x_sort steps: **identical** to baseline (use the same COMB_DIST_X / COMB_INDICES thread-locals — but these are declared in `trustworthiness()`; for variants, redeclare identical thread-locals inside the variant function body with the same initialization pattern).
 
-        # Reload to verify what was written
-        loaded = np.load(fname)
-        assert loaded.shape == shape, f"{fname}: shape {loaded.shape} != {shape}"
-        assert loaded.dtype == np.float64, f"{fname}: dtype {loaded.dtype} != float64"
-        finite_ok = np.all(np.isfinite(loaded))
-        col_ranges = loaded.max(axis=0) - loaded.min(axis=0)
-        range_ok = np.all(col_ranges > 0.01)
-        assert finite_ok, f"{fname}: NaN or Inf detected"
-        assert range_ok, (
-            f"{fname}: column max-min <= 0.01 in at least one column "
-            f"(min range: {col_ranges.min():.6f})"
-        )
+Penalty accumulation: **identical** logic to baseline, iterating over `knn_y_partition` instead of heap entries.
 
-        has_nan_inf = not finite_ok  # always False after assert
-        print(
-            f"{fname.name}  shape={loaded.shape}  dtype={loaded.dtype}"
-            f"  min={loaded.min():.6f}  max={loaded.max():.6f}"
-            f"  NaN/Inf={has_nan_inf}"
-        )
-        sys.stdout.flush()
+---
 
+### Step 5 — Add `dist_sq_2d_avx2_batch` kernel in `src/metrics.rs`
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--out-dir",
-        default="data/",
-        type=Path,
-        help="Output directory for .npy files (default: data/)",
-    )
-    args = parser.parse_args()
+Add before `trustworthiness_flat_simd` (after `trustworthiness_flat_partial`). Compile-gated:
 
-    out_dir = args.out_dir
-    out_dir.mkdir(parents=True, exist_ok=True)
+```rust
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+#[target_feature(enable = "avx2")]
+#[inline(always)]
+unsafe fn dist_sq_2d_avx2_batch(
+    yi: &[f64],       // query row: exactly 2 elements
+    y_flat: &[f64],   // full Y matrix, row-major, stride 2
+    n: usize,
+    out: &mut [f64],  // output: n distances
+) {
+    use std::arch::x86_64::*;
+    // Broadcast query point: [yi[0], yi[1], yi[0], yi[1]] in memory order
+    // _mm256_set_pd args are (e3,e2,e1,e0): e0=lowest address
+    let yi_bc = _mm256_set_pd(yi[1], yi[0], yi[1], yi[0]);
 
-    rng = np.random.default_rng(seed=42)
-
-    for n in [1000, 5000, 10000]:
-        generate_and_verify(out_dir, n, rng)
-
-
-if __name__ == "__main__":
-    main()
+    let mut j = 0usize;
+    while j + 1 < n {
+        // Load 2 target points: [yj[0], yj[1], yj+1[0], yj+1[1]]
+        let yj_pair = _mm256_loadu_pd(y_flat.as_ptr().add(j * 2));
+        let diff = _mm256_sub_pd(yi_bc, yj_pair);
+        let sq   = _mm256_mul_pd(diff, diff);
+        // _mm256_hadd_pd(sq, sq):
+        //   lower 128: [sq[0]+sq[1], sq[0]+sq[1]] → dist_j at element 0
+        //   upper 128: [sq[2]+sq[3], sq[2]+sq[3]] → dist_{j+1} at element 0 of upper half
+        let hadd = _mm256_hadd_pd(sq, sq);
+        out[j]     = _mm_cvtsd_f64(_mm256_castpd256_pd128(hadd));
+        out[j + 1] = _mm_cvtsd_f64(_mm256_extractf128_pd(hadd, 1));
+        j += 2;
+    }
+    // Scalar tail for odd n
+    while j < n {
+        out[j] = yi.iter()
+            .zip(y_flat[j * 2..j * 2 + 2].iter())
+            .map(|(&a, &b)| (a - b) * (a - b))
+            .sum();
+        j += 1;
+    }
+}
 ```
 
 ---
 
-### Step 8 — DELIV-2-2: Run `gen_data.py` to produce the six `.npy` files
+### Step 6 — Implement `trustworthiness_flat_simd` in `src/metrics.rs`
 
-Run from `research/2026-04-06-y-heap-bottleneck-optimization/`:
+Identical to `trustworthiness_flat_partial` except the y-distance fill step is:
 
-```bash
-cd research/2026-04-06-y-heap-bottleneck-optimization
-../../envs/spectral-test/bin/python scripts/gen_data.py --out-dir data/ \
-    | tee -a results/data_verification.txt
+```rust
+let d_y = y.ncols();
+
+#[cfg(target_arch = "x86_64")]
+let use_avx2_y = is_x86_feature_detected!("avx2") && d_y == 2 && y.is_standard_layout();
+#[cfg(not(target_arch = "x86_64"))]
+let use_avx2_y = false;
+
+// ... inside parallel map closure, inside COMB_DIST_Y.with(...):
+dist_y.clear();
+dist_y.resize(n, 0.0);
+
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+if use_avx2_y {
+    let y_flat = y.as_slice().unwrap();         // safe: is_standard_layout checked above
+    let yi_slice = &y_flat[i * 2..(i + 1) * 2];
+    unsafe { dist_sq_2d_avx2_batch(yi_slice, y_flat, n, &mut dist_y); }
+} else {
+    let yi = y.row(i);
+    for j in 0..n {
+        dist_y[j] = yi.iter().zip(y.row(j).iter())
+            .map(|(&a, &b)| (a - b) * (a - b)).sum();
+    }
+}
+#[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+{
+    let yi = y.row(i);
+    for j in 0..n {
+        dist_y[j] = yi.iter().zip(y.row(j).iter())
+            .map(|(&a, &b)| (a - b) * (a - b)).sum();
+    }
+}
+
+dist_y[i] = f64::INFINITY;
 ```
 
-The `-a` flag (append) preserves the header line written in Step 6.
-
-Confirm all six files exist:
-```bash
-ls -lh data/gaussian_n*.npy
-```
-
-Expected output: 6 files totaling roughly:
-- `gaussian_n1000_x.npy`: ~80KB (1000×10×8 bytes)
-- `gaussian_n1000_y.npy`: ~16KB (1000×2×8 bytes)
-- `gaussian_n5000_x.npy`: ~400KB
-- `gaussian_n5000_y.npy`: ~80KB
-- `gaussian_n10000_x.npy`: ~800KB
-- `gaussian_n10000_y.npy`: ~160KB
+Everything else (introselect, penalty, profiling) is identical to `trustworthiness_flat_partial`.
 
 ---
 
-### Step 9 — DELIV-2-3: Confirm `results/data_verification.txt`
+### Step 7 — Extend `lib.rs` exports
 
-Inspect `results/data_verification.txt`. It must contain:
-- A header line (from Step 6)
-- Exactly 6 data lines (from Step 8), one per file, each showing correct shape, dtype=float64,
-  NaN/Inf=False
+In `src/lib.rs`, the `#[cfg(all(feature = "cli", not(feature = "testing")))]` block currently exports only `trustworthiness`. Extend it to include all three variants so that `--features cli,profiling` (without `testing`) compiles cleanly:
 
-Expected shape lines:
-```
-gaussian_n1000_x.npy   shape=(1000, 10)  dtype=float64  ...  NaN/Inf=False
-gaussian_n1000_y.npy   shape=(1000, 2)   dtype=float64  ...  NaN/Inf=False
-gaussian_n5000_x.npy   shape=(5000, 10)  dtype=float64  ...  NaN/Inf=False
-gaussian_n5000_y.npy   shape=(5000, 2)   dtype=float64  ...  NaN/Inf=False
-gaussian_n10000_x.npy  shape=(10000, 10) dtype=float64  ...  NaN/Inf=False
-gaussian_n10000_y.npy  shape=(10000, 2)  dtype=float64  ...  NaN/Inf=False
+**Current:**
+```rust
+#[cfg(all(feature = "cli", not(feature = "testing")))]
+pub use crate::metrics::trustworthiness;
 ```
 
-If any line shows wrong shape or NaN/Inf=True, delete the affected files and re-run Step 8
-after diagnosing the issue in `gen_data.py`.
+**Replace with:**
+```rust
+#[cfg(all(feature = "cli", not(feature = "testing")))]
+pub use crate::metrics::{
+    trustworthiness,
+    trustworthiness_heap_reuse,
+    trustworthiness_flat_partial,
+    trustworthiness_flat_simd,
+};
+```
+
+The `#[cfg(feature = "testing")]` block already does `pub use crate::metrics::*`, so the variant functions are automatically exported when `testing` is active. No change needed there.
+
+**Also add DELIV-3C-4:** Under the existing `#[cfg(feature = "testing")]` block where specific symbols are re-exported via wrapper fns, the variant functions should be accessible via the `pub use crate::metrics::*` glob. Verify this is sufficient. If the testing block uses explicit re-exports rather than a glob, add explicit lines:
+
+```rust
+#[cfg(feature = "testing")]
+#[doc(hidden)]
+pub use crate::metrics::trustworthiness_heap_reuse;
+#[cfg(feature = "testing")]
+#[doc(hidden)]
+pub use crate::metrics::trustworthiness_flat_partial;
+#[cfg(feature = "testing")]
+#[doc(hidden)]
+pub use crate::metrics::trustworthiness_flat_simd;
+```
+
+(If the existing block already does `pub use crate::metrics::*`, these are redundant and should be omitted.)
+
+---
+
+### Step 8 — Add `--variant` flag to `src/bin/tw_profiler.rs`
+
+**Parse the flag** (after existing `warmup` parse, before `stderr_capture`):
+
+```rust
+let variant: String = pargs.opt_value_from_str("--variant")?.unwrap_or_else(|| "baseline".to_string());
+```
+
+**Replace the warmup loop** to dispatch via the variant:
+
+```rust
+macro_rules! call_variant {
+    ($fn:expr) => {
+        std::hint::black_box($fn(x.view(), y.view(), k))
+    };
+}
+for _ in 0..warmup {
+    match variant.as_str() {
+        "baseline"     => { call_variant!(spectral_init::trustworthiness); }
+        "heap_reuse"   => { call_variant!(spectral_init::trustworthiness_heap_reuse); }
+        "flat_partial" => { call_variant!(spectral_init::trustworthiness_flat_partial); }
+        "flat_simd"    => { call_variant!(spectral_init::trustworthiness_flat_simd); }
+        other => return Err(format!("unknown variant: {other}").into()),
+    }
+}
+```
+
+**Replace the timed loop** with the same match dispatch (without `black_box`).
+
+The `--stderr-capture` redirect already intercepts `eprintln!` on stderr (fd 2) and `parse_step_timing()` already parses `[timing:<step>] <ns>` — no changes needed to either.
+
+Also include `variant` in the JSON output fields (alongside `k`, `iters`, `warmup`) so runs are self-documenting.
+
+---
+
+### Step 9 — Add correctness tests to `src/metrics.rs`
+
+Add to the `#[cfg(test)]` module inside `src/metrics.rs`.
+
+First, add the 7 data-generating helpers (factored from t_tw_01–04, t_tw_07, t_tw_08):
+
+```rust
+fn tw_case_01() -> (ndarray::Array2<f64>, ndarray::Array2<f64>, usize) { /* perfect preservation grid, n=20 k=5 */ }
+fn tw_case_02() -> (ndarray::Array2<f64>, ndarray::Array2<f64>, usize) { /* random n=20 k=5 seed 99 */ }
+fn tw_case_03() -> (ndarray::Array2<f64>, ndarray::Array2<f64>, usize) { /* 4-pt hand check k=1 */ }
+fn tw_case_04() -> (ndarray::Array2<f64>, ndarray::Array2<f64>, usize) { /* n=20 k=9 max k */ }
+fn tw_case_05() -> (ndarray::Array2<f64>, ndarray::Array2<f64>, usize) { /* n=30 k=5 */ }
+fn tw_case_06() -> (ndarray::Array2<f64>, ndarray::Array2<f64>, usize) { /* n=50 k=3 */ }
+fn tw_case_07() -> (ndarray::Array2<f64>, ndarray::Array2<f64>, usize) { /* n=50 k=7 */ }
+```
+
+Then add 21 tests (3 variants × 7 cases). Example for heap_reuse:
+
+```rust
+#[test]
+fn t_tw_heap_reuse_01() {
+    let (x, y, k) = tw_case_01();
+    let delta = (trustworthiness_heap_reuse(x.view(), y.view(), k)
+               - trustworthiness(x.view(), y.view(), k)).abs();
+    assert!(delta < 1e-12, "heap_reuse 01: |ΔT| = {delta} ≥ 1e-12");
+}
+// ... _02 through _07 ...
+
+#[test] fn t_tw_flat_partial_01() { ... }  // same pattern
+#[test] fn t_tw_flat_simd_01()    { ... }  // same pattern
+```
+
+**RT-G guard:** If any correctness test fails with `|ΔT| ≥ 1e-12`, the root cause is the comparator in `select_nth_unstable_by`. The fix: verify that `.total_cmp(&dist_y[b]).then(a.cmp(&b))` (ascending distance, ascending index on ties) exactly replicates the BinaryHeap eviction order.
+
+BinaryHeap reasoning: stores `(d.to_bits(), j)`, pops the **max** tuple when `len > k`. On equal `d.to_bits()`, the pair with higher `j` is larger → higher `j` evicted → lower `j` is retained. The comparator `.then(a.cmp(&b))` orders by ascending index → lower index is "smaller" → lower index is partitioned to `[..=k]` on ties. This replicates baseline exactly.
 
 ---
 
 ## Verification
 
-After completing all steps, verify:
-
-1. **RT-I gate satisfied:**
+1. **Feature check passes:**
    ```bash
-   ls research/2026-04-06-y-heap-bottleneck-optimization/results/prior_failure_analysis.md
-   grep "RT-I gate status: Satisfied" \
-       research/2026-04-06-y-heap-bottleneck-optimization/results/prior_failure_analysis.md
+   cargo check
+   cargo check --features testing
+   cargo check --features profiling
+   cargo check --features cli
+   cargo check --features cli,profiling
+   cargo check --features cli,testing,profiling
    ```
 
-2. **Directory tree complete:**
+2. **All tests pass:**
    ```bash
-   find research/2026-04-06-y-heap-bottleneck-optimization/ \
-       -name '.gitkeep' | sort
-   # Expected: 5 lines (data, results, results/criterion, results/profiler, results/analysis)
+   cargo test --features testing
    ```
+   Expected: all existing t_tw_01–08 pass, all 21 new variant correctness tests pass.
 
-3. **Config files present:**
+3. **Profiler binary compiles and runs:**
    ```bash
-   head -2 research/2026-04-06-y-heap-bottleneck-optimization/rust-toolchain.toml
-   # Expected: [toolchain]\nchannel = "nightly-2026-03-26"
-   grep "name: y-heap-bench" \
-       research/2026-04-06-y-heap-bottleneck-optimization/environment.yml
+   cargo build --features cli,profiling
+   ./target/debug/tw_profiler --x <X.npy> --y <Y.npy> --variant heap_reuse
+   ./target/debug/tw_profiler --x <X.npy> --y <Y.npy> --variant flat_partial
+   ./target/debug/tw_profiler --x <X.npy> --y <Y.npy> --variant flat_simd
    ```
+   With `--stderr-capture tmp.txt`, the captured file must contain lines matching `[timing:x_dist] <ns>`, `[timing:x_sort] <ns>`, `[timing:y_heap] <ns>`, `[timing:penalty] <ns>`.
 
-4. **All six data files present and non-empty:**
+4. **AVX2 kernel correctness (flat_simd only):**
+   Run on a 2D Y matrix with standard layout. Compare output against flat_partial result: should match to `< 1e-12` (guaranteed by the correctness tests that use 2D Y data).
+
+5. **No regression on existing tests:**
    ```bash
-   ls -lh research/2026-04-06-y-heap-bottleneck-optimization/data/gaussian_n*.npy
-   # 6 files, sizes in range 16KB–800KB
+   cargo test
+   cargo test --features testing
    ```
-
-5. **Verification record complete:**
-   ```bash
-   wc -l research/2026-04-06-y-heap-bottleneck-optimization/results/data_verification.txt
-   # 7 lines (1 header + 6 data lines)
-   grep "NaN/Inf=False" \
-       research/2026-04-06-y-heap-bottleneck-optimization/results/data_verification.txt \
-       | wc -l
-   # 6
-   ```
-
-All five checks passing signals that groupA is complete and groupB may begin.
+   Both must pass with zero failures.
