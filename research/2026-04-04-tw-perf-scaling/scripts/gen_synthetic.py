@@ -17,7 +17,7 @@ DATA_DIR = Path("data")
 def generate_gaussian(n: int) -> None:
     rng = np.random.RandomState(0)
     x = rng.randn(n, 10)
-    y = np.random.RandomState(0).randn(n, 2)
+    y = rng.randn(n, 2)
     out_dir = DATA_DIR / "gaussian"
     out_dir.mkdir(parents=True, exist_ok=True)
     np.save(out_dir / f"gaussian_n{n}_x.npy", x.astype(np.float64))
