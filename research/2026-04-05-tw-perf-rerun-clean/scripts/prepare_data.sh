@@ -14,7 +14,7 @@ echo "=== Generating synthetic Gaussian data (seed=2026) ==="
 python "$SCRIPTS_DIR/gen_synthetic.py" \
     --seed 2026 \
     --output-dir "$GAUSSIAN_DIR" \
-    --sizes 1000 5000 10000 25000 50000 100000 \
+    --sizes 1000 5000 10000 25000 40000 50000 100000 \
     --d 10
 
 echo ""
