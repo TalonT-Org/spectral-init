@@ -5,7 +5,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-NPZ_DIR="/home/talon/projects/spectral-init/temp/merfish_100k"
+NPZ_DIR="${MERFISH_NPZ_DIR:-/home/talon/projects/spectral-init/temp/merfish_100k}"
 GAUSSIAN_DIR="$REPO_ROOT/research/2026-04-05-tw-perf-rerun-clean/data/gaussian"
 MERFISH_DIR="$REPO_ROOT/research/2026-04-05-tw-perf-rerun-clean/data/merfish"
 SCRIPTS_DIR="$REPO_ROOT/research/2026-04-05-tw-perf-rerun-clean/scripts"
