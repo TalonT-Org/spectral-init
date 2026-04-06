@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 RESULTS_DIR="$SCRIPT_DIR/../results/criterion"
 
 # W8 guard: abort if profiling feature is active — would contaminate timing
@@ -30,7 +30,7 @@ run_variant() {
 
     # Harvest Criterion JSON for each n
     for n in 1000 5000 10000; do
-        local src="$REPO_ROOT/target/criterion/${group}/n/${n}/estimates.json"
+        local src="$REPO_ROOT/target/criterion/${group}/n/${n}/new/estimates.json"
         local dst="$RESULTS_DIR/y_heap_${variant}_n${n}.json"
         if [[ -f "$src" ]]; then
             cp "$src" "$dst"

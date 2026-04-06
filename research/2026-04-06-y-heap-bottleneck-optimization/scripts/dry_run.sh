@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 DATA_DIR="$SCRIPT_DIR/../data"
 RESULTS_DIR="$SCRIPT_DIR/../results"
 
@@ -24,7 +24,7 @@ cargo bench \
     --bench y_heap_variants_bench \
     --features testing \
     --manifest-path "$REPO_ROOT/Cargo.toml" \
-    -- n/1000 --sample-size 3 --warm-up-time 2 --measurement-time 5
+    -- n/1000 --sample-size 10 --warm-up-time 2 --measurement-time 5
 
 # ── Step 3: Build profiler and run baseline at n=1000 ─────────────────────────
 echo "[Step 3] Building profiler (features: cli)..."
@@ -47,7 +47,7 @@ FAIL=0
 
 echo "[Step 4] Checking Criterion JSON files..."
 for variant in baseline heap_reuse flat_partial flat_simd; do
-    JSON="$REPO_ROOT/target/criterion/y_heap_${variant}/n/1000/estimates.json"
+    JSON="$REPO_ROOT/target/criterion/y_heap_${variant}/n/1000/new/estimates.json"
     if [[ -f "$JSON" ]]; then
         echo "  OK: $JSON"
     else
@@ -72,6 +72,7 @@ print(score)
 echo "[Step 4] Running correctness tests..."
 if cargo test \
     --features testing \
+    --lib \
     --manifest-path "$REPO_ROOT/Cargo.toml" \
     -- t_tw_heap_reuse 2>&1 | tail -5; then
     echo "  OK: correctness tests passed"
