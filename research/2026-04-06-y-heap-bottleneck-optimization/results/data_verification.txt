@@ -1,0 +1,1 @@
+# env: envs/spectral-test/bin/python — numpy scipy matplotlib import OK
