@@ -68,6 +68,12 @@ def main() -> None:
     spat_npz = np.load(spat_path)
     spatial = spat_npz[list(spat_npz.files)[0]]
 
+    # Known limitation: row ordering of the source .npz file is not validated.
+    # If re-downloaded with different cell ordering, PCA output will differ
+    # even with random_state=42, producing a different fixture. Users
+    # regenerating from source should verify row count matches the original
+    # (expression.shape[0] should equal the expected cell count for the
+    # downloaded dataset version) and compare fixture checksums.
     print("Running PCA(50) on first 10 000 cells ...")
     x = PCA(n_components=50, random_state=42).fit_transform(expression[:10000])
     x = x.astype(np.float64)

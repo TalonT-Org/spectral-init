@@ -19,7 +19,10 @@ benchmarks, which build without the testing feature, are the authoritative sourc
 The conclusive finding is that the pre-locked **combined exact variant** (`partial_rank +
 avx2_kernel`) achieves a consistent **2.04× Criterion speedup at n=50K** (95% CI: 2.01×–2.06×),
 estimated ~1.95× at n=100K (extrapolated from Criterion n=50K using O(n² log n) scaling),
-reducing wall-clock from ~41s to ~21s at production scale.
+reducing wall-clock from ~41s to ~21s at production scale. **Note: all Criterion throughput
+benchmarks used Gaussian synthetic data only; MERFISH-specific Criterion throughput was not
+measured in this experiment.** Subsequent study (2026-04-05-tw-perf-rerun-clean) found MERFISH
+data produces ~2× longer execution times and ~3× wider CIs than Gaussian at n=50K.
 Thread-local buffers contribute zero measurable speedup in clean code. The AVX2 standalone
 kernel is inconsistent at small n. AVX-512 provides only 1.08× improvement over AVX2 at
 d=10 (62.5% register utilization), below the 1.2× NO-GO threshold. H5 row subsampling could

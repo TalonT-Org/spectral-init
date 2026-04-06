@@ -13,11 +13,14 @@ data variance stability (H-partial-MERFISH), and step-level CPU time fractions
 passed across 9 fixture datasets.
 
 The principal negative finding is that the **approximate trustworthiness approach
-(H5) is both inaccurate and slower**: mean |delta|=0.474 far exceeds the 0.01
-accuracy threshold, and the median wall-time ratio is 0.91 (i.e., ~9% *slower*
-than exact). This approach should not be pursued. In contrast, the **thread_local
-(1.54×) and avx2 (1.49×) optimizations provide robust individual speedups** at
-n=10K with well-characterized confidence intervals. The combined variant's
+(H5) is both inaccurate and slower**: mean |delta|=0.474 far exceeds the 0.001
+accuracy threshold (pre-registered), and the median wall-time ratio is 0.91
+(i.e., ~9% *slower* than exact). Note: H5 was evaluated on Gaussian synthetic
+data (n=40K); the pre-specified MERFISH fixture gate was not run due to absent
+external data. This approach should not be pursued. In contrast, the
+**thread_local (1.54×) and avx2 (1.49×) optimizations provide robust individual
+speedups** at n=10K (Gaussian synthetic data) with well-characterized confidence
+intervals. The combined variant's
 apparent 1.03× gain is obscured by a substantial W4 cache warm-state anomaly
 (19–22% forward/reversed divergence) and requires isolated re-benchmarking. A
 key secondary finding is that **y_heap dominates CPU time at 70.3%** of baseline
@@ -34,7 +37,8 @@ via subsampling (m << n) to avoid O(n²) cost. This experiment was commissioned
 to:
 
 1. Determine whether approximate trustworthiness at m=5000 is accurate enough
-   (|delta| ≤ 0.01 vs exact) and delivers a net speedup at n=40K.
+   (|delta| ≤ 0.001 vs exact, pre-registered threshold) and delivers a net
+   speedup at n=40K Gaussian synthetic data.
 2. Quantify which Criterion variants provide statistically significant speedups
    at n=10K using bootstrap Holm-Bonferroni correction.
 3. Assess whether real-world MERFISH data (sparse, heterogeneous transcriptomics)
@@ -48,10 +52,17 @@ to:
 
 Four hypotheses were tested in a single pipeline:
 
-- **H5**: Null = approximate trustworthiness |delta| vs exact ≤ 0.01 (accuracy
-  acceptable) and wall-time ratio > 1.0 (speedup). Test: 95% t-CI on mean |delta|
-  over 10 independent random seeds (42–51) at n=40K, m=5000.
+- **H5**: Null = approximate trustworthiness |delta| vs exact ≤ 0.001 (accuracy
+  acceptable, pre-registered threshold) and wall-time ratio > 1.0 (speedup).
+  Test: 95% t-CI on mean |delta| over 10 independent random seeds (42–51) at
+  n=40K, m=5000. **Data scope:** evaluated on Gaussian synthetic data
+  (`gaussian_n40000_x/y.npy`). The pre-registered MERFISH fixture gate was not
+  evaluated because MERFISH source data was absent from the environment; the
+  negative verdict is scoped to Gaussian synthetic data only.
 - **H-100K**: Null = each variant's speedup ratio vs baseline ≥ 1.0 (not faster).
+  **Data scope:** benchmarks were run at n=10K (not n=100K) due to feasibility
+  constraints; n=100K production-scale speedup was not directly measured. The
+  label "H-100K" refers to the production-scale target, not the benchmark size.
   Test: bootstrap ratio CI (10K resamples) with Holm-Bonferroni MHT correction;
   W5 FALLBACK used because Criterion raw sample arrays were not available in the
   JSON output (point-estimate ratios substituted). W4 cache warm-state check:
@@ -119,11 +130,13 @@ Four hypotheses were tested in a single pipeline:
 | Speedup ratio range | [0.8725, 0.9512] |
 | Mean \|delta\| | 0.474926 |
 | 95% t-CI (df=9, t=2.2622) | [0.474889, 0.474962] |
-| Accuracy threshold | 0.01 |
+| Accuracy threshold | 0.001 (pre-registered) |
 | **Verdict** | **NEGATIVE** |
 
-The CI lower bound (0.4749) far exceeds the 0.01 threshold. The approximation
-provides no speedup: median ratio 0.91 means it runs ~9% *slower* than exact.
+The CI lower bound (0.4749) far exceeds the 0.001 threshold (~474× over
+threshold). The approximation provides no speedup: median ratio 0.91 means it
+runs ~9% *slower* than exact. Note: this test used Gaussian synthetic data
+(n=40K); the pre-registered MERFISH fixture gate was not evaluated.
 
 ### H-100K: Criterion Variant Speedups (n=10K, FALLBACK method)
 
@@ -178,6 +191,13 @@ wall-time than Gaussian.
 - Expected: x_dist > x_sort > rank_scatter > y_heap > x_knn_set > penalty
 - Observed: y_heap > x_dist > x_sort > penalty > x_knn_set > rank_scatter
 
+**Note:** Step timing data is available for the baseline variant only. The
+profiling binary (`tw_profiler --features profiling`) was used for the baseline;
+all five variant binaries (`tw_profiler` with variant features) recorded
+all-zero `step_times_ns` arrays across all 30 timed iterations, indicating
+that per-step instrumentation was not active for those variant builds. Step
+fractions for non-baseline variants are not reported.
+
 ### Standardized Metrics
 
 #### Accuracy Metrics (all PASS)
@@ -207,9 +227,10 @@ wall-time than Gaussian.
 ## Observations
 
 1. **Approximate trustworthiness is worse on both dimensions** (H5): It is less
-   accurate by ~47× margin over the threshold AND 9% slower than exact at n=40K
-   with m=5000. The subsampling approach introduces approximation error far greater
-   than the acceptable tolerance without delivering any computational benefit.
+   accurate by ~474× margin over the pre-registered 0.001 threshold AND 9% slower
+   than exact at n=40K with m=5000 (Gaussian synthetic data). The subsampling
+   approach introduces approximation error far greater than the acceptable tolerance
+   without delivering any computational benefit.
 
 2. **thread_local and avx2 are the effective individual optimizations**: Both
    yield consistent ~50% speedups at n=10K. Their CIs do not include 1.0, and
@@ -249,11 +270,13 @@ wall-time than Gaussian.
 ## Analysis
 
 **H5** is a clear negative result — not merely marginally failing, but failing
-by ~47× on the accuracy threshold while simultaneously being slower. The subsampled
-approximation at m=5000 out of n=40K (12.5% sampling rate) is insufficient for
-the required 0.01 accuracy. This likely reflects the non-local nature of the
-trustworthiness statistic: small rank violations that matter for the metric are
-underrepresented in a random subsample.
+by ~474× on the pre-registered 0.001 accuracy threshold while simultaneously
+being slower. The subsampled approximation at m=5000 out of n=40K (12.5%
+sampling rate) is insufficient for the required 0.001 accuracy (Gaussian
+synthetic data). This likely reflects the non-local nature of the trustworthiness
+statistic: small rank violations that matter for the metric are underrepresented
+in a random subsample. The pre-specified MERFISH fixture gate was not run; this
+negative result is scoped to Gaussian synthetic data.
 
 **H-100K** reveals a bifurcation: thread_local and avx2 are clearly effective
 (~50% speedups, FALLBACK CIs well above 1.0), while partial_rank is clearly
@@ -305,9 +328,12 @@ profiling finding.
 
 ## Conclusions
 
-1. **H5**: Definitively rejected. Approximate trustworthiness at m=5000 is both
-   inaccurate (mean |delta|=0.47 >> threshold 0.01) and slower (median ratio
-   0.91). Do not proceed with this approach.
+1. **H5**: Definitively rejected on Gaussian synthetic data. Approximate
+   trustworthiness at m=5000 is both inaccurate (mean |delta|=0.47 >> pre-registered
+   threshold 0.001, ~474× over threshold) and slower (median ratio 0.91). The
+   pre-specified MERFISH fixture gate was not evaluated (external data absent).
+   Do not proceed with this approach on Gaussian data; MERFISH behavior remains
+   untested.
 
 2. **H-100K**: thread_local (1.54×) and avx2 (1.49×) provide statistically
    robust speedups. partial_rank is confirmed non-faster. combined is inconclusive
@@ -326,12 +352,18 @@ profiling finding.
 
 ## Recommendations
 
-1. **Do not ship approximate trustworthiness**: H5 definitively rejects it. Both
-   accuracy and speed are worse. Close any open work on this path.
+1. **Do not ship approximate trustworthiness** (Gaussian data verdict): H5
+   definitively rejects it on Gaussian synthetic data (n=40K). Both accuracy
+   (~474× over the pre-registered 0.001 threshold) and speed are worse. The
+   pre-specified MERFISH gate was not run; MERFISH-specific behavior remains an
+   open question. Close any open work on this path unless MERFISH-specific
+   evaluation is warranted.
 
 2. **Adopt thread_local and avx2 individually**: Both show robust, independently
-   verified ~50% speedups with well-characterized CIs. These can be enabled without
-   further investigation.
+   verified ~50% speedups with well-characterized CIs at n=10K Gaussian synthetic
+   data (W5 FALLBACK method). Production-scale speedup at n=100K+ was not directly
+   measured in this study; the n=10K result is directionally reliable but
+   large-scale validation is recommended before deployment.
 
 3. **Re-benchmark combined variant under stricter isolation**: Rerun tw_combined
    and tw_baseline as the only processes, each with a 5-minute thermal gap, using
