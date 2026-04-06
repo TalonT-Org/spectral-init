@@ -4,6 +4,8 @@ use std::path::PathBuf;
 use std::time::Duration;
 use std::hint::black_box;
 
+/// Physical core count of the benchmark machine.
+/// Host: 1 socket × 8 cores × 2-way HT = 16 logical CPUs; pin to physical cores only.
 const N_THREADS: usize = 8;
 
 fn bench_tw_partial_rank(c: &mut Criterion) {
@@ -21,7 +23,7 @@ fn bench_tw_partial_rank(c: &mut Criterion) {
     group.warm_up_time(Duration::from_secs(10));
     group.measurement_time(Duration::from_secs(60));
 
-    for n in [1000usize, 5000, 10000] {
+    for n in [1000usize, 5000, 10000, 50000] {
         let x: Array2<f64> = ndarray_npy::read_npy(data_dir.join(format!("gaussian_n{n}_x.npy")))
             .unwrap_or_else(|e| panic!("failed to load gaussian_n{n}_x.npy: {e}"));
         let y: Array2<f64> = ndarray_npy::read_npy(data_dir.join(format!("gaussian_n{n}_y.npy")))

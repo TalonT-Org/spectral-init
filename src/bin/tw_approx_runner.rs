@@ -5,7 +5,6 @@
 //!                    --output results.json
 //!
 //! Requires feature: cli
-//! The approximate path is a stub returning 0.0 — completed in groupB.
 //! Outputs a JSON file with n, m, seed, t_exact, t_approx, delta, wall_exact_s, wall_approx_s.
 
 fn main() {
