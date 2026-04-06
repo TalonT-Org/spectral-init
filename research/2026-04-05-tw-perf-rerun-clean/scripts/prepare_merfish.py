@@ -2,7 +2,7 @@
 
 Usage:
     python scripts/prepare_merfish.py \
-        --npz-dir /home/talon/projects/spectral-init/temp/merfish_100k \
+        --npz-dir /path/to/merfish_100k \
         --output-dir research/2026-04-05-tw-perf-rerun-clean/data/merfish \
         --n 10000
 """
