@@ -209,6 +209,13 @@ fn measure_solver_pair(
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[test]
 fn test_gap_sweep() {
+    if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
+        eprintln!(
+            "test_gap_sweep: skipping — AVX2/FMA not available; \
+             ComputeMode::RustNative falls back to scalar, making the comparison vacuous"
+        );
+        return;
+    }
     let n = cluster_size();
     let results_dir = results_dir();
     let mut records: Vec<serde_json::Value> = Vec::with_capacity(BRIDGE_WEIGHTS.len());
@@ -241,6 +248,13 @@ fn test_gap_sweep() {
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[test]
 fn test_discrete_multi_seed() {
+    if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
+        eprintln!(
+            "test_discrete_multi_seed: skipping — AVX2/FMA not available; \
+             ComputeMode::RustNative falls back to scalar, making the comparison vacuous"
+        );
+        return;
+    }
     let n = cluster_size();
     let results_dir = results_dir();
     let mut records: Vec<serde_json::Value> =
@@ -265,6 +279,13 @@ fn test_discrete_multi_seed() {
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[test]
 fn test_solver_level_parity() {
+    if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
+        eprintln!(
+            "test_solver_level_parity: skipping — AVX2/FMA not available; \
+             RustNative and PythonCompat both use scalar, so level comparison is vacuous"
+        );
+        return;
+    }
     let n = cluster_size();
     for &w in BRIDGE_WEIGHTS.iter() {
         let laplacian = large_epsilon_bridge_laplacian(n, w);
