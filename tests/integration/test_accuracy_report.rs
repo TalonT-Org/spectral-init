@@ -162,7 +162,7 @@ fn process_disconnected_path(dataset: &str, n_embedding_dims: usize) -> Disconne
                 .collect();
             let lap_c = build_normalized_laplacian(&sub_graph, &inv_sqrt_c);
 
-            let ((evals, evecs), _) = solve_eigenproblem_pub(&lap_c, n_embedding_dims, 42);
+            let ((evals, evecs), _) = solve_eigenproblem_pub(&lap_c, n_embedding_dims, 42, ComputeMode::PythonCompat);
             (0..evecs.ncols())
                 .map(|d| common::residual_spmv(&lap_c, evecs.column(d), evals[d]))
                 .fold(0.0f64, f64::max)
@@ -236,7 +236,7 @@ fn process_dataset(dataset: &str, n: usize, is_connected: bool, expected_n_compo
 
     // NOTE: solve_eigenproblem_pub uses sqrt_deg = ones(n) internally.
     let ((eigenvalues, eigenvectors), solver_level) =
-        solve_eigenproblem_pub(&laplacian, n_components_dim, 42);
+        solve_eigenproblem_pub(&laplacian, n_components_dim, 42, ComputeMode::PythonCompat);
 
     let eigenvalue_abs_errors: Vec<f64> = eigenvalues.iter()
         .zip(ref_eigenvalues.iter())

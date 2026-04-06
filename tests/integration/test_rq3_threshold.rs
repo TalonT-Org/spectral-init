@@ -42,13 +42,13 @@ fn rq3_threshold_override_subspace_agreement() {
     // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
     unsafe { std::env::set_var("SPECTRAL_DENSE_N_THRESHOLD", "2000"); }
     let ((eigs_dense, vecs_dense), level_dense) =
-        spectral_init::solve_eigenproblem_pub(&laplacian, n_components, 42);
+        spectral_init::solve_eigenproblem_pub(&laplacian, n_components, 42, spectral_init::ComputeMode::PythonCompat);
     assert_eq!(level_dense, 0, "expected Level 0 (dense EVD) with threshold=2000");
 
     // ── Run 2: Force LOBPCG (threshold=50, n=200 >= 50 → Level 1+) ──
     unsafe { std::env::set_var("SPECTRAL_DENSE_N_THRESHOLD", "50"); }
     let ((eigs_lobpcg, vecs_lobpcg), level_lobpcg) =
-        spectral_init::solve_eigenproblem_pub(&laplacian, n_components, 42);
+        spectral_init::solve_eigenproblem_pub(&laplacian, n_components, 42, spectral_init::ComputeMode::PythonCompat);
     assert!(level_lobpcg >= 1, "expected Level >= 1 (LOBPCG path) with threshold=50, got {level_lobpcg}");
 
     // ── Cleanup env var ──

@@ -581,14 +581,14 @@ fn test_complete_bipartite_coordinate_stability() {
 #[test]
 fn test_level_0_dense_evd_for_small_n() {
     let laplacian = path_laplacian_6(); // n=6 < 2000 → Level 0
-    let (_, level) = spectral_init::solve_eigenproblem_pub(&laplacian, 2, 42);
+    let (_, level) = spectral_init::solve_eigenproblem_pub(&laplacian, 2, 42, spectral_init::ComputeMode::PythonCompat);
     assert_eq!(level, 0, "n=6 must use Level 0 dense EVD");
 }
 
 #[test]
 fn test_level_1_lobpcg_for_large_well_conditioned_n() {
     let laplacian = large_diagonal_laplacian(2001); // n=2001 >= 2000, eigengap ≈ 0.5
-    let (_, level) = spectral_init::solve_eigenproblem_pub(&laplacian, 2, 42);
+    let (_, level) = spectral_init::solve_eigenproblem_pub(&laplacian, 2, 42, spectral_init::ComputeMode::PythonCompat);
     assert_eq!(
         level, 1,
         "n=2001 well-conditioned diagonal must use Level 1 LOBPCG"

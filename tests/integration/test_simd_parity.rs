@@ -6,12 +6,10 @@ use rand::SeedableRng;
 use rand::rngs::StdRng;
 use rand_distr::{Distribution, StandardNormal};
 use serde_json::json;
-use spectral_init::{normalize_signs_pub, scale_and_add_noise_pub, solve_eigenproblem_pub};
+use spectral_init::{normalize_signs_pub, scale_and_add_noise_pub, solve_eigenproblem_pub, ComputeMode};
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 use spectral_init::operator::spmv_avx2_gather_pub;
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-use spectral_init::solve_eigenproblem_simd_pub;
 
 use spectral_init::operator::spmv_csr;
 
@@ -123,6 +121,15 @@ fn test_spmv_divergence() {
 
 #[test]
 fn test_solver_divergence() {
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
+        eprintln!(
+            "test_solver_divergence: skipping — AVX2/FMA not available; \
+             ComputeMode::RustNative falls back to scalar, making the SIMD comparison vacuous"
+        );
+        return;
+    }
+
     let results_dir = results_dir();
     std::fs::create_dir_all(&results_dir).expect("cannot create RESULTS_DIR");
     std::fs::create_dir_all(results_dir.join("eigenvectors"))
@@ -136,14 +143,14 @@ fn test_solver_divergence() {
         let n = laplacian.rows();
 
         let ((_, eigvec_scalar), solver_level_scalar) =
-            solve_eigenproblem_pub(&laplacian, 2, 42);
+            solve_eigenproblem_pub(&laplacian, 2, 42, ComputeMode::PythonCompat);
 
         // x86_64 path: run SIMD solver and compare.
         #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
         let record = {
             let mut eigvec_scalar = eigvec_scalar; // rebind as mut — normalize_signs_pub needs &mut
             let ((_, mut eigvec_avx2), solver_level_avx2) =
-                solve_eigenproblem_simd_pub(&laplacian, 2, 42);
+                solve_eigenproblem_pub(&laplacian, 2, 42, ComputeMode::RustNative);
 
             normalize_signs_pub(&mut eigvec_scalar); // match production E.5
             normalize_signs_pub(&mut eigvec_avx2); // match production E.5

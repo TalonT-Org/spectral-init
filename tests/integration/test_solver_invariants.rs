@@ -9,7 +9,7 @@ use spectral_init::operator::CsrOperator;
 use spectral_init::solvers::lobpcg::lobpcg_solve;
 use spectral_init::lobpcg_sinv_solve;
 use spectral_init::rsvd_solve;
-use spectral_init::solve_eigenproblem_pub;
+use spectral_init::{solve_eigenproblem_pub, ComputeMode};
 use spectral_init::{spectral_init, SpectralInitConfig};
 
 /// Two-component graph: disjoint paths P_{n1} (nodes 0..n1) and P_{n2} (nodes n1..n1+n2).
@@ -58,7 +58,7 @@ fn make_two_component_graph(n1: u32, n2: u32) -> sprs::CsMatI<f32, u32, usize> {
 fn test_inv_eigenvalue_ascending_order() {
     let lap_path = common::fixture_path("blobs_50", "comp_b_laplacian.npz");
     let lap = common::load_sparse_csr(&lap_path);
-    let ((eigvals, _eigvecs), _level) = solve_eigenproblem_pub(&lap, 2, 42);
+    let ((eigvals, _eigvecs), _level) = solve_eigenproblem_pub(&lap, 2, 42, ComputeMode::PythonCompat);
     for i in 0..eigvals.len().saturating_sub(1) {
         assert!(
             eigvals[i] <= eigvals[i + 1] + 1e-12,
@@ -77,7 +77,7 @@ fn test_inv_escalation_routing_large_n() {
     let lap = common::ring_laplacian(100);
 
     // Clean path: n=100 < DENSE_N_THRESHOLD=2000 → level 0 (dense EVD).
-    let (_, level) = solve_eigenproblem_pub(&lap, 2, 42);
+    let (_, level) = solve_eigenproblem_pub(&lap, 2, 42, ComputeMode::PythonCompat);
     assert_eq!(
         level, 0,
         "expected dense EVD (level 0) for n=100, got level={level}"
@@ -86,7 +86,7 @@ fn test_inv_escalation_routing_large_n() {
     // Forced path: threshold=0 forces all n away from dense → level ≥ 1.
     // Safe because nextest runs each test in a dedicated process.
     unsafe { std::env::set_var("SPECTRAL_DENSE_N_THRESHOLD", "0"); }
-    let (_, level_forced) = solve_eigenproblem_pub(&lap, 2, 42);
+    let (_, level_forced) = solve_eigenproblem_pub(&lap, 2, 42, ComputeMode::PythonCompat);
     unsafe { std::env::remove_var("SPECTRAL_DENSE_N_THRESHOLD"); }
     assert!(
         level_forced >= 1,

@@ -18,7 +18,7 @@ proptest! {
     fn proptest_eigenvalues_sorted(n in 50usize..=200) {
         let laplacian = common::ring_laplacian(n);
         let ((eigs, _vecs), _level) =
-            spectral_init::solve_eigenproblem_pub(&laplacian, 2, 42);
+            spectral_init::solve_eigenproblem_pub(&laplacian, 2, 42, spectral_init::ComputeMode::PythonCompat);
         for i in 0..eigs.len() - 1 {
             prop_assert!(
                 eigs[i] <= eigs[i + 1] + 1e-12,
@@ -32,7 +32,7 @@ proptest! {
     fn proptest_eigenvalues_nonneg(n in 50usize..=200) {
         let laplacian = common::ring_laplacian(n);
         let ((eigs, _vecs), _level) =
-            spectral_init::solve_eigenproblem_pub(&laplacian, 2, 42);
+            spectral_init::solve_eigenproblem_pub(&laplacian, 2, 42, spectral_init::ComputeMode::PythonCompat);
         for (i, &e) in eigs.iter().enumerate() {
             prop_assert!(e >= 0.0, "eigenvalue λ[{}]={} is negative", i, e);
         }
@@ -42,7 +42,7 @@ proptest! {
     fn proptest_eigenvalues_leq_2(n in 50usize..=200) {
         let laplacian = common::ring_laplacian(n);
         let ((eigs, _vecs), _level) =
-            spectral_init::solve_eigenproblem_pub(&laplacian, 2, 42);
+            spectral_init::solve_eigenproblem_pub(&laplacian, 2, 42, spectral_init::ComputeMode::PythonCompat);
         for (i, &e) in eigs.iter().enumerate() {
             prop_assert!(
                 e <= 2.0,
@@ -55,7 +55,7 @@ proptest! {
     fn proptest_trivial_null_space(n in 50usize..=200) {
         let laplacian = common::ring_laplacian(n);
         let ((eigs, _vecs), _level) =
-            spectral_init::solve_eigenproblem_pub(&laplacian, 2, 42);
+            spectral_init::solve_eigenproblem_pub(&laplacian, 2, 42, spectral_init::ComputeMode::PythonCompat);
         prop_assert!(
             eigs[0].abs() < 1e-6,
             "smallest eigenvalue λ₀={} not near zero for connected ring({})",
@@ -67,7 +67,7 @@ proptest! {
     fn proptest_residual_leq_1e5(n in 50usize..=200) {
         let laplacian = common::ring_laplacian(n);
         let ((eigs, vecs), _level) =
-            spectral_init::solve_eigenproblem_pub(&laplacian, 2, 42);
+            spectral_init::solve_eigenproblem_pub(&laplacian, 2, 42, spectral_init::ComputeMode::PythonCompat);
         for i in 0..eigs.len() {
             let col = vecs.column(i);
             let r = common::residual_spmv(&laplacian, col, eigs[i]);
@@ -83,7 +83,7 @@ proptest! {
     fn proptest_orthogonality(n in 50usize..=200) {
         let laplacian = common::ring_laplacian(n);
         let ((_eigs, vecs), _level) =
-            spectral_init::solve_eigenproblem_pub(&laplacian, 2, 42);
+            spectral_init::solve_eigenproblem_pub(&laplacian, 2, 42, spectral_init::ComputeMode::PythonCompat);
         // vecs is (n, 3) — compute V^T * V which should be I_3
         let vtv = vecs.t().dot(&vecs);
         let k = vtv.nrows();
