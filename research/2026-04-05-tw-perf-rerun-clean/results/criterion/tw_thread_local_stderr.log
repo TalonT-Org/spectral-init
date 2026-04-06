@@ -1,0 +1,21 @@
+warning: function `spmv_avx2_gather_inner` is never used
+  --> src/operator.rs:98:11
+   |
+98 | unsafe fn spmv_avx2_gather_inner(
+   |           ^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `spectral-init` (lib) generated 1 warning
+   Compiling spectral-init v0.1.0 (/home/talon/projects/worktrees/research-20260405-tw-perf-rerun-clean)
+    Finished `bench` profile [optimized] target(s) in 1.41s
+Gnuplot not found, using plotters backend
+Benchmarking tw_thread_local/thread_local/1000
+Benchmarking tw_thread_local/thread_local/1000: Warming up for 10.000 s
+Benchmarking tw_thread_local/thread_local/1000: Collecting 100 samples in estimated 64.664 s (10k iterations)
+Benchmarking tw_thread_local/thread_local/1000: Analyzing
+tw_thread_local/thread_local/1000
+                        time:   [6.6492 ms 6.7109 ms 6.7706 ms]
+Benchmarking tw_thread_local/thread_local/5000
+Benchmarking tw_thread_local/thread_local/5000: Warming up for 10.000 s
+Benchmarking tw_thread_local/thread_local/5000: Collecting 100 samples in estimated 74.053 s (500 iterations)

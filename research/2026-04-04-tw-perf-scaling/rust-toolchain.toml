@@ -1,0 +1,4 @@
+# Rust toolchain pinned for tw-perf-scaling experiment reproducibility.
+# Exact nightly used: rustc 1.96.0-nightly (23903d01c 2026-03-26)
+[toolchain]
+channel = "nightly-2026-03-26"

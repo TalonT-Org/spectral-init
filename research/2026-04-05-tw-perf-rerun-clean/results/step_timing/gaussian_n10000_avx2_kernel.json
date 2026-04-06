@@ -1,0 +1,281 @@
+{
+  "iters": [
+    0.566396999,
+    0.566012111,
+    0.559378248,
+    0.565618462,
+    0.543114985,
+    0.546290383,
+    0.537908946,
+    0.56366337,
+    0.592349934,
+    0.597308141,
+    0.633487906,
+    0.645712995,
+    0.635503494,
+    0.730921095,
+    0.724764371,
+    0.760660428,
+    0.804799864,
+    0.703865133,
+    0.664520653,
+    0.689102023,
+    0.624042003,
+    0.620926367,
+    0.622743212,
+    0.615137118,
+    0.594978007,
+    0.662840641,
+    0.695999483,
+    0.625186303,
+    0.656318425,
+    0.682144948
+  ],
+  "mean_s": 0.6343898682666667,
+  "n": 10000,
+  "std_s": 0.06691484843965312,
+  "step_times_ns": [
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    },
+    {
+      "penalty": 0,
+      "rank_scatter": 0,
+      "x_dist": 0,
+      "x_knn_set": 0,
+      "x_sort": 0,
+      "y_heap": 0
+    }
+  ],
+  "variant": "avx2_kernel",
+  "warmup": 5
+}
