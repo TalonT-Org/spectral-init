@@ -4,7 +4,7 @@ Usage:
     python scripts/gen_synthetic.py \
         --seed 2026 \
         --output-dir research/2026-04-05-tw-perf-rerun-clean/data/gaussian \
-        --sizes 1000 5000 10000 25000 50000 100000 \
+        --sizes 1000 5000 10000 25000 50000 40000 \
         --d 10
 """
 
@@ -20,7 +20,7 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path,
                         default=Path("research/2026-04-05-tw-perf-rerun-clean/data/gaussian"))
     parser.add_argument("--sizes", type=int, nargs="+",
-                        default=[1000, 5000, 10000, 25000, 50000, 100000])
+                        default=[1000, 5000, 10000, 25000, 50000, 40000])
     parser.add_argument("--d", type=int, default=10,
                         help="Input dimensionality for x arrays")
     args = parser.parse_args()

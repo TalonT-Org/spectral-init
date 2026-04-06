@@ -33,13 +33,13 @@ fn bench_tw_baseline(c: &mut Criterion) {
         });
     }
 
-    // n=100K: override parameters for long-running flat-sampling measurement
+    // n=40K: override parameters for long-running flat-sampling measurement
     group.sampling_mode(SamplingMode::Flat);
     group.sample_size(63);
     group.warm_up_time(Duration::from_secs(30));
     group.measurement_time(Duration::from_secs(1500));
 
-    let n = 100_000usize;
+    let n = 40_000usize;
     let x: Array2<f64> = ndarray_npy::read_npy(data_dir.join(format!("gaussian_n{n}_x.npy")))
         .unwrap_or_else(|e| panic!("failed to load gaussian_n{n}_x.npy: {e}"));
     let y: Array2<f64> = ndarray_npy::read_npy(data_dir.join(format!("gaussian_n{n}_y.npy")))

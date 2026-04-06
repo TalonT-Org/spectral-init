@@ -12,8 +12,8 @@ DATA_DIR="$EXP_DIR/data/gaussian"
 RESULTS_DIR="$EXP_DIR/results/h5"
 BINARY="$REPO_ROOT/target/release/tw_approx_runner"
 WARMUP_TMP="$REPO_ROOT/temp/h5_warmup_discard.json"
-X="$DATA_DIR/gaussian_n100000_x.npy"
-Y="$DATA_DIR/gaussian_n100000_y.npy"
+X="$DATA_DIR/gaussian_n40000_x.npy"
+Y="$DATA_DIR/gaussian_n40000_y.npy"
 K=15
 M_TRIAL=5000
 

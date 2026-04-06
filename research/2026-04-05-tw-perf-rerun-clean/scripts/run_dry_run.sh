@@ -106,7 +106,7 @@ replacements = [
     ('group.sample_size(100)',                           'group.sample_size(10)'),
     ('group.warm_up_time(Duration::from_secs(10))',      'group.warm_up_time(Duration::from_secs(1))'),
     ('group.measurement_time(Duration::from_secs(60))',  'group.measurement_time(Duration::from_secs(5))'),
-    # n=100K overrides
+    # n=40K overrides
     ('group.sample_size(63)',                            'group.sample_size(10)'),
     ('group.warm_up_time(Duration::from_secs(30))',      'group.warm_up_time(Duration::from_secs(1))'),
     ('group.measurement_time(Duration::from_secs(1500))','group.measurement_time(Duration::from_secs(5))'),

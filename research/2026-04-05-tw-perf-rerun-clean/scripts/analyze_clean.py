@@ -190,9 +190,9 @@ def section_h100k(dry_run):
         "combined": "tw_combined",
     }
 
-    baseline_id, baseline_rec = find_record(forward_data, "tw_baseline", "100000")
+    baseline_id, baseline_rec = find_record(forward_data, "tw_baseline", "40000")
     if baseline_rec is None:
-        lines.append("  ERROR: baseline n=100K record not found in criterion_output.json.")
+        lines.append("  ERROR: baseline n=40K record not found in criterion_output.json.")
         return "\n".join(lines)
 
     rng = np.random.default_rng(seed=42)
@@ -201,9 +201,9 @@ def section_h100k(dry_run):
     variant_results = []
 
     for v in VARIANTS:
-        vid, vrec = find_record(forward_data, BENCH_PREFIX[v], "100000")
+        vid, vrec = find_record(forward_data, BENCH_PREFIX[v], "40000")
         if vrec is None:
-            lines.append(f"  WARN: {v} n=100K record not found; skipping.")
+            lines.append(f"  WARN: {v} n=40K record not found; skipping.")
             pvals.append(1.0)
             variant_results.append((v, None, None, None, "MISSING"))
             continue
@@ -239,7 +239,7 @@ def section_h100k(dry_run):
     reject_arr, pvals_adj, _, _ = multipletests(pvals, method="holm")
 
     lines += [
-        f"  Baseline n=100K id: {baseline_id}",
+        f"  Baseline n=40K id: {baseline_id}",
         f"  Bootstrap samples: {N_BOOTSTRAP}",
         "",
         "  | Variant | Mean Ratio | 95% Boot CI | p-value | Holm adj p | Reject H0 | Method |",
@@ -258,8 +258,8 @@ def section_h100k(dry_run):
     if reversed_data:
         w4_flags = []
         for bprefix in ["tw_combined", "tw_baseline"]:
-            _, frec = find_record(forward_data, bprefix, "100000")
-            _, rrec = find_record(reversed_data, bprefix, "100000")
+            _, frec = find_record(forward_data, bprefix, "40000")
+            _, rrec = find_record(reversed_data, bprefix, "40000")
             if frec and rrec and frec["point"] and rrec["point"]:
                 diff_frac = abs(frec["point"] - rrec["point"]) / frec["point"]
                 if diff_frac > 0.05:
@@ -334,12 +334,12 @@ def section_h_partial_merfish(dry_run):
 # ---------------------------------------------------------------------------
 
 def section_h0_h1_clean(dry_run):
-    """H0/H1-clean: step CPU-time fractions — baseline, n=100K, 30 iterations."""
+    """H0/H1-clean: step CPU-time fractions — baseline, n=40K, 30 iterations."""
     STEP_KEYS = ["x_dist", "x_sort", "rank_scatter", "x_knn_set", "y_heap", "penalty"]
     # Expected ordering by mean fraction (most expensive first) — W3 descriptive only
     EXPECTED_ORDER = ["x_dist", "x_sort", "rank_scatter", "y_heap", "x_knn_set", "penalty"]
 
-    lines = ["## H0/H1-clean: Step CPU-Time Fractions (Baseline, n=100K)"]
+    lines = ["## H0/H1-clean: Step CPU-Time Fractions (Baseline, n=40K)"]
 
     if dry_run:
         lines += [
@@ -349,7 +349,7 @@ def section_h0_h1_clean(dry_run):
         ]
         return "\n".join(lines)
 
-    baseline_path = os.path.join(STEP_DIR, "gaussian_n100000_baseline.json")
+    baseline_path = os.path.join(STEP_DIR, "gaussian_n40000_baseline.json")
     if not os.path.exists(baseline_path):
         lines.append(f"  ERROR: {baseline_path} not found.")
         return "\n".join(lines)
