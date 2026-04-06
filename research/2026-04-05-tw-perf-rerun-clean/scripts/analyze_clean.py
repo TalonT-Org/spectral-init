@@ -131,12 +131,12 @@ def section_h5(dry_run):
     n = len(deltas)
     mean_delta = float(np.mean(deltas))
     se_delta = float(np.std(deltas, ddof=1) / math.sqrt(n))
-    t_crit_r9 = float(t_dist.ppf(0.975, df=9))
+    t_crit_r9 = float(t_dist.ppf(0.975, df=max(n - 1, 1)))
     ci_half = t_crit_r9 * se_delta
     ci_lower = mean_delta - ci_half
     ci_upper = mean_delta + ci_half
 
-    THRESHOLD = 0.01
+    THRESHOLD = 0.001  # Pre-registered value from experiment plan (H5 accuracy gate)
     near_threshold = (ci_half > 0.5 * mean_delta) if mean_delta > 0 else False
     if ci_upper < THRESHOLD:
         verdict = "POSITIVE (approx accurate: CI below threshold)"
@@ -151,7 +151,7 @@ def section_h5(dry_run):
         f"  Seeds loaded: {len(seed_files)}",
         f"  Speedup ratio (wall_approx/wall_exact): "
         f"median={median_speedup:.4f}, range=[{range_speedup[0]:.4f}, {range_speedup[1]:.4f}]",
-        f"  |delta| mean={mean_delta:.6f}, 95% t-CI (df=9, t={t_crit_r9:.4f}): "
+        f"  |delta| mean={mean_delta:.6f}, 95% t-CI (df={max(n - 1, 1)}, t={t_crit_r9:.4f}): "
         f"[{ci_lower:.6f}, {ci_upper:.6f}]",
         f"  Verdict: **{verdict}**",
     ]
@@ -219,7 +219,9 @@ def section_h100k(dry_run):
                 np.mean(rng.choice(b_arr, size=len(b_arr)))
                 for _ in range(N_BOOTSTRAP)
             ])
-            p = float(np.mean(ratios >= 1.0))
+            # One-sided p-value: fraction of bootstrap ratios failing the >=1.5x threshold.
+            # Small p → strong evidence of speedup; large p → weak evidence.
+            p = float(np.mean(ratios < 1.5))
             ci_boot = (float(np.percentile(ratios, 2.5)), float(np.percentile(ratios, 97.5)))
             mean_r = float(np.mean(ratios))
             fallback = False
@@ -229,7 +231,9 @@ def section_h100k(dry_run):
             b_point = baseline_rec["point"] or 1.0
             v_point = vrec["point"] or 1.0
             mean_r = v_point / b_point if b_point else float("nan")
-            p = 0.5 if abs(mean_r - 1.0) < 0.01 else (1.0 if mean_r >= 1.0 else 0.0)
+            # NOTE: W5 fallback assigns deterministic pseudo-p-values (not a statistical test).
+            # These are heuristic indicators only; raw Criterion sample arrays were unavailable.
+            p = 0.5 if abs(mean_r - 1.0) < 0.01 else (1.0 if mean_r < 1.5 else 0.0)
             ci_boot = (mean_r * 0.95, mean_r * 1.05)
             fallback = True
 
