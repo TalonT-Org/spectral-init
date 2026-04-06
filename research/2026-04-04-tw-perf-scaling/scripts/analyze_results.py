@@ -79,7 +79,7 @@ def parse_criterion_speedup(variant_name: str, baseline_mean_s: float | None) ->
                 continue
             bench_id = msg.get("id", "")
             if ("50000" in bench_id or "50k" in bench_id.lower()) and variant_name in bench_id:
-                mean = msg.get("mean", {}).get("estimate")
+                mean = msg.get("typical", msg.get("mean", {})).get("estimate")
                 if mean is not None:
                     variant_mean = float(mean)
                     break
