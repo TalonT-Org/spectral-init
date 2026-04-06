@@ -1,1 +1,7 @@
 # env: envs/spectral-test/bin/python — numpy scipy matplotlib import OK
+gaussian_n1000_x.npy  shape=(1000, 10)  dtype=float64  min=0.000314  max=0.999977  NaN/Inf=False
+gaussian_n1000_y.npy  shape=(1000, 2)  dtype=float64  min=0.000013  max=0.999466  NaN/Inf=False
+gaussian_n5000_x.npy  shape=(5000, 10)  dtype=float64  min=0.000019  max=0.999994  NaN/Inf=False
+gaussian_n5000_y.npy  shape=(5000, 2)  dtype=float64  min=0.000013  max=0.999952  NaN/Inf=False
+gaussian_n10000_x.npy  shape=(10000, 10)  dtype=float64  min=0.000026  max=0.999998  NaN/Inf=False
+gaussian_n10000_y.npy  shape=(10000, 2)  dtype=float64  min=0.000023  max=0.999828  NaN/Inf=False
