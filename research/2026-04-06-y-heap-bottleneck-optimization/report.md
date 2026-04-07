@@ -10,6 +10,8 @@ The primary question was whether per-row heap allocation, heap maintenance overh
 
 The `flat_simd` variant (Vec + introselect + AVX2 2D distance kernel) achieves a **statistically significant ~2× total speedup at n=10000** (conservative ratio bounds: 1.73–2.27×), with the y_heap step fraction dropping from 69.8% to 27.6%. All 21 correctness tests pass with `|ΔT| < 1e-12`, and all 9 accuracy and 5 parity fixture tests pass with no regression. The recommendation is to **ship `flat_simd`** as the production replacement for the BinaryHeap-based implementation.
 
+**Data scope:** All benchmarks use synthetic uniform random data (Gaussian, d_x=10, d_y=2, seeded). Results may not generalize to real-world manifold data where distance distributions and neighbor structure differ from uniform random inputs.
+
 ## Background and Research Question
 
 The `trustworthiness()` function is the primary diagnostic metric for embedding quality in `spectral-init`. At n=10K, k=15, step-level profiling (PR #229) established that the `y_heap` step — which scans all n points in embedding space to find the k-nearest neighbors for each row — consumed 70.3% of total wall-clock time. All other steps (x_dist, x_sort, penalty) together account for the remaining 30%.
