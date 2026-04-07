@@ -6,7 +6,7 @@
 
 **Decision:** `POSITIVE`
 
-POSITIVE — flat_simd n=10000 speedup 1.9939× (ratio 95% CI lb 1.7272 > 1.0)
+POSITIVE — flat_simd n=10000 speedup 1.9939× (ratio CI lb 1.7272 > 1.0)
 
 ## Speedup Table
 
@@ -32,7 +32,7 @@ _Bundle attribution (W2: conflated bundles, not single-cause isolation)_
 | Bundle | Attribution fraction | n |
 |--------|----------------------|---|
 | Allocation (malloc elim.) | -0.0107 | 10000 |
-| DS change (BTreeMap→Vec) | 0.4431 | 10000 |
+| DS change (BinaryHeap→Vec+introselect) | 0.4431 | 10000 |
 | SIMD (flat layout)       | 0.1090 | 10000 |
 
 ## Step Fractions

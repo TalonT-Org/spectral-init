@@ -163,7 +163,7 @@ def compute_hypothesis(data: dict, results_dir: Path) -> tuple:
         primary = "POSITIVE"
         details["primary_text"] = (
             f"POSITIVE — flat_simd n=10000 speedup {point:.4f}× "
-            f"(ratio 95% CI lb {ratio_ci_lb:.4f} > 1.0)"
+            f"(ratio CI lb {ratio_ci_lb:.4f} > 1.0)"
         )
     elif point >= 1.1:
         primary = "ESCALATE"
@@ -176,7 +176,7 @@ def compute_hypothesis(data: dict, results_dir: Path) -> tuple:
         primary = "NEGATIVE"
         details["primary_text"] = (
             f"NEGATIVE — flat_simd n=10000 speedup {point:.4f}× "
-            f"(ratio 95% CI lb {ratio_ci_lb})"
+            f"(ratio CI lb {ratio_ci_lb})"
         )
 
     # Fallback: if flat_simd is NEGATIVE, check flat_partial (H1 alone)

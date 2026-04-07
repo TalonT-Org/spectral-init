@@ -8,7 +8,7 @@ The `trustworthiness()` function in `spectral-init` spent 70% of its wall-clock 
 
 The primary question was whether per-row heap allocation, heap maintenance overhead, or the raw distance arithmetic was responsible for the 70% step fraction. A causal isolation design (three incrementally additive variants) resolved this cleanly: **heap allocation cost is negligible; the dominant gain comes from replacing BinaryHeap with a flat Vec + `select_nth_unstable_by` (introselect), with AVX2 SIMD providing substantial additional gain on 2D embeddings**.
 
-The `flat_simd` variant (Vec + introselect + AVX2 2D distance kernel) achieves a **statistically significant ~2× total speedup at n=10000** (Criterion 95% CI: 1.73–2.27×), with the y_heap step fraction dropping from 69.8% to 27.6%. All 21 correctness tests pass with `|ΔT| < 1e-12`, and all 9 accuracy and 5 parity fixture tests pass with no regression. The recommendation is to **ship `flat_simd`** as the production replacement for the BinaryHeap-based implementation.
+The `flat_simd` variant (Vec + introselect + AVX2 2D distance kernel) achieves a **statistically significant ~2× total speedup at n=10000** (conservative ratio bounds: 1.73–2.27×), with the y_heap step fraction dropping from 69.8% to 27.6%. All 21 correctness tests pass with `|ΔT| < 1e-12`, and all 9 accuracy and 5 parity fixture tests pass with no regression. The recommendation is to **ship `flat_simd`** as the production replacement for the BinaryHeap-based implementation.
 
 ## Background and Research Question
 
@@ -92,7 +92,7 @@ The combined H1+H2 approach (no new dependencies) was selected as the primary ex
 | flat_simd | 5000 | 37.684 | 1.8574 | 1.7824 | 1.9259 | * |
 | flat_simd | 10000 | 145.099 | 1.9939 | 1.7272 | 2.2727 | * |
 
-`*` = CI lower bound > 1.0 (statistically significant speedup). CI bounds are conservative ratio CIs: `(base_ci_lb / variant_ci_ub, base_ci_ub / variant_ci_lb)`.
+`*` = CI lower bound > 1.0 (statistically significant speedup). CI bounds are conservative ratio bounds (not formal 95% CIs): `(base_ci_lb / variant_ci_ub, base_ci_ub / variant_ci_lb)`.
 
 ### Step Fractions — Profiler (n=10000, 30 iters, 5 warmup)
 
@@ -175,7 +175,7 @@ All 5 parity datasets: PASS.
 
 5. **x_dist and x_sort are unaffected.** Step fractions confirm x_dist (~580ms) and x_sort (~435ms) are identical across all variants — the implementation correctly isolated only the y_heap step.
 
-6. **flat_simd n=10000 CI is wide but decisive.** The conservative ratio CI (1.73–2.27) is expected with 10 Criterion samples and the Flat sampling mode at high measurement times. The CI lower bound of 1.73 strongly confirms significance; no Stage 2 escalation was needed.
+6. **flat_simd n=10000 ratio bounds are wide but decisive.** The conservative ratio bounds (1.73–2.27) — computed as `base_ci_lb / variant_ci_ub` to `base_ci_ub / variant_ci_lb`, not formal 95% CIs — are expected to be wide with 10 Criterion samples and the Flat sampling mode at high measurement times. The lower bound of 1.73 strongly confirms significance; no Stage 2 escalation was needed.
 
 7. **No accuracy or parity regressions detected.** The `select_nth_unstable_by` comparator `.total_cmp(&dist_y[b]).then(a.cmp(&b))` correctly replicates BinaryHeap tie-breaking. The PythonCompat eigensolver path is unchanged — these are entirely within the `trustworthiness()` metric function.
 
