@@ -1,0 +1,44 @@
+{
+  "files": [
+    {
+      "filename": "uniform_n1000_x.npy",
+      "shape": [
+        1000,
+        10
+      ],
+      "source_type": "generated",
+      "seed": 42,
+      "verified": true
+    },
+    {
+      "filename": "uniform_n1000_y.npy",
+      "shape": [
+        1000,
+        2
+      ],
+      "source_type": "generated",
+      "seed": 42,
+      "verified": true
+    },
+    {
+      "filename": "gauss_n1000_x.npy",
+      "shape": [
+        1000,
+        10
+      ],
+      "source_type": "generated",
+      "seed": 99,
+      "verified": true
+    },
+    {
+      "filename": "gauss_n1000_y.npy",
+      "shape": [
+        1000,
+        2
+      ],
+      "source_type": "generated",
+      "seed": 99,
+      "verified": true
+    }
+  ]
+}

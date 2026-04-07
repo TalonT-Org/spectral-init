@@ -1,0 +1,659 @@
+{
+  "criterion": [
+    {
+      "variant": "flat_simd",
+      "dist": "uniform",
+      "n": 1000,
+      "rep": 1,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "uniform",
+      "n": 1000,
+      "rep": 2,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "uniform",
+      "n": 1000,
+      "rep": 3,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "uniform",
+      "n": 5000,
+      "rep": 1,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "uniform",
+      "n": 5000,
+      "rep": 2,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "uniform",
+      "n": 5000,
+      "rep": 3,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "uniform",
+      "n": 10000,
+      "rep": 1,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "uniform",
+      "n": 10000,
+      "rep": 2,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "uniform",
+      "n": 10000,
+      "rep": 3,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "uniform",
+      "n": 50000,
+      "rep": 1,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "uniform",
+      "n": 50000,
+      "rep": 2,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "uniform",
+      "n": 50000,
+      "rep": 3,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "uniform",
+      "n": 75000,
+      "rep": 1,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "uniform",
+      "n": 75000,
+      "rep": 2,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "uniform",
+      "n": 75000,
+      "rep": 3,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "uniform",
+      "n": 100000,
+      "rep": 1,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "uniform",
+      "n": 100000,
+      "rep": 2,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "uniform",
+      "n": 100000,
+      "rep": 3,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "gauss",
+      "n": 1000,
+      "rep": 1,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "gauss",
+      "n": 1000,
+      "rep": 2,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "gauss",
+      "n": 1000,
+      "rep": 3,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "gauss",
+      "n": 5000,
+      "rep": 1,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "gauss",
+      "n": 5000,
+      "rep": 2,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "gauss",
+      "n": 5000,
+      "rep": 3,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "gauss",
+      "n": 10000,
+      "rep": 1,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "gauss",
+      "n": 10000,
+      "rep": 2,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "gauss",
+      "n": 10000,
+      "rep": 3,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "gauss",
+      "n": 50000,
+      "rep": 1,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "gauss",
+      "n": 50000,
+      "rep": 2,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "gauss",
+      "n": 50000,
+      "rep": 3,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "gauss",
+      "n": 75000,
+      "rep": 1,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "gauss",
+      "n": 75000,
+      "rep": 2,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "gauss",
+      "n": 75000,
+      "rep": 3,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "gauss",
+      "n": 100000,
+      "rep": 1,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "gauss",
+      "n": 100000,
+      "rep": 2,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "gauss",
+      "n": 100000,
+      "rep": 3,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "uniform",
+      "n": 1000,
+      "rep": 1,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "uniform",
+      "n": 1000,
+      "rep": 2,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "uniform",
+      "n": 1000,
+      "rep": 3,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "uniform",
+      "n": 5000,
+      "rep": 1,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "uniform",
+      "n": 5000,
+      "rep": 2,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "uniform",
+      "n": 5000,
+      "rep": 3,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "uniform",
+      "n": 10000,
+      "rep": 1,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "uniform",
+      "n": 10000,
+      "rep": 2,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "uniform",
+      "n": 10000,
+      "rep": 3,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "uniform",
+      "n": 50000,
+      "rep": 1,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "uniform",
+      "n": 50000,
+      "rep": 2,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "uniform",
+      "n": 50000,
+      "rep": 3,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "uniform",
+      "n": 75000,
+      "rep": 1,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "uniform",
+      "n": 75000,
+      "rep": 2,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "uniform",
+      "n": 75000,
+      "rep": 3,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "uniform",
+      "n": 100000,
+      "rep": 1,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "uniform",
+      "n": 100000,
+      "rep": 2,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "uniform",
+      "n": 100000,
+      "rep": 3,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "gauss",
+      "n": 1000,
+      "rep": 1,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "gauss",
+      "n": 1000,
+      "rep": 2,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "gauss",
+      "n": 1000,
+      "rep": 3,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "gauss",
+      "n": 5000,
+      "rep": 1,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "gauss",
+      "n": 5000,
+      "rep": 2,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "gauss",
+      "n": 5000,
+      "rep": 3,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "gauss",
+      "n": 10000,
+      "rep": 1,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "gauss",
+      "n": 10000,
+      "rep": 2,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "gauss",
+      "n": 10000,
+      "rep": 3,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "gauss",
+      "n": 50000,
+      "rep": 1,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "gauss",
+      "n": 50000,
+      "rep": 2,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "gauss",
+      "n": 50000,
+      "rep": 3,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "gauss",
+      "n": 75000,
+      "rep": 1,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "gauss",
+      "n": 75000,
+      "rep": 2,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "gauss",
+      "n": 75000,
+      "rep": 3,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "gauss",
+      "n": 100000,
+      "rep": 1,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "gauss",
+      "n": 100000,
+      "rep": 2,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "gauss",
+      "n": 100000,
+      "rep": 3,
+      "status": "completed"
+    }
+  ],
+  "profiler": [
+    {
+      "variant": "flat_simd",
+      "dist": "uniform",
+      "n": 1000,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "uniform",
+      "n": 5000,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "uniform",
+      "n": 10000,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "uniform",
+      "n": 50000,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "uniform",
+      "n": 75000,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "uniform",
+      "n": 100000,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "gauss",
+      "n": 1000,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "gauss",
+      "n": 5000,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "gauss",
+      "n": 10000,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "gauss",
+      "n": 50000,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "gauss",
+      "n": 75000,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "gauss",
+      "n": 100000,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "uniform",
+      "n": 1000,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "uniform",
+      "n": 5000,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "uniform",
+      "n": 10000,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "uniform",
+      "n": 50000,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "uniform",
+      "n": 75000,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "uniform",
+      "n": 100000,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "gauss",
+      "n": 1000,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "gauss",
+      "n": 5000,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "gauss",
+      "n": 10000,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "gauss",
+      "n": 50000,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "gauss",
+      "n": 75000,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "gauss",
+      "n": 100000,
+      "status": "completed"
+    }
+  ],
+  "analysis": {
+    "status": "completed",
+    "timestamp": "2026-04-07T03:36:12.410799",
+    "dry_run": false
+  }
+}
