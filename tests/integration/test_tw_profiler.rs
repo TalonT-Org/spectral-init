@@ -104,3 +104,72 @@ fn t_profiler_02_stderr_capture_writes_file() {
 
     let _ = std::fs::remove_dir_all(&tmp);
 }
+
+#[test]
+fn t_profiler_03_variant_kdtree_valid_json() {
+    let tmp = std::env::temp_dir().join(format!("tw_profiler_kd_test_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(&tmp).expect("create temp dir");
+    let output_path = tmp.join("results.json");
+
+    let status = Command::new(env!("CARGO"))
+        .args([
+            "run", "--features", "cli", "--bin", "tw_profiler", "--",
+            "--n", "50",
+            "--variant", "kdtree",
+            "--k", "5",
+            "--iters", "2",
+            "--warmup", "1",
+            "--output",
+        ])
+        .arg(&output_path)
+        .status()
+        .expect("failed to run tw_profiler");
+
+    assert!(status.success(), "tw_profiler (kdtree) exited with {:?}", status);
+    let json_str = std::fs::read_to_string(&output_path).expect("read results.json");
+    let val: serde_json::Value = serde_json::from_str(&json_str).expect("parse JSON");
+
+    assert_eq!(val["n"], 50);
+    assert_eq!(val["k"], 5);
+    assert_eq!(val["variant"], "kdtree");
+    let iters = val["iters"].as_array().expect("iters array");
+    assert_eq!(iters.len(), 2);
+    let score = val["score"].as_f64().expect("score");
+    assert!(score > 0.0 && score <= 1.0, "score out of (0,1]: {score}");
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn t_profiler_04_n_dist_generates_data() {
+    let tmp = std::env::temp_dir().join(format!("tw_profiler_dist_test_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(&tmp).expect("create temp dir");
+    let output_path = tmp.join("results.json");
+
+    let status = Command::new(env!("CARGO"))
+        .args([
+            "run", "--features", "cli", "--bin", "tw_profiler", "--",
+            "--n", "50",
+            "--dist", "gauss",
+            "--variant", "flat_simd",
+            "--k", "5",
+            "--iters", "2",
+            "--warmup", "1",
+            "--output",
+        ])
+        .arg(&output_path)
+        .status()
+        .expect("failed to run tw_profiler");
+
+    assert!(status.success(), "tw_profiler (gauss) exited with {:?}", status);
+    let json_str = std::fs::read_to_string(&output_path).expect("read results.json");
+    let val: serde_json::Value = serde_json::from_str(&json_str).expect("parse JSON");
+    assert_eq!(val["dist"], "gauss");
+    assert_eq!(val["variant"], "flat_simd");
+    let score = val["score"].as_f64().expect("score");
+    assert!(score > 0.0 && score <= 1.0, "score: {score}");
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}
