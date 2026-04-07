@@ -6,8 +6,16 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 RESULTS_DIR="$SCRIPT_DIR/../results/criterion"
 
 # W8 guard: abort if profiling feature is active — would contaminate timing
+# Check both explicit env var and cargo feature metadata
 if [[ -n "${CARGO_FEATURE_PROFILING:-}" ]]; then
     echo "ERROR: CARGO_FEATURE_PROFILING is set. Benchmark must run without profiling instrumentation." >&2
+    exit 1
+fi
+if cargo metadata --manifest-path "$REPO_ROOT/Cargo.toml" --format-version 1 --no-deps 2>/dev/null \
+   | python3 -c "import sys,json; feats=json.load(sys.stdin)['packages'][0].get('features',{}); sys.exit(0 if 'profiling' not in feats.get('default',[]) else 1)" 2>/dev/null; then
+    :
+else
+    echo "ERROR: 'profiling' is in default features. Benchmark must run without profiling instrumentation." >&2
     exit 1
 fi
 
