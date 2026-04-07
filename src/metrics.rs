@@ -485,6 +485,15 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
         this constraint is required by the normalization denominator and matches sklearn's ValueError",
         n / 2);
 
+    #[cfg(feature = "profiling")]
+    {
+        use std::sync::atomic::Ordering;
+        X_DIST_NS.store(0, Ordering::Relaxed);
+        X_SORT_NS.store(0, Ordering::Relaxed);
+        Y_DIST_NS.store(0, Ordering::Relaxed);
+        PENALTY_NS.store(0, Ordering::Relaxed);
+    }
+
     #[cfg(target_arch = "x86_64")]
     let use_avx2 = is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma");
     #[cfg(not(target_arch = "x86_64"))]
