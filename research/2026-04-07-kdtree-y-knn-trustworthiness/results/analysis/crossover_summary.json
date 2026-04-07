@@ -1,0 +1,11 @@
+{
+  "T_cross_estimate": null,
+  "T_cross_range": {
+    "rep1": null,
+    "rep2": null,
+    "rep3": null
+  },
+  "T_cross_stable": false,
+  "n75k_speedup_uniform": null,
+  "n75k_on_kdtree_faster_side": null
+}

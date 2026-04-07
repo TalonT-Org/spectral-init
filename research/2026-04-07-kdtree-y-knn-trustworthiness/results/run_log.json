@@ -1,0 +1,119 @@
+{
+  "criterion": [
+    {
+      "variant": "flat_simd",
+      "dist": "uniform",
+      "n": 1000,
+      "rep": 1,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "uniform",
+      "n": 1000,
+      "rep": 2,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "uniform",
+      "n": 1000,
+      "rep": 3,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "gauss",
+      "n": 1000,
+      "rep": 1,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "gauss",
+      "n": 1000,
+      "rep": 2,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "gauss",
+      "n": 1000,
+      "rep": 3,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "uniform",
+      "n": 1000,
+      "rep": 1,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "uniform",
+      "n": 1000,
+      "rep": 2,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "uniform",
+      "n": 1000,
+      "rep": 3,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "gauss",
+      "n": 1000,
+      "rep": 1,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "gauss",
+      "n": 1000,
+      "rep": 2,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "gauss",
+      "n": 1000,
+      "rep": 3,
+      "status": "completed"
+    }
+  ],
+  "profiler": [
+    {
+      "variant": "flat_simd",
+      "dist": "uniform",
+      "n": 1000,
+      "status": "completed"
+    },
+    {
+      "variant": "flat_simd",
+      "dist": "gauss",
+      "n": 1000,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "uniform",
+      "n": 1000,
+      "status": "completed"
+    },
+    {
+      "variant": "kdtree",
+      "dist": "gauss",
+      "n": 1000,
+      "status": "completed"
+    }
+  ],
+  "analysis": {
+    "status": "completed",
+    "timestamp": "2026-04-07T01:34:00.894227",
+    "dry_run": true
+  }
+}

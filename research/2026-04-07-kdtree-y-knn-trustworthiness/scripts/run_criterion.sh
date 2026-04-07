@@ -26,7 +26,7 @@ RAYON_NUM_THREADS="$(nproc)"
 # ---------------------------------------------------------------------------
 if [[ "$DRY_RUN" == "true" ]]; then
     N_VALUES=(1000)
-    EXTRA_FLAGS=(--sample-size 2 --warm-up-time 1 --measurement-time 2)
+    EXTRA_FLAGS=(--sample-size 10 --warm-up-time 1 --measurement-time 2)
 else
     N_VALUES=(1000 5000 10000 50000 75000 100000)
     EXTRA_FLAGS=(--measurement-time 10)
@@ -39,6 +39,7 @@ REPS=3
 # Ensure output directories exist
 # ---------------------------------------------------------------------------
 mkdir -p "$RESEARCH_DIR/results/criterion"
+mkdir -p "$PROJECT_ROOT/temp"
 
 # ---------------------------------------------------------------------------
 # Write run_metadata.json
@@ -61,6 +62,11 @@ echo "[run_criterion] metadata written (rust_channel=$RUST_CHANNEL, threads=$RAY
 
 # ---------------------------------------------------------------------------
 # Main loop — run cargo criterion for each variant × dist × n × rep
+#
+# cargo-criterion 1.1.0 with criterion 0.5 uses CBOR storage, not JSON.
+# We use --message-format json to get machine-readable output on stdout.
+# The filter "${group}/${n}" is precise enough to avoid substring matches
+# (e.g. "flat_simd_uniform_n1000/1000" does NOT match "n10000/10000").
 # ---------------------------------------------------------------------------
 LOG_ENTRIES=()
 
@@ -68,20 +74,46 @@ for variant in "${VARIANTS[@]}"; do
     for dist in "${DISTRIBUTIONS[@]}"; do
         for n in "${N_VALUES[@]}"; do
             group="${variant}_${dist}_n${n}"
+            bench_id="${group}/${n}"
             for rep in $(seq 1 "$REPS"); do
                 echo "[run_criterion] variant=$variant dist=$dist n=$n rep=$rep group=$group"
 
+                json_tmp="$PROJECT_ROOT/temp/criterion_json_$$.jsonl"
                 status="completed"
+
+                # stdout → JSON capture; stderr → terminal (progress/warnings)
                 if (cd "$PROJECT_ROOT" && cargo criterion \
                         --bench trustworthiness_bench \
-                        --features testing -- "$group" "${EXTRA_FLAGS[@]}"); then
-                    src="$PROJECT_ROOT/target/criterion/$group/$n/estimates.json"
+                        --features testing \
+                        --message-format json \
+                        -- "$bench_id" "${EXTRA_FLAGS[@]}" > "$json_tmp"); then
+
                     dst="$RESEARCH_DIR/results/criterion/${group}_rep${rep}.json"
-                    if [[ -f "$src" ]]; then
-                        cp "$src" "$dst"
-                        echo "[run_criterion]   -> copied estimates.json to $dst"
+
+                    # Extract the benchmark-complete line for our exact bench_id
+                    result_line=$(python3 -c "
+import json, sys
+target = sys.argv[1]
+jsonl = sys.argv[2]
+with open(jsonl) as f:
+    for line in f:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            d = json.loads(line)
+            if d.get('reason') == 'benchmark-complete' and d.get('id') == target:
+                print(line)
+                break
+        except Exception:
+            pass
+" "$bench_id" "$json_tmp" 2>/dev/null || true)
+
+                    if [[ -n "$result_line" ]]; then
+                        echo "$result_line" > "$dst"
+                        echo "[run_criterion]   -> saved estimates to $dst"
                     else
-                        echo "[run_criterion]   WARNING: estimates.json not found at $src" >&2
+                        echo "[run_criterion]   WARNING: no benchmark-complete for '$bench_id' in JSON output" >&2
                         status="missing_estimates"
                     fi
                 else
@@ -89,6 +121,7 @@ for variant in "${VARIANTS[@]}"; do
                     status="failed"
                 fi
 
+                rm -f "$json_tmp"
                 LOG_ENTRIES+=("{\"variant\": \"$variant\", \"dist\": \"$dist\", \"n\": $n, \"rep\": $rep, \"status\": \"$status\"}")
             done
         done

@@ -73,7 +73,7 @@ def median_estimate(variant: str, dist: str, n: int):
     for rep in range(1, REPS + 1):
         d = load_criterion(group, rep)
         if d is not None:
-            pe = d.get("median", {}).get("point_estimate")
+            pe = d.get("median", {}).get("estimate")
             if pe is not None:
                 estimates.append(float(pe))
     if not estimates:
@@ -81,11 +81,11 @@ def median_estimate(variant: str, dist: str, n: int):
     estimates_sorted = sorted(estimates)
     mid = len(estimates_sorted) // 2
     if len(estimates_sorted) % 2 == 1:
-        med = estimates_sorted[mid]
+        med = float(estimates_sorted[mid])
     else:
-        med = (estimates_sorted[mid - 1] + estimates_sorted[mid]) / 2.0
+        med = (float(estimates_sorted[mid - 1]) + float(estimates_sorted[mid])) / 2.0
     cv = _std(estimates) / _mean(estimates) if len(estimates) >= 2 else float("nan")
-    high_cv = (not math.isnan(cv)) and cv > 0.10
+    high_cv = (not math.isnan(cv)) and (cv > 0.10)
     return med, cv, high_cv
 
 
@@ -95,7 +95,7 @@ def median_estimate_single_rep(variant: str, dist: str, n: int, rep: int):
     d = load_criterion(group, rep)
     if d is None:
         return None
-    pe = d.get("median", {}).get("point_estimate")
+    pe = d.get("median", {}).get("estimate")
     return float(pe) if pe is not None else None
 
 
