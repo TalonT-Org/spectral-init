@@ -427,28 +427,30 @@ unsafe fn dist_sq_2d_avx2_batch(
     out: &mut [f64],
 ) {
     use std::arch::x86_64::*;
-    unsafe {
-        // Broadcast query: [yi[1], yi[0], yi[1], yi[0]] — _mm256_set_pd args are (e3,e2,e1,e0)
-        let yi_bc = _mm256_set_pd(yi[1], yi[0], yi[1], yi[0]);
-        let mut j = 0usize;
-        while j + 1 < n {
-            // Load two target points: [yj[0], yj[1], yj+1[0], yj+1[1]]
-            let yj_pair = _mm256_loadu_pd(y_flat.as_ptr().add(j * 2));
-            let diff = _mm256_sub_pd(yi_bc, yj_pair);
-            let sq   = _mm256_mul_pd(diff, diff);
-            // hadd: lower 128-bit → sq[0]+sq[1] = dist_j; upper 128-bit → sq[2]+sq[3] = dist_{j+1}
-            let hadd = _mm256_hadd_pd(sq, sq);
-            out[j]     = _mm_cvtsd_f64(_mm256_castpd256_pd128(hadd));
-            out[j + 1] = _mm_cvtsd_f64(_mm256_extractf128_pd(hadd, 1));
-            j += 2;
-        }
-        // Scalar tail for odd n
-        if j < n {
-            let base = j * 2;
-            let d0 = yi[0] - y_flat[base];
-            let d1 = yi[1] - y_flat[base + 1];
-            out[j] = d0 * d0 + d1 * d1;
-        }
+    debug_assert!(yi.len() >= 2, "yi must have at least 2 elements");
+    debug_assert!(y_flat.len() >= n * 2, "y_flat must have at least n*2 elements");
+    debug_assert!(out.len() >= n, "out must have at least n elements");
+    // Broadcast query: [yi[1], yi[0], yi[1], yi[0]] — _mm256_set_pd args are (e3,e2,e1,e0)
+    let yi_bc = _mm256_set_pd(yi[1], yi[0], yi[1], yi[0]);
+    let mut j = 0usize;
+    while j + 1 < n {
+        // Load two target points: [yj[0], yj[1], yj+1[0], yj+1[1]]
+        debug_assert!(j * 2 + 3 < y_flat.len(), "y_flat bounds exceeded at j={j}");
+        let yj_pair = _mm256_loadu_pd(y_flat.as_ptr().add(j * 2));
+        let diff = _mm256_sub_pd(yi_bc, yj_pair);
+        let sq   = _mm256_mul_pd(diff, diff);
+        // hadd: lower 128-bit → sq[0]+sq[1] = dist_j; upper 128-bit → sq[2]+sq[3] = dist_{j+1}
+        let hadd = _mm256_hadd_pd(sq, sq);
+        out[j]     = _mm_cvtsd_f64(_mm256_castpd256_pd128(hadd));
+        out[j + 1] = _mm_cvtsd_f64(_mm256_extractf128_pd(hadd, 1));
+        j += 2;
+    }
+    // Scalar tail for odd n
+    if j < n {
+        let base = j * 2;
+        let d0 = yi[0] - y_flat[base];
+        let d1 = yi[1] - y_flat[base + 1];
+        out[j] = d0 * d0 + d1 * d1;
     }
 }
 
