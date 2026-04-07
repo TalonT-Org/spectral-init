@@ -150,6 +150,15 @@ def compute_hypothesis(data: dict, results_dir: Path) -> tuple:
         "ci_synthetic": entry.get("ci_synthetic", False),
     }
 
+    if entry.get("ci_synthetic", False):
+        return ("INCONCLUSIVE", {
+            **details,
+            "primary_text": (
+                "INCONCLUSIVE — CI data is synthetic (±5% fallback); "
+                "cannot declare statistical significance from heuristic bounds"
+            ),
+        })
+
     if ratio_ci_lb is not None and ratio_ci_lb > 1.0:
         primary = "POSITIVE"
         details["primary_text"] = (
