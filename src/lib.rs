@@ -135,6 +135,7 @@ pub use crate::metrics::{
     spectral_gap,
     eigenvalue_condition_number,
     trustworthiness,
+    trustworthiness_inner,
     DENSE_EVD_QUALITY_THRESHOLD,
     LOBPCG_QUALITY_THRESHOLD,
     SINV_LOBPCG_QUALITY_THRESHOLD,

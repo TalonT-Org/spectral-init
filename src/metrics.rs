@@ -683,8 +683,8 @@ fn trustworthiness_flat(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64
     1.0 - penalty_sum * 2.0 / denom
 }
 
-#[cfg(test)]
-fn trustworthiness_inner(
+#[cfg(any(test, feature = "testing"))]
+pub(crate) fn trustworthiness_inner(
     x: ArrayView2<f64>,
     y: ArrayView2<f64>,
     k: usize,

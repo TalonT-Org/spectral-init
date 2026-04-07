@@ -20,7 +20,7 @@ from pathlib import Path
 
 import numpy as np
 
-N_VALUES = [1000, 5000, 10000, 50000, 100000]
+N_VALUES = [1000, 5000, 10000, 50000, 75000, 100000]
 D_X = 10
 D_Y = 2
 N_CLUSTERS = 8

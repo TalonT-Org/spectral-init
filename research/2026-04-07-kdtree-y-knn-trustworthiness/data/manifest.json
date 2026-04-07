@@ -161,6 +161,46 @@
       "verified": true
     },
     {
+      "filename": "uniform_n75000_x.npy",
+      "shape": [
+        75000,
+        10
+      ],
+      "source_type": "generated",
+      "seed": 42,
+      "verified": true
+    },
+    {
+      "filename": "uniform_n75000_y.npy",
+      "shape": [
+        75000,
+        2
+      ],
+      "source_type": "generated",
+      "seed": 42,
+      "verified": true
+    },
+    {
+      "filename": "gauss_n75000_x.npy",
+      "shape": [
+        75000,
+        10
+      ],
+      "source_type": "generated",
+      "seed": 99,
+      "verified": true
+    },
+    {
+      "filename": "gauss_n75000_y.npy",
+      "shape": [
+        75000,
+        2
+      ],
+      "source_type": "generated",
+      "seed": 99,
+      "verified": true
+    },
+    {
       "filename": "uniform_n100000_x.npy",
       "shape": [
         100000,
