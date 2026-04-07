@@ -1,407 +1,322 @@
-# Implementation Plan: KD-tree Core — groupC KD-tree y-NN Trustworthiness
+# Implementation Plan: groupD — Benchmark Extension (trustworthiness_bench.rs)
 
 ## Summary
 
-Extend `src/metrics.rs` with a KD-tree code path for `trustworthiness()` experiments.
-The production path is preserved with zero behavioral change by factoring the existing
-flat_simd body into a private always-compiled `trustworthiness_flat()`. A new
-test/bench-gated `trustworthiness_inner(use_kdtree: bool)` dispatches between
-`trustworthiness_flat()` (false branch) and a kiddo-powered KD-tree path (true branch).
-Two new profiling atomics at module scope track KD-tree build and query time.
+Extend the Criterion benchmark suite so that both the flat_simd and KD-tree variants of
+`trustworthiness_inner` are benchmarked across all (distribution × n) cells, including the
+held-out n=75 K validation point. Key structural changes:
 
-**Key constraint:** `kiddo` is a dev-dependency — it cannot appear in code compiled
-into the production library binary. `trustworthiness_inner` is gated behind
-`#[cfg(any(test, feature = "testing"))]` to match the compilation contexts where
-kiddo is available (all benches require `--features testing`; tests use `cfg(test)`).
+1. **`src/metrics.rs`** — relax `trustworthiness_inner`'s cfg gate from `#[cfg(test)]` to
+   `#[cfg(any(test, feature = "testing"))]` and lift visibility to `pub(crate)`, so bench
+   binaries compiled with `--features testing` can call it.
+2. **`src/lib.rs`** — add `trustworthiness_inner` to the existing
+   `#[cfg(feature = "testing")]` re-export block so the bench can reach it as
+   `spectral_init::trustworthiness_inner`.
+3. **`research/.../scripts/gen_data.py`** — add 75000 to `N_VALUES` so the 75 K `.npy`
+   files are generated.
+4. **`benches/trustworthiness_bench.rs`** — replace the current single-group benchmark with
+   24 Criterion groups (2 distributions × 6 n-values × 2 variants), loading real `.npy`
+   data, with per-sample build-time telemetry on the KD-tree variant.
+
+---
 
 ## Proposed Architecture
 
 ```mermaid
-%%{init: {'flowchart': {'nodeSpacing': 45, 'rankSpacing': 55, 'curve': 'basis'}}}%%
+%%{init: {'flowchart': {'nodeSpacing': 50, 'rankSpacing': 60, 'curve': 'basis'}}}%%
 flowchart TB
     %% CLASS DEFINITIONS %%
-    classDef terminal fill:#1a237e,stroke:#7986cb,stroke-width:2px,color:#fff;
+    classDef cli fill:#1a237e,stroke:#7986cb,stroke-width:2px,color:#fff;
     classDef stateNode fill:#004d40,stroke:#4db6ac,stroke-width:2px,color:#fff;
     classDef handler fill:#e65100,stroke:#ffb74d,stroke-width:2px,color:#fff;
     classDef phase fill:#6a1b9a,stroke:#ba68c8,stroke-width:2px,color:#fff;
     classDef newComponent fill:#2e7d32,stroke:#81c784,stroke-width:2px,color:#fff;
+    classDef output fill:#00695c,stroke:#4db6ac,stroke-width:2px,color:#fff;
     classDef detector fill:#b71c1c,stroke:#ef5350,stroke-width:2px,color:#fff;
+    classDef terminal fill:#1a237e,stroke:#7986cb,stroke-width:2px,color:#fff;
 
-    CALL([Caller])
-    DONE([Result: f64])
-
-    subgraph PublicAPI ["Public API (always compiled)"]
-        TW["● trustworthiness()<br/>━━━━━━━━━━<br/>Thin wrapper<br/>cfg-dispatches to inner or flat"]
-        CFGCHECK{"build context?"}
+    subgraph SrcLayer ["SOURCE CHANGES"]
+        METRICS["● src/metrics.rs<br/>━━━━━━━━━━<br/>trustworthiness_inner<br/>cfg: any(test,feature=testing)<br/>visibility: pub(crate)"]
+        LIBRS["● src/lib.rs<br/>━━━━━━━━━━<br/>pub use trustworthiness_inner<br/>under cfg(feature = testing)"]
     end
 
-    subgraph Inner ["★ trustworthiness_inner() — cfg(test | feature=testing)"]
-        INNER["★ trustworthiness_inner<br/>(x, y, k, use_kdtree: bool)<br/>━━━━━━━━━━<br/>Runtime dispatch"]
-        KDCHECK{"use_kdtree?"}
+    subgraph DataLayer ["DATA LAYER"]
+        GENDATA["● scripts/gen_data.py<br/>━━━━━━━━━━<br/>N_VALUES adds 75000<br/>uniform + gauss × 6 sizes"]
+        NPYFILES["research/data/*.npy<br/>━━━━━━━━━━<br/>24 files: {uniform,gauss} ×<br/>n{1K,5K,10K,50K,75K,100K} × {x,y}"]
     end
 
-    subgraph FlatPath ["trustworthiness_flat() — always compiled"]
-        FLAT["● trustworthiness_flat()<br/>━━━━━━━━━━<br/>Existing flat_simd logic<br/>4 function-scope profiling atomics"]
-        XDIST["x_dist step<br/>━━━━━━━━━━<br/>AVX2 or scalar<br/>+ X_DIST_NS"]
-        XSORT["x_sort step<br/>━━━━━━━━━━<br/>select_nth_unstable<br/>+ X_SORT_NS"]
-        YDIST["y_dist step (flat_simd)<br/>━━━━━━━━━━<br/>AVX2 batch or scalar<br/>+ Y_DIST_NS"]
-        PEN1["penalty step<br/>━━━━━━━━━━<br/>scan-rank sum<br/>+ PENALTY_NS"]
+    subgraph BenchLayer ["BENCHMARK LAYER"]
+        CARGOML["Cargo.toml<br/>━━━━━━━━━━<br/>features = testing (required)<br/>ndarray-npy, kiddo in dev-deps"]
+        BENCHRS["★ benches/trustworthiness_bench.rs<br/>━━━━━━━━━━<br/>load_npy_pair() helper<br/>24 Criterion groups<br/>flat_simd + kdtree variants<br/>10 samples · 10 s warm_up"]
     end
 
-    subgraph KDPath ["★ KD-tree path — inside trustworthiness_inner(true)"]
-        KDBUILD["★ Build ImmutableKdTree<br/>━━━━━━━━━━<br/>Vec<[f64;2]> → Arc<tree><br/>+ Y_KDTREE_BUILD_NS"]
-        XDIST2["x_dist step<br/>━━━━━━━━━━<br/>scalar loop<br/>(own thread-locals)"]
-        XSORT2["x_sort step<br/>━━━━━━━━━━<br/>select_nth_unstable"]
-        KDQUERY["★ KD-tree query<br/>━━━━━━━━━━<br/>tree.nearest_n(k+1)<br/>filter self → take k<br/>+ Y_KDTREE_QUERY_NS"]
-        PEN2["penalty step<br/>━━━━━━━━━━<br/>scan-rank sum<br/>(identical to flat path)"]
+    subgraph QualityGate ["QUALITY GATE"]
+        CARGO_BENCH["cargo bench<br/>━━━━━━━━━━<br/>--bench trustworthiness_bench<br/>--features testing"]
     end
 
-    CALL --> TW
-    TW --> CFGCHECK
-    CFGCHECK -->|"test / testing build"| INNER
-    CFGCHECK -->|"prod build"| FLAT
+    subgraph Outputs ["OUTPUTS"]
+        CRITERION_HTML["target/criterion/**<br/>━━━━━━━━━━<br/>HTML + JSON reports<br/>per Criterion group"]
+        STDERR_TEL["stderr telemetry<br/>━━━━━━━━━━<br/>[bench:build_ms] &lt;f64&gt;<br/>one per KD-tree sample"]
+    end
 
-    INNER --> KDCHECK
-    KDCHECK -->|"false"| FLAT
-    KDCHECK -->|"true"| KDBUILD
+    METRICS --> LIBRS
+    GENDATA --> NPYFILES
+    NPYFILES --> BENCHRS
+    LIBRS --> BENCHRS
+    CARGOML --> BENCHRS
+    BENCHRS --> CARGO_BENCH
+    CARGO_BENCH --> CRITERION_HTML
+    CARGO_BENCH --> STDERR_TEL
 
-    FLAT --> XDIST --> XSORT --> YDIST --> PEN1 --> DONE
-    KDBUILD --> XDIST2 --> XSORT2 --> KDQUERY --> PEN2 --> DONE
-
-    class CALL,DONE terminal;
-    class TW,FLAT handler;
-    class INNER newComponent;
-    class CFGCHECK,KDCHECK stateNode;
-    class XDIST,XSORT,YDIST,PEN1,XDIST2,XSORT2,PEN2 phase;
-    class KDBUILD,KDQUERY newComponent;
+    class METRICS,LIBRS handler;
+    class GENDATA handler;
+    class NPYFILES stateNode;
+    class CARGOML phase;
+    class BENCHRS newComponent;
+    class CARGO_BENCH detector;
+    class CRITERION_HTML,STDERR_TEL output;
 ```
 
-**Lens Used:** Process Flow — the plan changes runtime dispatch logic, adding a
-decision point (`use_kdtree: bool`) that routes between two y-NN execution paths.
+**Lens Used:** Development — the plan restructures benchmark infrastructure (Criterion groups,
+data loading, build-time telemetry); the changes live entirely in the build/test quality-gate
+layer.
 
 **Color Legend:**
 | Color | Category | Description |
 |-------|----------|-------------|
-| Dark Blue | Terminal | Call site and result |
-| Teal | State | Runtime cfg/bool decision points |
-| Orange | Handler | Existing functions (modified) |
-| Green | New Component | New functions and KD-tree steps |
-| Purple | Phase | Processing steps in Rayon loop |
+| Orange | Handler | Modified source files |
+| Dark Teal | State | Generated .npy data files |
+| Purple | Phase | Build configuration (Cargo.toml) |
+| Green | New Component | New benchmark file |
+| Dark Red | Detector | Quality gate (cargo bench invocation) |
+| Dark Teal (output) | Output | Criterion reports, stderr telemetry |
+
+---
 
 ## Tests
 
-Write these tests first — they should fail before implementation and pass after.
+These verification commands should **fail before the plan is implemented** and **pass after**.
 
-### t_tw_11_kdtree_matches_baseline
-**File:** `src/metrics.rs`, inside `mod tests`  
-**Gate:** `#[test]` (no extra cfg — `trustworthiness_inner` is available inside `#[cfg(test)]`)  
-**Condition to fail now:** `trustworthiness_inner` does not exist yet.
-
-```rust
-#[test]
-fn t_tw_11_kdtree_matches_baseline() {
-    use rand::{SeedableRng, Rng};
-    let mut rng = rand::rngs::SmallRng::seed_from_u64(123);
-    let n = 50;
-    let x = ndarray::Array2::from_shape_fn((n, 6), |_| rng.random::<f64>());
-    let y = ndarray::Array2::from_shape_fn((n, 2), |_| rng.random::<f64>());
-
-    for k in [3usize, 7] {
-        let t_kd = trustworthiness_inner(x.view(), y.view(), k, true);
-        let t_ref = trustworthiness_brute_force(x.view(), y.view(), k);
-        assert!(t_kd.is_finite(), "T_kdtree(k={k}) must be finite, got {t_kd}");
-        assert!(t_kd >= 0.0 && t_kd <= 1.0, "T_kdtree(k={k}) out of [0,1]: {t_kd}");
-        assert!(
-            (t_kd - t_ref).abs() < 1e-12,
-            "T_kdtree(k={k})={t_kd} diverges from brute-force={t_ref} by {}",
-            (t_kd - t_ref).abs()
-        );
-    }
-}
+### T1 — Bench compilation check
 ```
+cargo build --bench trustworthiness_bench --features testing 2>&1
+```
+**Fails now:** `trustworthiness_inner` is behind `#[cfg(test)]` only; not visible to bench.
+**Passes after:** cfg gate is widened and `pub(crate)` + re-export are in place.
 
-**Verify fails before implementation:**
+### T2 — Smoke run (PHASE-4.5)
 ```
-cargo test t_tw_11 --features testing
-# Expected: compile error — `trustworthiness_inner` not found
+cargo bench --bench trustworthiness_bench --features testing \
+    -- flat_simd_uniform_n1000 --profile-time 5
 ```
+**Fails now:** bench doesn't compile (same root as T1); also lacks npy files for n=75K.
+**Passes after:** all steps complete.
+
+### T3 — KD-tree telemetry present
+Run any kdtree group and confirm stderr contains `[bench:build_ms]`:
+```
+cargo bench --bench trustworthiness_bench --features testing \
+    -- kdtree_uniform_n1000 --profile-time 2 2>&1 | grep '\[bench:build_ms\]'
+```
+**Fails now:** bench doesn't exist in the current form.
+**Passes after:** Step 4 is complete.
+
+### T4 — 75K data files exist
+```
+ls research/2026-04-07-kdtree-y-knn-trustworthiness/data/ | grep n75000
+```
+**Fails now:** gen_data.py omits n=75000; no files generated.
+**Passes after:** Step 3 + data generation are complete.
+
+---
 
 ## Implementation Steps
 
-### Step 1 — Add module-scope profiling atomics (PHASE-3a)
+### Step 1 — Widen cfg gate and visibility on `trustworthiness_inner` (`src/metrics.rs`)
 
-In `src/metrics.rs`, add two new module-scope static atomics immediately before or after
-the existing `#[cfg(feature = "testing")]` data structures block (around line 676).
-These must be at module scope (not inside a function) so that `trustworthiness_flat()`
-can read them for printing and `trustworthiness_inner()` can write to them.
-
+At line 686, change:
 ```rust
-// ─── KD-tree profiling atomics (module scope) ─────────────────────────────────
-#[cfg(feature = "profiling")]
-static Y_KDTREE_BUILD_NS: std::sync::atomic::AtomicU64 =
-    std::sync::atomic::AtomicU64::new(0);
-#[cfg(feature = "profiling")]
-static Y_KDTREE_QUERY_NS: std::sync::atomic::AtomicU64 =
-    std::sync::atomic::AtomicU64::new(0);
+#[cfg(test)]
+fn trustworthiness_inner(
 ```
-
-### Step 2 — Extract flat body to `trustworthiness_flat()` (PHASE-3b/3c prerequisite)
-
-Move the entire body of `trustworthiness()` (lines 479–673 in the current file) into a
-new private function with the same signature:
-
-```rust
-fn trustworthiness_flat(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 {
-    // ... entire current body of trustworthiness() ...
-}
-```
-
-Then extend its profiling print block (currently lines 663–670) to also emit the two
-new module-scope atomics:
-
-```rust
-#[cfg(feature = "profiling")]
-{
-    use std::sync::atomic::Ordering;
-    eprintln!("[timing:x_dist] {}",         X_DIST_NS.load(Ordering::Relaxed));
-    eprintln!("[timing:x_sort] {}",         X_SORT_NS.load(Ordering::Relaxed));
-    eprintln!("[timing:y_dist] {}",         Y_DIST_NS.load(Ordering::Relaxed));
-    eprintln!("[timing:penalty] {}",        PENALTY_NS.load(Ordering::Relaxed));
-    eprintln!("[timing:y_kdtree_build] {}", Y_KDTREE_BUILD_NS.load(Ordering::Relaxed));
-    eprintln!("[timing:y_kdtree_query] {}", Y_KDTREE_QUERY_NS.load(Ordering::Relaxed));
-}
-```
-
-Note: In the flat path, `Y_KDTREE_BUILD_NS` and `Y_KDTREE_QUERY_NS` will always
-be 0 — this is correct. They are printed for completeness and consistency.
-
-### Step 3 — Refactor `trustworthiness()` to delegate (PHASE-3c)
-
-Replace the now-extracted body with conditional delegation:
-
-```rust
-pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 {
-    #[cfg(any(test, feature = "testing"))]
-    return trustworthiness_inner(x, y, k, false);
-
-    #[cfg(not(any(test, feature = "testing")))]
-    trustworthiness_flat(x, y, k)
-}
-```
-
-This ensures:
-- **Production builds** (no features): direct call to `trustworthiness_flat()`, identical behavior.
-- **Test/bench builds** (test cfg or `--features testing`): delegate to `trustworthiness_inner(false)` → `trustworthiness_flat()`, identical behavior.
-- Zero behavioral change on either path.
-
-### Step 4 — Add `trustworthiness_inner()` with KD-tree branch (PHASE-3b + PHASE-3d)
-
-Add the following function immediately after `trustworthiness()`. It must be gated
-so kiddo (a dev-dependency) is only imported when available:
-
+to:
 ```rust
 #[cfg(any(test, feature = "testing"))]
-fn trustworthiness_inner(
-    x: ArrayView2<f64>,
-    y: ArrayView2<f64>,
-    k: usize,
-    use_kdtree: bool,
-) -> f64 {
-    if !use_kdtree {
-        return trustworthiness_flat(x, y, k);
-    }
+pub(crate) fn trustworthiness_inner(
+```
 
-    // ── KD-tree path (assumes d_y == 2) ──────────────────────────────────────
-    // d_y == 2 is required by ImmutableKdTree<f64, u32, 2, 32>. The caller is
-    // responsible for ensuring this; the assertion below guards misuse.
-    debug_assert_eq!(y.ncols(), 2, "trustworthiness_inner: KD-tree path requires d_y == 2");
+No other changes to `metrics.rs`. The function body stays identical.
 
-    use std::cell::RefCell;
-    use std::collections::HashSet;
-    use std::num::NonZero;
-    use std::sync::Arc;
-    use kiddo::{ImmutableKdTree, SquaredEuclidean};
-    use rayon::prelude::*;
+**Rationale:** `cargo bench` does not set `cfg(test)`. Benches with `--features testing` need
+the function; `pub(crate)` is the minimal visibility that lets `lib.rs` re-export it.
 
-    let n = x.nrows();
-    assert_eq!(y.nrows(), n,
-        "trustworthiness_inner: x and y must have the same number of rows");
-    assert!(k > 0, "trustworthiness_inner: k must be > 0");
-    assert!(k < n / 2,
-        "trustworthiness_inner: k must be < n/2 (got k={k}, n={n})");
+---
 
-    // ── Build KD-tree (outside Rayon loop) ───────────────────────────────────
-    #[cfg(feature = "profiling")]
-    let t_build = std::time::Instant::now();
+### Step 2 — Re-export `trustworthiness_inner` from `src/lib.rs`
 
-    let points: Vec<[f64; 2]> = (0..n)
-        .map(|i| [y[[i, 0]], y[[i, 1]]])
-        .collect();
-    let tree: Arc<ImmutableKdTree<f64, u32, 2, 32>> =
-        Arc::new(ImmutableKdTree::new_from_slice(&points));
+In the existing `#[cfg(feature = "testing")]` block (lines 123–147), add
+`trustworthiness_inner` to the `pub use crate::metrics::{...}` list:
 
-    #[cfg(feature = "profiling")]
-    Y_KDTREE_BUILD_NS.fetch_add(
-        t_build.elapsed().as_nanos() as u64,
-        std::sync::atomic::Ordering::Relaxed,
-    );
+```rust
+#[cfg(feature = "testing")]
+#[doc(hidden)]
+pub use crate::metrics::{
+    // ... existing symbols ...
+    trustworthiness,
+    trustworthiness_inner,   // ← ADD THIS LINE
+    // ... rest unchanged ...
+};
+```
 
-    // Thread-local X buffers (separate from trustworthiness_flat's pools)
-    thread_local! {
-        static KD_DIST_X:  RefCell<Vec<f64>>   = const { RefCell::new(Vec::new()) };
-        static KD_INDICES: RefCell<Vec<usize>> = const { RefCell::new(Vec::new()) };
-    }
+The bench then calls `spectral_init::trustworthiness_inner(x.view(), y.view(), k, flag)`.
 
-    // ── Rayon parallel loop ───────────────────────────────────────────────────
-    let penalty_sum: f64 = (0..n).into_par_iter().map(|i| {
-        let xi = x.row(i);
+---
 
-        KD_DIST_X.with(|dist_x_cell| {
-            KD_INDICES.with(|indices_cell| {
-                let mut dist_x  = dist_x_cell.borrow_mut();
-                let mut indices = indices_cell.borrow_mut();
+### Step 3 — Add n=75000 to `gen_data.py`
 
-                // ── x_dist step ──────────────────────────────────────────────
-                dist_x.clear();
-                dist_x.resize(n, 0.0f64);
-                for j in 0..n {
-                    let xj = x.row(j);
-                    dist_x[j] = xi.iter()
-                        .zip(xj.iter())
-                        .map(|(&a, &b)| (a - b) * (a - b))
-                        .sum();
-                }
+File: `research/2026-04-07-kdtree-y-knn-trustworthiness/scripts/gen_data.py`
 
-                // ── x_sort step ──────────────────────────────────────────────
-                indices.clear();
-                indices.extend(0..n);
-                indices.select_nth_unstable_by(k, |&a, &b| {
-                    dist_x[a].total_cmp(&dist_x[b]).then(a.cmp(&b))
-                });
-                let knn_x_set: HashSet<usize> =
-                    indices[..=k].iter().filter(|&&m| m != i).copied().collect();
+Change line 23:
+```python
+N_VALUES = [1000, 5000, 10000, 50000, 100000]
+```
+to:
+```python
+N_VALUES = [1000, 5000, 10000, 50000, 75000, 100000]
+```
 
-                // ── y_dist step (KD-tree) ─────────────────────────────────────
-                #[cfg(feature = "profiling")]
-                let t_query = std::time::Instant::now();
+No other changes needed — the script iterates `N_VALUES` uniformly for both distributions.
 
-                let results = tree.nearest_n::<SquaredEuclidean>(
-                    &[y[[i, 0]], y[[i, 1]]],
-                    NonZero::new(k + 1).unwrap(),
-                );
-                let knn_y_indices: Vec<usize> = results
-                    .into_iter()
-                    .filter(|nb| nb.item as usize != i)
-                    .take(k)
-                    .map(|nb| nb.item as usize)
-                    .collect();
+Then regenerate the data (run from the `research/2026-04-07-kdtree-y-knn-trustworthiness/`
+directory):
+```sh
+python scripts/gen_data.py
+```
+Verify `data/uniform_n75000_x.npy`, `data/uniform_n75000_y.npy`,
+`data/gauss_n75000_x.npy`, `data/gauss_n75000_y.npy` are created with `verified=true`
+in `data/manifest.json`.
 
-                #[cfg(feature = "profiling")]
-                Y_KDTREE_QUERY_NS.fetch_add(
-                    t_query.elapsed().as_nanos() as u64,
-                    std::sync::atomic::Ordering::Relaxed,
-                );
+---
 
-                // ── penalty step (identical to flat path) ─────────────────────
-                let mut row_penalty = 0u64;
-                for &j in &knn_y_indices {
-                    if !knn_x_set.contains(&j) {
-                        let dj = dist_x[j];
-                        let rank: usize = (0..n)
-                            .filter(|&m| dist_x[m] < dj || (dist_x[m] == dj && m < j))
-                            .count();
-                        row_penalty += (rank - k) as u64;
-                    }
-                }
-                row_penalty as f64
-            })
-        })
-    }).sum();
+### Step 4 — Rewrite `benches/trustworthiness_bench.rs`
 
-    #[cfg(feature = "profiling")]
-    {
-        use std::sync::atomic::Ordering;
-        eprintln!("[timing:y_kdtree_build] {}",
-            Y_KDTREE_BUILD_NS.load(Ordering::Relaxed));
-        eprintln!("[timing:y_kdtree_query] {}",
-            Y_KDTREE_QUERY_NS.load(Ordering::Relaxed));
-    }
+Replace the entire file contents with the following structure:
 
-    let denom = n as f64 * k as f64 * (2 * n).saturating_sub(3 * k + 1) as f64;
-    1.0 - penalty_sum * 2.0 / denom
+```rust
+use criterion::{BenchmarkId, Criterion, SamplingMode, criterion_group, criterion_main};
+use kiddo::{ImmutableKdTree, SquaredEuclidean};
+use ndarray::Array2;
+use ndarray_npy::read_npy;
+use std::hint::black_box;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+const DATA_DIR: &str =
+    "research/2026-04-07-kdtree-y-knn-trustworthiness/data";
+const K: usize = 15;
+const DISTRIBUTIONS: &[&str] = &["uniform", "gauss"];
+const N_VALUES: &[usize] = &[1_000, 5_000, 10_000, 50_000, 75_000, 100_000];
+
+fn load_npy_pair(dist: &str, n: usize) -> (Array2<f64>, Array2<f64>) {
+    let x: Array2<f64> =
+        read_npy(format!("{DATA_DIR}/{dist}_n{n}_x.npy")).unwrap();
+    let y: Array2<f64> =
+        read_npy(format!("{DATA_DIR}/{dist}_n{n}_y.npy")).unwrap();
+    (x, y)
 }
+
+fn bench_variants(c: &mut Criterion) {
+    let _ = rayon::current_num_threads(); // warm rayon
+
+    for &dist in DISTRIBUTIONS {
+        for &n in N_VALUES {
+            let (x, y) = load_npy_pair(dist, n);
+
+            // ── flat_simd group ──────────────────────────────────────────────
+            let mut group = c.benchmark_group(
+                format!("flat_simd_{dist}_n{n}")
+            );
+            group.sampling_mode(SamplingMode::Flat);
+            group.sample_size(10);
+            group.warm_up_time(Duration::from_secs(10));
+            group.bench_function(BenchmarkId::from_parameter(n), |b| {
+                b.iter(|| {
+                    black_box(spectral_init::trustworthiness_inner(
+                        x.view(), y.view(), K, false,
+                    ))
+                });
+            });
+            group.finish();
+
+            // ── kdtree group ─────────────────────────────────────────────────
+            let mut group = c.benchmark_group(
+                format!("kdtree_{dist}_n{n}")
+            );
+            group.sampling_mode(SamplingMode::Flat);
+            group.sample_size(10);
+            group.warm_up_time(Duration::from_secs(10));
+            group.bench_function(BenchmarkId::from_parameter(n), |b| {
+                // Capture one build-time measurement per sample,
+                // outside the Criterion measurement closure.
+                let t_build = Instant::now();
+                let points: Vec<[f64; 2]> = (0..n)
+                    .map(|i| [y[[i, 0]], y[[i, 1]]])
+                    .collect();
+                let _tree: Arc<ImmutableKdTree<f64, 2>> =
+                    Arc::new(ImmutableKdTree::new_from_slice(&points));
+                let build_ms = t_build.elapsed().as_secs_f64() * 1_000.0;
+                eprintln!("[bench:build_ms] {build_ms:.6}");
+
+                b.iter(|| {
+                    black_box(spectral_init::trustworthiness_inner(
+                        x.view(), y.view(), K, true,
+                    ))
+                });
+            });
+            group.finish();
+        }
+    }
+}
+
+criterion_group!(benches, bench_variants);
+criterion_main!(benches);
 ```
 
-**Implementation notes:**
+**Key design decisions:**
+- The old `make_data` / `"trustworthiness"` group is removed. All coverage is superseded by
+  the new per-(dist, n) groups with real experimental data.
+- Criterion groups are named without parameter suffix in `BenchmarkId::from_parameter(n)`:
+  Criterion renders them as `flat_simd_uniform_n1000/1000`, but filter matching on
+  `flat_simd_uniform_n1000` selects the whole group (all parameter variants within it),
+  which is what PHASE-4.5 requires.
+- `flat_simd` group comes before `kdtree` group for every (dist, n) pair — conservative
+  cache-warming bias against KD-tree (W8, documented in experiment plan).
+- Build-time capture builds the tree once outside `b.iter()` for measurement. The full
+  `trustworthiness_inner(..., true)` call inside `b.iter()` builds it again internally —
+  this is intentional: Criterion's measurement covers the complete computation including
+  tree construction, and the separate capture provides the isolated build-time signal.
 
-- **kiddo `Send + Sync`:** `ImmutableKdTree` is `Sync` (immutable after construction).
-  `Arc<ImmutableKdTree>` is `Send + Sync`, so the Rayon closure captures `tree` by
-  reference (via `Arc` deref). No per-iteration clone needed — Rayon can share a
-  `Sync` reference across threads via the captured `Arc`.
+---
 
-- **Self-exclusion:** Query returns `k+1` results. The `.filter(|nb| nb.item as usize != i)`
-  removes the self-hit (point `i` is always the nearest neighbor to itself). `.take(k)`
-  ensures exactly `k` neighbors are retained.
+### Step 5 — Verify (PHASE-4.5)
 
-- **`NonZero::new(k + 1)`:** `k >= 1` is asserted at entry, so `k + 1 >= 2` — the
-  `unwrap()` is safe.
-
-- **Thread-local naming:** `KD_DIST_X` / `KD_INDICES` are distinct names from
-  `COMB_DIST_X` / `COMB_INDICES` in `trustworthiness_flat()`. In Rust, function-body
-  `thread_local!` statics are unique items even if given the same name; using distinct
-  names avoids confusion and potential future shadowing issues.
-
-- **No AVX2 dispatch in KD-tree path:** The x_dist step in the KD-tree branch uses
-  scalar arithmetic. The experiment is measuring y-NN KD-tree vs flat_simd; mixing
-  in SIMD for X would add confounding variance. The flat_simd comparison path is
-  isolated to the `use_kdtree = false` branch (via `trustworthiness_flat()`).
-
-### Step 5 — Add test `t_tw_11_kdtree_matches_baseline` (PHASE-3e)
-
-Add the test from the **Tests** section above to `src/metrics.rs` inside `mod tests`,
-immediately after `t_tw_10_self_exclusion_never_in_knn`.
-
-No additional imports needed inside `mod tests` — `trustworthiness_inner` is visible
-within the test module (same crate, `#[cfg(test)]` applies).
-
-### Step 6 — Verify (PHASE-3e + PHASE-3f)
-
-Run in order:
-
-```bash
-# New test
-cargo test t_tw_11 --features testing
-
-# Existing regression guard
-cargo test t_tw_08 t_tw_10 --features testing
+```sh
+cargo bench --bench trustworthiness_bench --features testing \
+    -- flat_simd_uniform_n1000 --profile-time 5
 ```
 
-All three tests must pass with zero failures.
+This must exit 0 with Criterion output for the `flat_simd_uniform_n1000` group.
+
+---
 
 ## Verification
 
-1. **Correctness:** `t_tw_11_kdtree_matches_baseline` asserts `|T_kdtree − T_brute_force| < 1e-12`
-   for k ∈ {3, 7} on a 50×6 / 50×2 dataset with seed 123. This catches any off-by-one
-   in self-exclusion, incorrect k-NN selection, or wrong penalty formula.
-
-2. **Non-regression:** `t_tw_08` and `t_tw_10` continue to pass. Because `trustworthiness()`
-   in a test build now delegates through `trustworthiness_inner(false)` → `trustworthiness_flat()`,
-   these tests exercise the full delegation chain.
-
-3. **Production compile check:**
-   ```bash
-   cargo build --release
-   # Must compile without any reference to kiddo — trustworthiness_inner is not compiled
-   ```
-
-4. **Profiling compile check:**
-   ```bash
-   cargo build --features profiling,testing
-   # Both Y_KDTREE_BUILD_NS / Y_KDTREE_QUERY_NS and all original atomics must compile
-   ```
-
-5. **Symbol visibility sanity:**
-   ```bash
-   cargo test -- --list 2>&1 | grep t_tw_11
-   # Should list the new test
-   ```
+1. **T1 passes:** `cargo build --bench trustworthiness_bench --features testing` exits 0.
+2. **T2 passes:** PHASE-4.5 smoke run exits 0.
+3. **T3 passes:** A kdtree bench run emits at least one `[bench:build_ms] <float>` line to
+   stderr.
+4. **T4 passes:** All four n=75000 `.npy` files exist in the data directory.
+5. **Group count:** `cargo bench --bench trustworthiness_bench --features testing -- --list`
+   shows 24 distinct benchmark IDs (2 distributions × 6 n-values × 2 variants).
+6. **Config:** Each group reports `sample_size = 10` and `warm_up_time = 10s` in Criterion
+   output.
