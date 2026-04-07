@@ -1,0 +1,6 @@
+{
+  "experiment": "kdtree-y-knn-trustworthiness",
+  "kiddo_version": "5.3.0",
+  "rust_channel": "nightly-2026-03-26",
+  "note": "partial — full metadata populated by run_criterion.sh"
+}
