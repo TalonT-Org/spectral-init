@@ -6,6 +6,6 @@
     "rep3": null
   },
   "T_cross_stable": false,
-  "n75k_speedup_uniform": null,
+  "n75k_speedup_uniform": 0.713932912619428,
   "n75k_on_kdtree_faster_side": null
 }

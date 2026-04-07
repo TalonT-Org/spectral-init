@@ -2,35 +2,63 @@
 
 ## Run Scope
 
-- **Dry run:** True
-- **N values analyzed:** [1000]
+- **Dry run:** False
+- **N values analyzed:** [1000, 5000, 10000, 50000, 75000, 100000]
 - **RAYON_NUM_THREADS:** 16
 - **Rust channel:** nightly-x86_64-unknown-linux-gnu
-- **Timestamp:** 2026-04-07T01:28:50-07:00
+- **Timestamp:** 2026-04-07T01:39:09-07:00
 - **Scope qualifier:** All conclusions scoped to `RAYON_NUM_THREADS=16` threads on the benchmark machine.
-
-> **DRY RUN — insufficient data for H1/H4 verdict; pipeline integrity verified**
 
 ## Total Speedup (flat_simd ns / kdtree ns; >1 = kdtree faster)
 
 | dist | n | speedup | flat_simd CV | kdtree CV |
 |------|---|---------|-------------|-----------|
-| uniform | 1000 | 0.710 | 0.023 | 0.049 |
-| gauss | 1000 | 0.710 | 0.046 | 0.032 |
+| uniform | 1000 | 0.740 | 0.036 | 0.023 |
+| uniform | 5000 | 0.733 | 0.003 | 0.013 |
+| uniform | 10000 | 0.710 | 0.007 | 0.008 |
+| uniform | 50000 | 0.696 | 0.011 | 0.008 |
+| uniform | 75000 | 0.714 | 0.003 | 0.003 |
+| uniform | 100000 | 0.733 | 0.005 | 0.004 |
+| gauss | 1000 | 0.744 | 0.030 | 0.032 |
+| gauss | 5000 | 0.736 | 0.002 | 0.005 |
+| gauss | 10000 | 0.721 | 0.007 | 0.022 |
+| gauss | 50000 | 0.705 | 0.006 | 0.006 |
+| gauss | 75000 | 0.714 | 0.002 | 0.002 |
+| gauss | 100000 | 0.733 | 0.004 | 0.000 |
 
 ## KD-tree Build Fraction (build / (build + query))
 
 | dist | n | build_fraction | note |
 |------|---|---------------|------|
-| uniform | 1000 | 0.018 |  |
-| gauss | 1000 | 0.019 |  |
+| uniform | 1000 | 0.016 |  |
+| uniform | 5000 | 0.022 |  |
+| uniform | 10000 | 0.021 |  |
+| uniform | 50000 | 0.018 |  |
+| uniform | 75000 | 0.018 |  |
+| uniform | 100000 | 0.016 |  |
+| gauss | 1000 | 0.017 |  |
+| gauss | 5000 | 0.020 |  |
+| gauss | 10000 | 0.019 |  |
+| gauss | 50000 | 0.015 |  |
+| gauss | 75000 | 0.015 |  |
+| gauss | 100000 | 0.013 |  |
 
 ## Query Speedup (flat_simd y_dist / kdtree y_kdtree_query)
 
 | dist | n | query_speedup |
 |------|---|--------------|
-| uniform | 1000 | 3.161 |
-| gauss | 1000 | 3.228 |
+| uniform | 1000 | 2.938 |
+| uniform | 5000 | 14.480 |
+| uniform | 10000 | 24.746 |
+| uniform | 50000 | 87.877 |
+| uniform | 75000 | 120.077 |
+| uniform | 100000 | 150.335 |
+| gauss | 1000 | 2.899 |
+| gauss | 5000 | 13.192 |
+| gauss | 10000 | 24.901 |
+| gauss | 50000 | 83.424 |
+| gauss | 75000 | 115.005 |
+| gauss | 100000 | 140.188 |
 
 ## Crossover Analysis (H2)
 
@@ -41,39 +69,40 @@
 
 ## n=75K Held-Out Check (RT8)
 
-- n=75K not in analysis N_VALUES (dry-run mode or not collected).
+- **n=75K uniform speedup:** 0.714
+- **On kdtree-faster side of T_cross:** None
 
 ## Hypothesis Evaluation
 
 ### H1 — KD-tree speedup at large n
-- speedup_50k_uniform = N/A
-- speedup_100k_uniform = N/A
-- **H1 met:** None
+- speedup_50k_uniform = 0.696
+- speedup_100k_uniform = 0.733
+- **H1 met:** False
 
 ### H2 — Crossover exists in [1K, 50K]
 - T_cross = None
-- **H2 met:** None
+- **H2 met:** False
 
 ### H3 — Correctness (external)
 - **H3 note:** ASSUMED PASS — run `cargo test t_tw_11 --features testing` separately
 
 ### H4 — Build fraction ≤ 10% at large n
-- **H4 met:** None
+- **H4 met:** True
 
 ## Five Success Criteria
 
 | # | Criterion | Status |
 |---|-----------|--------|
-| 1 | speedup_50k_uniform ≥ 5.0 | N/A (dry run) |
-| 2 | speedup_100k_uniform ≥ 10.0 | N/A (dry run) |
+| 1 | speedup_50k_uniform ≥ 5.0 | ✗ NOT MET |
+| 2 | speedup_100k_uniform ≥ 10.0 | ✗ NOT MET |
 | 3 | Correctness (t_tw_11/t_tw_08/t_tw_10) | External prerequisite: cargo test t_tw_11/t_tw_08/t_tw_10 --features testing |
-| 4 | T_cross variance ≤ 2× across 3 reps | N/A (dry run) |
-| 5 | build_fraction ≤ 10% at n=50K and n=100K | N/A (dry run) |
+| 4 | T_cross variance ≤ 2× across 3 reps | ✗ NOT MET |
+| 5 | build_fraction ≤ 10% at n=50K and n=100K | ✓ MET |
 
 ## Verdict
 
-**INCONCLUSIVE**
+**DO NOT SHIP**
 
-DRY RUN — insufficient data for H1/H4 verdict; pipeline integrity verified
+Speedup ≤ 2.0 at n=50K across distributions.
 
 _All conclusions scoped to `RAYON_NUM_THREADS=16` threads on the benchmark machine._
