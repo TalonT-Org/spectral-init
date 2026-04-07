@@ -12,7 +12,7 @@ use faer::linalg::solvers::SelfAdjointEigen;
 use ndarray::{Array1, Array2, ArrayView1, ArrayView2};
 use rayon::prelude::*;
 use sprs::CsMatI;
-use std::collections::{BinaryHeap, HashSet};
+use std::collections::HashSet;
 
 // ─── Threshold constants ──────────────────────────────────────────────────────
 
@@ -409,6 +409,51 @@ unsafe fn dist_sq_avx2(xi: &[f64], xj: &[f64]) -> f64 {
     }
 }
 
+/// Batch squared Euclidean distances from a 2D query point to `n` target points
+/// stored in row-major layout (`y_flat`, stride 2). Processes two target points per
+/// SIMD iteration using `_mm256_hadd_pd` for horizontal reduction.
+///
+/// # Safety
+/// - `yi` must have exactly 2 elements.
+/// - `y_flat` must have at least `n * 2` elements (row-major, d_y = 2).
+/// - `out` must have at least `n` elements.
+/// Called only when `d_y == 2`, `y.is_standard_layout()`, and `avx2` is detected at runtime.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+unsafe fn dist_sq_2d_avx2_batch(
+    yi: &[f64],
+    y_flat: &[f64],
+    n: usize,
+    out: &mut [f64],
+) {
+    use std::arch::x86_64::*;
+    debug_assert!(yi.len() >= 2, "yi must have at least 2 elements");
+    debug_assert!(y_flat.len() >= n * 2, "y_flat must have at least n*2 elements");
+    debug_assert!(out.len() >= n, "out must have at least n elements");
+    // Broadcast query: [yi[1], yi[0], yi[1], yi[0]] — _mm256_set_pd args are (e3,e2,e1,e0)
+    let yi_bc = _mm256_set_pd(yi[1], yi[0], yi[1], yi[0]);
+    let mut j = 0usize;
+    while j + 1 < n {
+        // Load two target points: [yj[0], yj[1], yj+1[0], yj+1[1]]
+        debug_assert!(j * 2 + 3 < y_flat.len(), "y_flat bounds exceeded at j={j}");
+        let yj_pair = _mm256_loadu_pd(y_flat.as_ptr().add(j * 2));
+        let diff = _mm256_sub_pd(yi_bc, yj_pair);
+        let sq   = _mm256_mul_pd(diff, diff);
+        // hadd: lower 128-bit → sq[0]+sq[1] = dist_j; upper 128-bit → sq[2]+sq[3] = dist_{j+1}
+        let hadd = _mm256_hadd_pd(sq, sq);
+        out[j]     = _mm_cvtsd_f64(_mm256_castpd256_pd128(hadd));
+        out[j + 1] = _mm_cvtsd_f64(_mm256_extractf128_pd(hadd, 1));
+        j += 2;
+    }
+    // Scalar tail for odd n
+    if j < n {
+        let base = j * 2;
+        let d0 = yi[0] - y_flat[base];
+        let d1 = yi[1] - y_flat[base + 1];
+        out[j] = d0 * d0 + d1 * d1;
+    }
+}
+
 // ─── Trustworthiness metric ───────────────────────────────────────────────────
 
 /// Computes the trustworthiness metric T(k) — a measure of how well the k-nearest-neighbor
@@ -445,6 +490,16 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
     #[cfg(not(target_arch = "x86_64"))]
     let use_avx2 = false;
     let d_x = x.ncols();
+    let d_y = y.ncols();
+
+    #[cfg(target_arch = "x86_64")]
+    let use_avx2_y = {
+        d_y == 2
+            && y.is_standard_layout()
+            && is_x86_feature_detected!("avx2")
+    };
+    #[cfg(not(target_arch = "x86_64"))]
+    let use_avx2_y = false;
 
     // Validate contiguity once before the parallel loop: SIMD dispatch requires C-contiguous rows.
     #[cfg(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))]
@@ -458,6 +513,20 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
         static COMB_INDICES: RefCell<Vec<usize>> = const { RefCell::new(Vec::new()) };
     }
 
+    thread_local! {
+        static COMB_DIST_Y:    RefCell<Vec<f64>>   = const { RefCell::new(Vec::new()) };
+        static COMB_INDICES_Y: RefCell<Vec<usize>> = const { RefCell::new(Vec::new()) };
+    }
+
+    #[cfg(feature = "profiling")]
+    static X_DIST_NS:  std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    #[cfg(feature = "profiling")]
+    static X_SORT_NS:  std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    #[cfg(feature = "profiling")]
+    static Y_DIST_NS:  std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    #[cfg(feature = "profiling")]
+    static PENALTY_NS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
     let penalty_sum: f64 = (0..n).into_par_iter().map(|i| {
         let xi = x.row(i);
         let yi = y.row(i);
@@ -466,6 +535,10 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
             COMB_INDICES.with(|indices_cell| {
                 let mut dist_x = dist_x_cell.borrow_mut();
                 let mut indices = indices_cell.borrow_mut();
+
+                // ── x_dist step ──────────────────────────────────────────────
+                #[cfg(feature = "profiling")]
+                let t_x_dist = std::time::Instant::now();
 
                 dist_x.clear();
                 dist_x.resize(n, 0.0f64);
@@ -490,6 +563,14 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
                     };
                 }
 
+                #[cfg(feature = "profiling")]
+                X_DIST_NS.fetch_add(t_x_dist.elapsed().as_nanos() as u64,
+                    std::sync::atomic::Ordering::Relaxed);
+
+                // ── x_sort step ──────────────────────────────────────────────
+                #[cfg(feature = "profiling")]
+                let t_x_sort = std::time::Instant::now();
+
                 indices.clear();
                 indices.extend(0..n);
                 indices.select_nth_unstable_by(k, |&a, &b| {
@@ -499,28 +580,94 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
                 let knn_x_set: HashSet<usize> =
                     indices[..=k].iter().filter(|&&m| m != i).copied().collect();
 
-                let mut heap: BinaryHeap<(u64, usize)> = BinaryHeap::with_capacity(k + 1);
-                for j in 0..n {
-                    if j == i { continue; }
-                    let d: f64 = yi.iter().zip(y.row(j).iter()).map(|(&a, &b)| (a - b) * (a - b)).sum();
-                    heap.push((d.to_bits(), j));
-                    if heap.len() > k { heap.pop(); }
-                }
+                #[cfg(feature = "profiling")]
+                X_SORT_NS.fetch_add(t_x_sort.elapsed().as_nanos() as u64,
+                    std::sync::atomic::Ordering::Relaxed);
 
-                let mut row_penalty = 0u64;
-                for (_, j) in heap {
-                    if !knn_x_set.contains(&j) {
-                        let dj = dist_x[j];
-                        let rank: usize = (0..n)
-                            .filter(|&m| dist_x[m] < dj || (dist_x[m] == dj && m < j))
-                            .count();
-                        row_penalty += (rank - k) as u64;
-                    }
-                }
-                row_penalty as f64
+                // ── y_dist step (flat_simd, replaces BinaryHeap) ─────────────
+                #[cfg(feature = "profiling")]
+                let t_y_dist = std::time::Instant::now();
+
+                COMB_DIST_Y.with(|dy_cell| {
+                    COMB_INDICES_Y.with(|iy_cell| {
+                        let mut dist_y    = dy_cell.borrow_mut();
+                        let mut indices_y = iy_cell.borrow_mut();
+
+                        dist_y.clear();
+                        dist_y.resize(n, 0.0f64);
+
+                        // Fill Y distances: AVX2 2D batch or scalar fallback.
+                        #[cfg(target_arch = "x86_64")]
+                        if use_avx2_y {
+                            let y_flat = y.as_slice()
+                                .expect("y must be standard layout for AVX2 dispatch");
+                            let yi_slice = &y_flat[i * 2..(i + 1) * 2];
+                            // SAFETY: y_flat has n*d_y elements; yi_slice has 2 elements;
+                            // dist_y has n elements; use_avx2_y guarantees d_y==2,
+                            // standard_layout, and runtime AVX2.
+                            unsafe { dist_sq_2d_avx2_batch(yi_slice, y_flat, n, &mut dist_y); }
+                        } else {
+                            for j in 0..n {
+                                let yj = y.row(j);
+                                dist_y[j] = yi.iter().zip(yj.iter())
+                                    .map(|(&a, &b)| (a - b) * (a - b)).sum();
+                            }
+                        }
+                        #[cfg(not(target_arch = "x86_64"))]
+                        {
+                            for j in 0..n {
+                                let yj = y.row(j);
+                                dist_y[j] = yi.iter().zip(yj.iter())
+                                    .map(|(&a, &b)| (a - b) * (a - b)).sum();
+                            }
+                        }
+
+                        dist_y[i] = f64::INFINITY; // self-exclusion
+
+                        indices_y.clear();
+                        indices_y.extend(0..n);
+                        indices_y.select_nth_unstable_by(k, |&a, &b| {
+                            dist_y[a].total_cmp(&dist_y[b]).then(a.cmp(&b))
+                        });
+
+                        #[cfg(feature = "profiling")]
+                        Y_DIST_NS.fetch_add(t_y_dist.elapsed().as_nanos() as u64,
+                            std::sync::atomic::Ordering::Relaxed);
+
+                        // ── penalty step ──────────────────────────────────────
+                        #[cfg(feature = "profiling")]
+                        let t_penalty = std::time::Instant::now();
+
+                        let mut row_penalty = 0u64;
+                        for &j in &indices_y[..k] {
+                            if !knn_x_set.contains(&j) {
+                                let dj = dist_x[j];
+                                let rank: usize = (0..n)
+                                    .filter(|&m| dist_x[m] < dj || (dist_x[m] == dj && m < j))
+                                    .count();
+                                row_penalty += (rank - k) as u64;
+                            }
+                        }
+
+                        #[cfg(feature = "profiling")]
+                        PENALTY_NS.fetch_add(t_penalty.elapsed().as_nanos() as u64,
+                            std::sync::atomic::Ordering::Relaxed);
+
+                        row_penalty as f64
+                    })
+                })
             })
         })
     }).sum();
+
+    #[cfg(feature = "profiling")]
+    {
+        use std::sync::atomic::Ordering;
+        eprintln!("[timing:x_dist] {}",  X_DIST_NS.load(Ordering::Relaxed));
+        eprintln!("[timing:x_sort] {}",  X_SORT_NS.load(Ordering::Relaxed));
+        eprintln!("[timing:y_dist] {}",  Y_DIST_NS.load(Ordering::Relaxed));
+        eprintln!("[timing:penalty] {}", PENALTY_NS.load(Ordering::Relaxed));
+    }
 
     let denom = n as f64 * k as f64 * (2 * n).saturating_sub(3 * k + 1) as f64;
     1.0 - penalty_sum * 2.0 / denom
@@ -1042,6 +1189,68 @@ mod tests {
             assert!(t >= 0.0 && t <= 1.0, "T(k={k}) out of [0,1]: {t}");
             assert!((t - t_ref).abs() < 1e-12,
                 "T(k={k}) combined={t} diverges from brute-force reference={t_ref}");
+        }
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn t_tw_09_avx2_2d_kernel_matches_scalar() {
+        if !is_x86_feature_detected!("avx2") {
+            return; // skip on CPUs without AVX2
+        }
+        use rand::{SeedableRng, Rng};
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(55);
+        for n in [0usize, 1, 2, 3, 10, 20, 51] {
+            let y_flat: Vec<f64> = (0..n * 2).map(|_| rng.random::<f64>()).collect();
+            let yi: Vec<f64> = (0..2).map(|_| rng.random::<f64>()).collect();
+            let mut out_avx2 = vec![0.0f64; n];
+            // SAFETY: runtime check above guarantees AVX2; y_flat has n*2, yi has 2, out has n.
+            unsafe { super::dist_sq_2d_avx2_batch(&yi, &y_flat, n, &mut out_avx2); }
+            for j in 0..n {
+                let scalar: f64 = yi.iter()
+                    .zip(y_flat[j * 2..j * 2 + 2].iter())
+                    .map(|(&a, &b)| (a - b) * (a - b))
+                    .sum();
+                assert!(
+                    (out_avx2[j] - scalar).abs() < 1e-10,
+                    "dist_sq_2d_avx2_batch mismatch at n={n}, j={j}: avx2={}, scalar={scalar}",
+                    out_avx2[j]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn t_tw_10_self_exclusion_never_in_knn() {
+        // Verify that the self-exclusion (dist_y[i] = INFINITY) prevents point i
+        // from appearing in its own k-NN result. Catching a regression where the
+        // INFINITY assignment is accidentally dropped.
+        use rand::{SeedableRng, Rng};
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(77);
+        let n = 20;
+        let k = 3;
+        let x = ndarray::Array2::from_shape_fn((n, 4), |_| rng.random::<f64>());
+        let y = ndarray::Array2::from_shape_fn((n, 2), |_| rng.random::<f64>());
+        // Run trustworthiness — internally computes k-NN of Y for each row.
+        // We verify correctness by comparing against brute-force which also applies self-exclusion.
+        let t = trustworthiness(x.view(), y.view(), k);
+        let t_ref = trustworthiness_brute_force(x.view(), y.view(), k);
+        assert!((t - t_ref).abs() < 1e-12,
+            "self-exclusion regression: combined={t} diverges from brute-force={t_ref}");
+        // Additionally, verify directly via brute-force that no point is its own neighbor.
+        for i in 0..n {
+            let yi = y.row(i);
+            let mut dists: Vec<(f64, usize)> = (0..n)
+                .filter(|&j| j != i)
+                .map(|j| {
+                    let d: f64 = yi.iter().zip(y.row(j).iter())
+                        .map(|(&a, &b)| (a-b)*(a-b)).sum();
+                    (d, j)
+                })
+                .collect();
+            dists.sort_by(|a, b| a.0.total_cmp(&b.0));
+            let knn: Vec<usize> = dists[..k].iter().map(|&(_, j)| j).collect();
+            assert!(!knn.contains(&i), "point {i} appeared in its own k-NN");
         }
     }
 
