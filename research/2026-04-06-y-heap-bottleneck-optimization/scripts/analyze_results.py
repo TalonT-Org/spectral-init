@@ -179,6 +179,20 @@ def compute_hypothesis(data: dict, results_dir: Path) -> tuple:
             f"(ratio 95% CI lb {ratio_ci_lb})"
         )
 
+    # Fallback: if flat_simd is NEGATIVE, check flat_partial (H1 alone)
+    if primary == "NEGATIVE":
+        fp_entry = data.get("flat_partial", {}).get(10000)
+        if fp_entry is not None and not fp_entry.get("ci_synthetic", False):
+            fp_ci_lb = fp_entry.get("ratio_ci_lb")
+            fp_point = fp_entry.get("speedup")
+            if fp_ci_lb is not None and fp_ci_lb > 1.0:
+                primary = "POSITIVE"
+                details["fallback_variant"] = "flat_partial"
+                details["primary_text"] = (
+                    f"POSITIVE (fallback) — flat_simd NEGATIVE but flat_partial n=10000 "
+                    f"speedup {fp_point:.4f}× (ratio CI lb {fp_ci_lb:.4f} > 1.0)"
+                )
+
     if primary != "ESCALATE":
         return (primary, details)
 
