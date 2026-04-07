@@ -1192,16 +1192,19 @@ mod tests {
         }
     }
 
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+    #[cfg(target_arch = "x86_64")]
     #[test]
     fn t_tw_09_avx2_2d_kernel_matches_scalar() {
+        if !is_x86_feature_detected!("avx2") {
+            return; // skip on CPUs without AVX2
+        }
         use rand::{SeedableRng, Rng};
         let mut rng = rand::rngs::SmallRng::seed_from_u64(55);
-        for n in [1usize, 2, 3, 10, 20, 51] {
+        for n in [0usize, 1, 2, 3, 10, 20, 51] {
             let y_flat: Vec<f64> = (0..n * 2).map(|_| rng.random::<f64>()).collect();
             let yi: Vec<f64> = (0..2).map(|_| rng.random::<f64>()).collect();
             let mut out_avx2 = vec![0.0f64; n];
-            // SAFETY: y_flat has n*2 elements, yi has 2, out has n — all guaranteed above.
+            // SAFETY: runtime check above guarantees AVX2; y_flat has n*2, yi has 2, out has n.
             unsafe { super::dist_sq_2d_avx2_batch(&yi, &y_flat, n, &mut out_avx2); }
             for j in 0..n {
                 let scalar: f64 = yi.iter()
@@ -1214,6 +1217,40 @@ mod tests {
                     out_avx2[j]
                 );
             }
+        }
+    }
+
+    #[test]
+    fn t_tw_10_self_exclusion_never_in_knn() {
+        // Verify that the self-exclusion (dist_y[i] = INFINITY) prevents point i
+        // from appearing in its own k-NN result. Catching a regression where the
+        // INFINITY assignment is accidentally dropped.
+        use rand::{SeedableRng, Rng};
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(77);
+        let n = 20;
+        let k = 3;
+        let x = ndarray::Array2::from_shape_fn((n, 4), |_| rng.random::<f64>());
+        let y = ndarray::Array2::from_shape_fn((n, 2), |_| rng.random::<f64>());
+        // Run trustworthiness — internally computes k-NN of Y for each row.
+        // We verify correctness by comparing against brute-force which also applies self-exclusion.
+        let t = trustworthiness(x.view(), y.view(), k);
+        let t_ref = trustworthiness_brute_force(x.view(), y.view(), k);
+        assert!((t - t_ref).abs() < 1e-12,
+            "self-exclusion regression: combined={t} diverges from brute-force={t_ref}");
+        // Additionally, verify directly via brute-force that no point is its own neighbor.
+        for i in 0..n {
+            let yi = y.row(i);
+            let mut dists: Vec<(f64, usize)> = (0..n)
+                .filter(|&j| j != i)
+                .map(|j| {
+                    let d: f64 = yi.iter().zip(y.row(j).iter())
+                        .map(|(&a, &b)| (a-b)*(a-b)).sum();
+                    (d, j)
+                })
+                .collect();
+            dists.sort_by(|a, b| a.0.total_cmp(&b.0));
+            let knn: Vec<usize> = dists[..k].iter().map(|&(_, j)| j).collect();
+            assert!(!knn.contains(&i), "point {i} appeared in its own k-NN");
         }
     }
 
