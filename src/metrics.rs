@@ -476,10 +476,6 @@ unsafe fn dist_sq_2d_avx2_batch(
 /// The guard uses integer floor division (`n / 2`), matching sklearn's exact boundary
 /// condition (`n_neighbors >= n // 2` raises `ValueError` in sklearn).
 pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 {
-    #[cfg(test)]
-    return trustworthiness_inner(x, y, k, false);
-
-    #[cfg(not(test))]
     trustworthiness_flat(x, y, k)
 }
 
@@ -784,6 +780,12 @@ pub fn trustworthiness_inner(
                     &[y[[i, 0]], y[[i, 1]]],
                     NonZero::new(k + 1).unwrap(),
                 );
+                // Filter self by index. Note: if multiple data points share the
+                // exact same Y-space coordinates as point i (duplicates at
+                // distance 0), this index-only filter keeps them and the true
+                // k-th neighbor may be excluded. This edge case does not arise
+                // with random float data but is a known limitation of the
+                // KD-tree path for pathological inputs.
                 let knn_y_indices: Vec<usize> = results
                     .into_iter()
                     .filter(|nb| nb.item as usize != i)

@@ -28,9 +28,12 @@ if args.dry_run:
 else:
     N_VALUES = [1000, 5000, 10000, 50000, 75000, 100000]
 
-CRIT_DIR = pathlib.Path("results/criterion")
-PROF_DIR = pathlib.Path("results/profiler")
-ANALYSIS_DIR = pathlib.Path("results/analysis")
+# Paths are anchored to the experiment root (scripts/ parent), making the
+# script runnable from any working directory.
+_EXPERIMENT_ROOT = pathlib.Path(__file__).resolve().parent.parent
+CRIT_DIR = _EXPERIMENT_ROOT / "results/criterion"
+PROF_DIR = _EXPERIMENT_ROOT / "results/profiler"
+ANALYSIS_DIR = _EXPERIMENT_ROOT / "results/analysis"
 ANALYSIS_DIR.mkdir(parents=True, exist_ok=True)
 
 # ---------------------------------------------------------------------------

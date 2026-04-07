@@ -4,6 +4,12 @@
 
 ## Executive Summary
 
+**Data scope:** All benchmarks use synthetic data — uniform random and 8-cluster
+Gaussian distributions in a 10D X-space and 2D Y-space. No real UMAP output
+embeddings were tested. The DO NOT SHIP conclusion applies to this synthetic
+benchmark regime; performance on actual UMAP manifold projections was not
+measured and may differ.
+
 This experiment evaluated whether replacing the flat SIMD brute-force Y-space
 k-nearest-neighbor search in the trustworthiness metric with a KD-tree (kiddo
 v5.3.0) would yield a ≥5× total speedup at n=50K and a ≥10× speedup at n=100K.
@@ -16,20 +22,21 @@ The headline finding is a **definitive negative result**: `flat_simd` is
 consistently 36–44% faster than `kdtree` across every combination of n and
 distribution tested (speedup ratio 0.696–0.744; speedup > 1.0 would indicate
 kdtree faster). No crossover point exists in the tested range. The Y-space KNN
-query is 150× faster with the KD-tree at n=100K, but the Y-space step
-represents only ~28% of total trustworthiness runtime; the remaining 72% is
-dominated by the O(n²) X-space distance computation which the KD-tree does not
-accelerate.
+query is 150× faster with the KD-tree at n=100K (query-only; fair build+query
+comparison gives ~148×), but the Y-space step represents only ~28% of total
+trustworthiness runtime at d_x=10; the remaining 72% is dominated by the O(n²)
+X-space distance computation which the KD-tree does not accelerate.
 
-**Recommendation: DO NOT SHIP the KD-tree optimization.** To achieve meaningful
-trustworthiness speedup, the X-space bottleneck must be addressed via
-approximate nearest neighbors in X-space or acceptance of approximate scores.
+**Recommendation: DO NOT SHIP the KD-tree optimization** (on synthetic data at
+d_x=10). To achieve meaningful trustworthiness speedup, the X-space bottleneck
+must be addressed via approximate nearest neighbors in X-space or acceptance of
+approximate scores.
 
 ## Background and Research Question
 
 The `trustworthiness_inner` function computes the UMAP trustworthiness metric,
 which requires finding k nearest neighbors in both the high-dimensional X-space
-(128D in the benchmark) and the 2D Y-space embedding. The existing `flat_simd`
+(10D in the benchmark) and the 2D Y-space embedding. The existing `flat_simd`
 variant performs an O(n²) brute-force pairwise distance computation for Y-space
 as well as X-space.
 
@@ -192,8 +199,10 @@ scales approximately as O(n / log n) as expected.
 
 3. **Speedup dips to its minimum at n=50K** (0.696 uniform), not monotonically
    increasing. This may reflect cache effects: at n=50K the flat_simd SIMD
-   brute-force fits in a favorable memory access pattern; the KD-tree query
-   overhead grows faster than its O(n log n) savings in this regime.
+   brute-force may fit in a favorable memory access pattern; the KD-tree query
+   overhead may grow faster than its O(n log n) savings in this regime. No cache
+   profiling data (LLC miss rates, perf stat) was collected; this mechanism
+   remains a hypothesis.
 
 4. **No distribution sensitivity.** Uniform and Gaussian speedup curves are
    nearly identical at every n (max difference 0.009). The X-space bottleneck
@@ -210,12 +219,13 @@ KD-tree optimization targets the Y-space KNN step — which is a minority
 contributor to trustworthiness runtime — while leaving the dominant X-space
 computation untouched.
 
-For trustworthiness, X-space KNN (and its implicit pairwise distances) is
-required at full precision: there is no approximation that preserves metric
-correctness. The O(n²) cost of `x_dist` + `x_sort` grows faster than any
-optimization to `y_dist` can compensate. This is not a failure of the KD-tree
-implementation; kiddo's query performance is impressive. The failure is that
-the optimized step is not the bottleneck.
+For exact trustworthiness, X-space KNN (and its implicit pairwise distances) is
+required at full precision: approximate X-space KNN produces approximate
+trustworthiness scores, not exact ones (see Recommendations). The O(n²) cost of
+`x_dist` + `x_sort` at d_x=10 grows faster than any optimization to `y_dist`
+can compensate. This is not a failure of the KD-tree implementation; kiddo's
+query performance is impressive. The failure is that the optimized step is not
+the bottleneck.
 
 The hypothesis in H2 (crossover in [1K, 50K]) assumed that Y-space cost would
 dominate at large n due to the KD-tree's O(n log n) vs O(n²) complexity
@@ -230,13 +240,15 @@ pointer-chasing traversal at moderate n. At very large n both degrade similarly.
 
 ## What We Learned
 
-- **Y-space is not the trustworthiness bottleneck.** At n=100K, Y-space
-  accounts for ~28% of total runtime; X-space (pairwise distances + sort)
-  accounts for ~58%. Any Y-space-only optimization faces a hard ceiling of
-  ~1.4× total speedup regardless of the technique used.
-- **KD-tree query performance is excellent.** A 150× Y-space speedup at n=100K
-  demonstrates kiddo v5.3.0 is a high-quality KD-tree. The library is not at
-  fault.
+- **Y-space is not the trustworthiness bottleneck** (at d_x=10). At n=100K,
+  Y-space accounts for ~28% of total runtime; X-space (pairwise distances +
+  sort) accounts for ~58%. These fractions are specific to d_x=10; higher-
+  dimensional X-spaces would amplify X-space dominance further. Any Y-space-only
+  optimization faces a hard ceiling of ~1.4× total speedup regardless of the
+  technique used.
+- **KD-tree query performance is excellent.** A ~148× Y-space speedup at n=100K
+  (build+query; query-only is ~150×) demonstrates kiddo v5.3.0 is a high-quality
+  KD-tree. The library is not at fault.
 - **Build fraction is negligible (<2.2%).** The cost of constructing the
   KD-tree is not a barrier; the query cost itself is the operative expense —
   and even that is small relative to X-space work.

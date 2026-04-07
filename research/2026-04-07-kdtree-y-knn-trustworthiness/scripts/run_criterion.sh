@@ -16,10 +16,12 @@ for arg in "$@"; do
 done
 
 # ---------------------------------------------------------------------------
-# Thread count
+# Thread count (inherit from environment or detect)
 # ---------------------------------------------------------------------------
 export RAYON_NUM_THREADS
-RAYON_NUM_THREADS="$(nproc)"
+if [[ -z "${RAYON_NUM_THREADS:-}" ]]; then
+    RAYON_NUM_THREADS="$(nproc)"
+fi
 
 # ---------------------------------------------------------------------------
 # Mode-dependent values
@@ -46,11 +48,12 @@ mkdir -p "$PROJECT_ROOT/temp"
 # ---------------------------------------------------------------------------
 RUST_CHANNEL="$(cd "$PROJECT_ROOT" && rustup show active-toolchain 2>/dev/null | awk '{print $1}' || echo "unknown")"
 TIMESTAMP="$(date -Iseconds)"
+KIDDO_VERSION="$(grep -A1 '^name = "kiddo"' "$PROJECT_ROOT/Cargo.lock" 2>/dev/null | grep '^version' | head -1 | sed 's/version = "\(.*\)"/\1/' || echo "unknown")"
 
 cat > "$RESEARCH_DIR/results/run_metadata.json" <<EOF
 {
   "experiment": "kdtree-y-knn-trustworthiness",
-  "kiddo_version": "5.3.0",
+  "kiddo_version": "$KIDDO_VERSION",
   "rust_channel": "$RUST_CHANNEL",
   "rayon_num_threads": $RAYON_NUM_THREADS,
   "timestamp": "$TIMESTAMP",
@@ -78,7 +81,7 @@ for variant in "${VARIANTS[@]}"; do
             for rep in $(seq 1 "$REPS"); do
                 echo "[run_criterion] variant=$variant dist=$dist n=$n rep=$rep group=$group"
 
-                json_tmp="$PROJECT_ROOT/temp/criterion_json_$$.jsonl"
+                json_tmp="$(mktemp "$PROJECT_ROOT/temp/criterion_json_XXXXXX.jsonl")"
                 status="completed"
 
                 # stdout → JSON capture; stderr → terminal (progress/warnings)

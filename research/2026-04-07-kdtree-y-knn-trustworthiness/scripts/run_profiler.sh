@@ -51,7 +51,7 @@ LOG_ENTRIES=()
 for variant in "${VARIANTS[@]}"; do
     for dist in "${DISTRIBUTIONS[@]}"; do
         for n in "${N_VALUES[@]}"; do
-            stderr_file="$PROJECT_ROOT/temp/tw_profiler_stderr_$$.txt"
+            stderr_file="$(mktemp "$PROJECT_ROOT/temp/tw_profiler_stderr_XXXXXX.txt")"
             out="$RESEARCH_DIR/results/profiler/${variant}_n${n}_${dist}.json"
 
             echo "[run_profiler] variant=$variant dist=$dist n=$n iters=$ITERS"
