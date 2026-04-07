@@ -476,6 +476,14 @@ unsafe fn dist_sq_2d_avx2_batch(
 /// The guard uses integer floor division (`n / 2`), matching sklearn's exact boundary
 /// condition (`n_neighbors >= n // 2` raises `ValueError` in sklearn).
 pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 {
+    #[cfg(test)]
+    return trustworthiness_inner(x, y, k, false);
+
+    #[cfg(not(test))]
+    trustworthiness_flat(x, y, k)
+}
+
+fn trustworthiness_flat(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 {
     use std::cell::RefCell;
     let n = x.nrows();
     assert_eq!(y.nrows(), n, "trustworthiness: x and y must have the same number of rows");
@@ -663,15 +671,155 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
     #[cfg(feature = "profiling")]
     {
         use std::sync::atomic::Ordering;
-        eprintln!("[timing:x_dist] {}",  X_DIST_NS.load(Ordering::Relaxed));
-        eprintln!("[timing:x_sort] {}",  X_SORT_NS.load(Ordering::Relaxed));
-        eprintln!("[timing:y_dist] {}",  Y_DIST_NS.load(Ordering::Relaxed));
-        eprintln!("[timing:penalty] {}", PENALTY_NS.load(Ordering::Relaxed));
+        eprintln!("[timing:x_dist] {}",         X_DIST_NS.load(Ordering::Relaxed));
+        eprintln!("[timing:x_sort] {}",         X_SORT_NS.load(Ordering::Relaxed));
+        eprintln!("[timing:y_dist] {}",         Y_DIST_NS.load(Ordering::Relaxed));
+        eprintln!("[timing:penalty] {}",        PENALTY_NS.load(Ordering::Relaxed));
+        eprintln!("[timing:y_kdtree_build] {}", Y_KDTREE_BUILD_NS.load(Ordering::Relaxed));
+        eprintln!("[timing:y_kdtree_query] {}", Y_KDTREE_QUERY_NS.load(Ordering::Relaxed));
     }
 
     let denom = n as f64 * k as f64 * (2 * n).saturating_sub(3 * k + 1) as f64;
     1.0 - penalty_sum * 2.0 / denom
 }
+
+#[cfg(test)]
+fn trustworthiness_inner(
+    x: ArrayView2<f64>,
+    y: ArrayView2<f64>,
+    k: usize,
+    use_kdtree: bool,
+) -> f64 {
+    if !use_kdtree {
+        return trustworthiness_flat(x, y, k);
+    }
+
+    // ── KD-tree path (assumes d_y == 2) ──────────────────────────────────────
+    // d_y == 2 is required by ImmutableKdTree<f64, 2>. The caller is
+    // responsible for ensuring this; the assertion below guards misuse.
+    debug_assert_eq!(y.ncols(), 2, "trustworthiness_inner: KD-tree path requires d_y == 2");
+
+    use std::cell::RefCell;
+    use std::num::NonZero;
+    use std::sync::Arc;
+    use kiddo::ImmutableKdTree;
+    use kiddo::SquaredEuclidean;
+
+    let n = x.nrows();
+    assert_eq!(y.nrows(), n,
+        "trustworthiness_inner: x and y must have the same number of rows");
+    assert!(k > 0, "trustworthiness_inner: k must be > 0");
+    assert!(k < n / 2,
+        "trustworthiness_inner: k must be < n/2 (got k={k}, n={n})");
+
+    // ── Build KD-tree (outside Rayon loop) ───────────────────────────────────
+    #[cfg(feature = "profiling")]
+    let t_build = std::time::Instant::now();
+
+    let points: Vec<[f64; 2]> = (0..n)
+        .map(|i| [y[[i, 0]], y[[i, 1]]])
+        .collect();
+    let tree: Arc<ImmutableKdTree<f64, 2>> =
+        Arc::new(ImmutableKdTree::new_from_slice(&points));
+
+    #[cfg(feature = "profiling")]
+    Y_KDTREE_BUILD_NS.fetch_add(
+        t_build.elapsed().as_nanos() as u64,
+        std::sync::atomic::Ordering::Relaxed,
+    );
+
+    // Thread-local X buffers (separate from trustworthiness_flat's pools)
+    thread_local! {
+        static KD_DIST_X:  RefCell<Vec<f64>>   = const { RefCell::new(Vec::new()) };
+        static KD_INDICES: RefCell<Vec<usize>> = const { RefCell::new(Vec::new()) };
+    }
+
+    // ── Rayon parallel loop ───────────────────────────────────────────────────
+    let penalty_sum: f64 = (0..n).into_par_iter().map(|i| {
+        let xi = x.row(i);
+
+        KD_DIST_X.with(|dist_x_cell| {
+            KD_INDICES.with(|indices_cell| {
+                let mut dist_x  = dist_x_cell.borrow_mut();
+                let mut indices = indices_cell.borrow_mut();
+
+                // ── x_dist step ──────────────────────────────────────────────
+                dist_x.clear();
+                dist_x.resize(n, 0.0f64);
+                for j in 0..n {
+                    let xj = x.row(j);
+                    dist_x[j] = xi.iter()
+                        .zip(xj.iter())
+                        .map(|(&a, &b)| (a - b) * (a - b))
+                        .sum();
+                }
+
+                // ── x_sort step ──────────────────────────────────────────────
+                indices.clear();
+                indices.extend(0..n);
+                indices.select_nth_unstable_by(k, |&a, &b| {
+                    dist_x[a].total_cmp(&dist_x[b]).then(a.cmp(&b))
+                });
+                let knn_x_set: HashSet<usize> =
+                    indices[..=k].iter().filter(|&&m| m != i).copied().collect();
+
+                // ── y_dist step (KD-tree) ─────────────────────────────────────
+                #[cfg(feature = "profiling")]
+                let t_query = std::time::Instant::now();
+
+                let results = tree.nearest_n::<SquaredEuclidean>(
+                    &[y[[i, 0]], y[[i, 1]]],
+                    NonZero::new(k + 1).unwrap(),
+                );
+                let knn_y_indices: Vec<usize> = results
+                    .into_iter()
+                    .filter(|nb| nb.item as usize != i)
+                    .take(k)
+                    .map(|nb| nb.item as usize)
+                    .collect();
+
+                #[cfg(feature = "profiling")]
+                Y_KDTREE_QUERY_NS.fetch_add(
+                    t_query.elapsed().as_nanos() as u64,
+                    std::sync::atomic::Ordering::Relaxed,
+                );
+
+                // ── penalty step (identical to flat path) ─────────────────────
+                let mut row_penalty = 0u64;
+                for &j in &knn_y_indices {
+                    if !knn_x_set.contains(&j) {
+                        let dj = dist_x[j];
+                        let rank: usize = (0..n)
+                            .filter(|&m| dist_x[m] < dj || (dist_x[m] == dj && m < j))
+                            .count();
+                        row_penalty += (rank - k) as u64;
+                    }
+                }
+                row_penalty as f64
+            })
+        })
+    }).sum();
+
+    #[cfg(feature = "profiling")]
+    {
+        use std::sync::atomic::Ordering;
+        eprintln!("[timing:y_kdtree_build] {}",
+            Y_KDTREE_BUILD_NS.load(Ordering::Relaxed));
+        eprintln!("[timing:y_kdtree_query] {}",
+            Y_KDTREE_QUERY_NS.load(Ordering::Relaxed));
+    }
+
+    let denom = n as f64 * k as f64 * (2 * n).saturating_sub(3 * k + 1) as f64;
+    1.0 - penalty_sum * 2.0 / denom
+}
+
+// ─── KD-tree profiling atomics (module scope) ─────────────────────────────────
+#[cfg(feature = "profiling")]
+static Y_KDTREE_BUILD_NS: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
+#[cfg(feature = "profiling")]
+static Y_KDTREE_QUERY_NS: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
 
 // ─── Data structures (testing feature only) ──────────────────────────────────
 
@@ -1251,6 +1399,27 @@ mod tests {
             dists.sort_by(|a, b| a.0.total_cmp(&b.0));
             let knn: Vec<usize> = dists[..k].iter().map(|&(_, j)| j).collect();
             assert!(!knn.contains(&i), "point {i} appeared in its own k-NN");
+        }
+    }
+
+    #[test]
+    fn t_tw_11_kdtree_matches_baseline() {
+        use rand::{SeedableRng, Rng};
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(123);
+        let n = 50;
+        let x = ndarray::Array2::from_shape_fn((n, 6), |_| rng.random::<f64>());
+        let y = ndarray::Array2::from_shape_fn((n, 2), |_| rng.random::<f64>());
+
+        for k in [3usize, 7] {
+            let t_kd = trustworthiness_inner(x.view(), y.view(), k, true);
+            let t_ref = trustworthiness_brute_force(x.view(), y.view(), k);
+            assert!(t_kd.is_finite(), "T_kdtree(k={k}) must be finite, got {t_kd}");
+            assert!(t_kd >= 0.0 && t_kd <= 1.0, "T_kdtree(k={k}) out of [0,1]: {t_kd}");
+            assert!(
+                (t_kd - t_ref).abs() < 1e-12,
+                "T_kdtree(k={k})={t_kd} diverges from brute-force={t_ref} by {}",
+                (t_kd - t_ref).abs()
+            );
         }
     }
 
