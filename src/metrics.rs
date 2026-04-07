@@ -523,7 +523,7 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
     #[cfg(feature = "profiling")]
     static X_SORT_NS:  std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     #[cfg(feature = "profiling")]
-    static Y_HEAP_NS:  std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    static Y_DIST_NS:  std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     #[cfg(feature = "profiling")]
     static PENALTY_NS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
@@ -586,7 +586,7 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
 
                 // ── y_dist step (flat_simd, replaces BinaryHeap) ─────────────
                 #[cfg(feature = "profiling")]
-                let t_y_heap = std::time::Instant::now();
+                let t_y_dist = std::time::Instant::now();
 
                 COMB_DIST_Y.with(|dy_cell| {
                     COMB_INDICES_Y.with(|iy_cell| {
@@ -631,7 +631,7 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
                         });
 
                         #[cfg(feature = "profiling")]
-                        Y_HEAP_NS.fetch_add(t_y_heap.elapsed().as_nanos() as u64,
+                        Y_DIST_NS.fetch_add(t_y_dist.elapsed().as_nanos() as u64,
                             std::sync::atomic::Ordering::Relaxed);
 
                         // ── penalty step ──────────────────────────────────────
@@ -665,7 +665,7 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
         use std::sync::atomic::Ordering;
         eprintln!("[timing:x_dist] {}",  X_DIST_NS.load(Ordering::Relaxed));
         eprintln!("[timing:x_sort] {}",  X_SORT_NS.load(Ordering::Relaxed));
-        eprintln!("[timing:y_heap] {}",  Y_HEAP_NS.load(Ordering::Relaxed));
+        eprintln!("[timing:y_dist] {}",  Y_DIST_NS.load(Ordering::Relaxed));
         eprintln!("[timing:penalty] {}", PENALTY_NS.load(Ordering::Relaxed));
     }
 
