@@ -418,7 +418,7 @@ unsafe fn dist_sq_avx2(xi: &[f64], xj: &[f64]) -> f64 {
 /// - `y_flat` must have at least `n * 2` elements (row-major, d_y = 2).
 /// - `out` must have at least `n` elements.
 /// Called only when `d_y == 2`, `y.is_standard_layout()`, and `avx2` is detected at runtime.
-#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+#[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2")]
 unsafe fn dist_sq_2d_avx2_batch(
     yi: &[f64],
@@ -595,7 +595,7 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
                         dist_y.resize(n, 0.0f64);
 
                         // Fill Y distances: AVX2 2D batch or scalar fallback.
-                        #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+                        #[cfg(target_arch = "x86_64")]
                         if use_avx2_y {
                             let y_flat = y.as_slice()
                                 .expect("y must be standard layout for AVX2 dispatch");
@@ -611,7 +611,7 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
                                     .map(|(&a, &b)| (a - b) * (a - b)).sum();
                             }
                         }
-                        #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+                        #[cfg(not(target_arch = "x86_64"))]
                         {
                             for j in 0..n {
                                 let yj = y.row(j);
