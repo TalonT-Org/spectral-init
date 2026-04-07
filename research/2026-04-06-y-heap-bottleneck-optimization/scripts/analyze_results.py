@@ -351,6 +351,13 @@ def compute_step_fractions(profiler_data: dict) -> dict:
             }
             step_means.append(mean)
 
+        if len(step_means) < len(STEPS):
+            missing = [s for s in STEPS if s not in step_stats]
+            warnings.warn(
+                f"{variant}: missing steps {missing} — "
+                f"y_heap_fraction may be inflated ({len(step_means)}/{len(STEPS)} steps present)"
+            )
+
         total = sum(step_means)
         y_heap_mean = step_stats.get("y_heap", {}).get("mean_ns", 0.0)
         y_heap_fraction = (y_heap_mean / total) if total > 0 else None
