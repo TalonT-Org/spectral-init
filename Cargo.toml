@@ -8,13 +8,14 @@ license = "MIT"
 [features]
 # Expose internal solver functions for integration tests.
 # Not part of the stable public API.
-testing = ["dep:serde"]
+testing = ["dep:serde", "dep:kiddo"]
 profiling = []
 # Enable CLI binary (trustworthiness) and .npy I/O support.
 cli = ["dep:ndarray-npy", "dep:pico-args", "dep:serde_json", "dep:libc"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"], optional = true }
+kiddo = { version = "5", optional = true }
 ndarray-npy = { version = "0.10", optional = true }
 pico-args = { version = "0.5", optional = true }
 sprs = "0.11"
