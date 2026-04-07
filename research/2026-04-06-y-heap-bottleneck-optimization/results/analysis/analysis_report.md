@@ -62,7 +62,7 @@ Run `cargo test --features testing` and confirm t_tw_01–t_tw_07 pass for all v
 
 ## Shipping Decision
 
-**SHIP `flat_simd`** — CI lower bound > 1.0 confirms statistically significant speedup at n=10000. Apply `flat_simd` variant to production.
+**SHIP `flat_simd`** — CI lower bound 1.73 exceeds pre-specified ≥1.5× gate, confirming statistically significant speedup at n=10000. Apply `flat_simd` variant to production.
 
 ## Threats to Validity
 

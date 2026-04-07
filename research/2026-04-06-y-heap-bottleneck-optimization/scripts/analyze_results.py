@@ -475,8 +475,8 @@ def build_shipping_block(decision: str, details: dict, data: dict = None) -> str
                 "Fallback: `flat_simd` if `heap_reuse` regresses in future profiling."
             )
         return (
-            "**SHIP `flat_simd`** — CI lower bound > 1.0 confirms statistically significant "
-            "speedup at n=10000. Apply `flat_simd` variant to production."
+            "**SHIP `flat_simd`** — CI lower bound exceeds pre-specified ≥1.5× gate, confirming "
+            "statistically significant speedup at n=10000. Apply `flat_simd` variant to production."
         )
 
     if decision == "WEAK_POSITIVE":
