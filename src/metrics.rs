@@ -493,6 +493,15 @@ fn trustworthiness_flat(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64
         this constraint is required by the normalization denominator and matches sklearn's ValueError",
         n / 2);
 
+    #[cfg(feature = "profiling")]
+    {
+        use std::sync::atomic::Ordering;
+        X_DIST_NS.store(0, Ordering::Relaxed);
+        X_SORT_NS.store(0, Ordering::Relaxed);
+        Y_DIST_NS.store(0, Ordering::Relaxed);
+        PENALTY_NS.store(0, Ordering::Relaxed);
+    }
+
     #[cfg(target_arch = "x86_64")]
     let use_avx2 = is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma");
     #[cfg(not(target_arch = "x86_64"))]
@@ -671,19 +680,17 @@ fn trustworthiness_flat(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64
     #[cfg(feature = "profiling")]
     {
         use std::sync::atomic::Ordering;
-        eprintln!("[timing:x_dist] {}",         X_DIST_NS.load(Ordering::Relaxed));
-        eprintln!("[timing:x_sort] {}",         X_SORT_NS.load(Ordering::Relaxed));
-        eprintln!("[timing:y_dist] {}",         Y_DIST_NS.load(Ordering::Relaxed));
-        eprintln!("[timing:penalty] {}",        PENALTY_NS.load(Ordering::Relaxed));
-        eprintln!("[timing:y_kdtree_build] {}", Y_KDTREE_BUILD_NS.load(Ordering::Relaxed));
-        eprintln!("[timing:y_kdtree_query] {}", Y_KDTREE_QUERY_NS.load(Ordering::Relaxed));
+        eprintln!("[timing:x_dist] {}",  X_DIST_NS.load(Ordering::Relaxed));
+        eprintln!("[timing:x_sort] {}",  X_SORT_NS.load(Ordering::Relaxed));
+        eprintln!("[timing:y_dist] {}",  Y_DIST_NS.load(Ordering::Relaxed));
+        eprintln!("[timing:penalty] {}", PENALTY_NS.load(Ordering::Relaxed));
     }
 
     let denom = n as f64 * k as f64 * (2 * n).saturating_sub(3 * k + 1) as f64;
     1.0 - penalty_sum * 2.0 / denom
 }
 
-#[cfg(any(test, feature = "testing"))]
+#[cfg(any(test, feature = "testing", feature = "cli"))]
 pub fn trustworthiness_inner(
     x: ArrayView2<f64>,
     y: ArrayView2<f64>,
@@ -713,6 +720,12 @@ pub fn trustworthiness_inner(
         "trustworthiness_inner: k must be < n/2 (got k={k}, n={n})");
 
     // ── Build KD-tree (outside Rayon loop) ───────────────────────────────────
+    #[cfg(feature = "profiling")]
+    {
+        use std::sync::atomic::Ordering;
+        Y_KDTREE_BUILD_NS.store(0, Ordering::Relaxed);
+        Y_KDTREE_QUERY_NS.store(0, Ordering::Relaxed);
+    }
     #[cfg(feature = "profiling")]
     let t_build = std::time::Instant::now();
 

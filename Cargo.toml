@@ -11,7 +11,7 @@ license = "MIT"
 testing = ["dep:serde", "dep:kiddo"]
 profiling = []
 # Enable CLI binary (trustworthiness) and .npy I/O support.
-cli = ["dep:ndarray-npy", "dep:pico-args", "dep:serde_json", "dep:libc"]
+cli = ["dep:ndarray-npy", "dep:pico-args", "dep:serde_json", "dep:libc", "dep:kiddo"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"], optional = true }
