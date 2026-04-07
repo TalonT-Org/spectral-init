@@ -271,7 +271,7 @@ def build_causal_table_md(data: dict, n: int = 10000) -> str:
     rows = [
         header,
         f"| Allocation (malloc elim.) | {_fmt(alloc_frac)} | {n} |",
-        f"| DS change (BTreeMap→Vec) | {_fmt(ds_frac)} | {n} |",
+        f"| DS change (BinaryHeap→Vec+introselect) | {_fmt(ds_frac)} | {n} |",
         f"| SIMD (flat layout)       | {_fmt(simd_frac)} | {n} |",
     ]
     return "\n".join(rows)
