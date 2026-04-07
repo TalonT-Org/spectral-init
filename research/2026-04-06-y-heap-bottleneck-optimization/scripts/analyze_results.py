@@ -158,9 +158,10 @@ def compute_hypothesis(data: dict, results_dir: Path) -> tuple:
         )
     elif point >= 1.1:
         primary = "ESCALATE"
+        ci_lb_str = f"{ratio_ci_lb:.4f}" if ratio_ci_lb is not None else "N/A"
         details["primary_text"] = (
             f"ESCALATE — point estimate {point:.4f}× ≥ 1.1 but CI lb "
-            f"{ratio_ci_lb:.4f} ≤ 1.0; Stage 2 needed"
+            f"{ci_lb_str} ≤ 1.0; Stage 2 needed"
         )
     else:
         primary = "NEGATIVE"
