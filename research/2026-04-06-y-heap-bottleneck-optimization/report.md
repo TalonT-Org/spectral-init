@@ -173,7 +173,7 @@ All 5 parity datasets: PASS.
 
 4. **Speedup increases with n.** `flat_partial` scales from 1.25× (n=1000) to 1.78× (n=10000); `flat_simd` from 1.41× to 1.99×. This is consistent with the y_heap step becoming more dominant at larger n (larger fraction of total, so more absolute gain from reducing it).
 
-5. **x_dist and x_sort are unaffected.** Step fractions confirm x_dist (~580ms) and x_sort (~435ms) are identical across all variants — the implementation correctly isolated only the y_heap step.
+5. **x_dist and x_sort are unaffected; penalty shows a minor unexplained increase.** Step fractions confirm x_dist (~580ms) and x_sort (~435ms) are consistent across all variants. However, the `penalty` step increases by ~12% in `flat_simd` (273.8ms baseline → 306.9ms), despite no code changes to the penalty computation. This may reflect cache interaction effects from the flat Vec layout changing memory access patterns. The increase is small relative to total runtime and does not affect the primary finding, but should be noted as a secondary effect.
 
 6. **flat_simd n=10000 ratio bounds are wide but decisive.** The conservative ratio bounds (1.73–2.27) — computed as `base_ci_lb / variant_ci_ub` to `base_ci_ub / variant_ci_lb`, not formal 95% CIs — are expected to be wide with 10 Criterion samples and the Flat sampling mode at high measurement times. The lower bound of 1.73 strongly confirms significance; no Stage 2 escalation was needed.
 
