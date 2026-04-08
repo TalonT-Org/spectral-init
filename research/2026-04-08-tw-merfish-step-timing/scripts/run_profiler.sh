@@ -4,7 +4,7 @@ set -euo pipefail
 # ── Constants ───────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 EXPERIMENT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-PROJECT_ROOT="$(cd "$EXPERIMENT_DIR/../../.." && pwd)"
+PROJECT_ROOT="$(cd "$EXPERIMENT_DIR/../.." && pwd)"
 MERFISH_DIR="$EXPERIMENT_DIR/../2026-04-05-tw-perf-rerun-clean/data/merfish"
 
 RESULTS_DIR="$EXPERIMENT_DIR/results/profiler"
