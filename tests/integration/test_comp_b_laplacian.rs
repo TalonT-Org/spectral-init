@@ -48,10 +48,7 @@ fn run_comp_b_test(dataset: &str, expected_n: usize) {
     // Diagonal: all 1.0
     for i in 0..expected_n {
         let d = l.get(i, i).copied().unwrap_or(0.0);
-        assert!(
-            (d - 1.0).abs() < 1e-15,
-            "L[{i},{i}] = {d}, expected 1.0"
-        );
+        assert!((d - 1.0).abs() < 1e-15, "L[{i},{i}] = {d}, expected 1.0");
     }
 }
 
@@ -64,12 +61,36 @@ macro_rules! make_comp_b_test {
     };
 }
 
-make_comp_b_test!(comp_b_laplacian_matches_python_blobs_connected_200,  "blobs_connected_200",  200);
-make_comp_b_test!(comp_b_laplacian_matches_python_blobs_connected_2000, "blobs_connected_2000", 2000);
-make_comp_b_test!(comp_b_laplacian_matches_python_disconnected_200,     "disconnected_200",     200);
-make_comp_b_test!(comp_b_laplacian_matches_python_moons_200,            "moons_200",            200);
-make_comp_b_test!(comp_b_laplacian_matches_python_circles_300,          "circles_300",          300);
-make_comp_b_test!(comp_b_laplacian_matches_python_near_dupes_100,       "near_dupes_100",       100);
-make_comp_b_test!(comp_b_laplacian_matches_python_blobs_50,             "blobs_50",             50);
-make_comp_b_test!(comp_b_laplacian_matches_python_blobs_500,            "blobs_500",            500);
-make_comp_b_test!(comp_b_laplacian_matches_python_blobs_5000,           "blobs_5000",           5000);
+make_comp_b_test!(
+    comp_b_laplacian_matches_python_blobs_connected_200,
+    "blobs_connected_200",
+    200
+);
+make_comp_b_test!(
+    comp_b_laplacian_matches_python_blobs_connected_2000,
+    "blobs_connected_2000",
+    2000
+);
+make_comp_b_test!(
+    comp_b_laplacian_matches_python_disconnected_200,
+    "disconnected_200",
+    200
+);
+make_comp_b_test!(comp_b_laplacian_matches_python_moons_200, "moons_200", 200);
+make_comp_b_test!(
+    comp_b_laplacian_matches_python_circles_300,
+    "circles_300",
+    300
+);
+make_comp_b_test!(
+    comp_b_laplacian_matches_python_near_dupes_100,
+    "near_dupes_100",
+    100
+);
+make_comp_b_test!(comp_b_laplacian_matches_python_blobs_50, "blobs_50", 50);
+make_comp_b_test!(comp_b_laplacian_matches_python_blobs_500, "blobs_500", 500);
+make_comp_b_test!(
+    comp_b_laplacian_matches_python_blobs_5000,
+    "blobs_5000",
+    5000
+);

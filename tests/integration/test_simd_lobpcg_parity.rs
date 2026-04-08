@@ -2,15 +2,14 @@
 mod common;
 
 use ndarray::{Array1, Array2};
-use sprs::CsMatI;
-use spectral_init::metrics::{sign_agnostic_max_error, subspace_gram_det_kd, max_eigenpair_residual};
 use serde_json::json;
-use spectral_init::{
-    normalize_signs_pub,
-    solve_eigenproblem_pub,
-    ComputeMode,
-    DEGENERATE_GAP_THRESHOLD,
+use spectral_init::metrics::{
+    max_eigenpair_residual, sign_agnostic_max_error, subspace_gram_det_kd,
 };
+use spectral_init::{
+    ComputeMode, DEGENERATE_GAP_THRESHOLD, normalize_signs_pub, solve_eigenproblem_pub,
+};
+use sprs::CsMatI;
 use std::fs;
 
 const SIMD_PARITY_F32_THRESHOLD: f64 = 4.0 * f32::EPSILON as f64;
@@ -124,7 +123,14 @@ fn max_subspace_angle(a: &Array2<f64>, b: &Array2<f64>) -> f64 {
     let s = evd.S();
     // Singular values of M are sqrt of eigenvalues of M^T*M
     let min_sv_sq = (0..k)
-        .map(|i| s.column_vector().iter().nth(i).copied().unwrap_or(0.0).max(0.0))
+        .map(|i| {
+            s.column_vector()
+                .iter()
+                .nth(i)
+                .copied()
+                .unwrap_or(0.0)
+                .max(0.0)
+        })
         .fold(f64::INFINITY, f64::min);
     let min_sv = min_sv_sq.sqrt().min(1.0); // clamp to [0, 1] for arccos
     min_sv.acos()
@@ -159,7 +165,7 @@ fn measure_solver_pair(
 
     // --- Residuals (pre-normalization, per Davis-Kahan definition) ---
     let residual_scalar = max_eigenpair_residual(laplacian, &eigenvalues_s, &eigvecs_s_raw);
-    let residual_simd   = max_eigenpair_residual(laplacian, &eigenvalues_x, &eigvecs_x_raw);
+    let residual_simd = max_eigenpair_residual(laplacian, &eigenvalues_x, &eigvecs_x_raw);
 
     // --- Sign normalization ---
     let mut eigvecs_s = eigvecs_s_raw;
@@ -289,7 +295,8 @@ fn test_solver_level_parity() {
     let n = cluster_size();
     for &w in BRIDGE_WEIGHTS.iter() {
         let laplacian = large_epsilon_bridge_laplacian(n, w);
-        let ((eigenvalues_s, _), level_s) = solve_eigenproblem_pub(&laplacian, 2, 42, ComputeMode::PythonCompat);
+        let ((eigenvalues_s, _), level_s) =
+            solve_eigenproblem_pub(&laplacian, 2, 42, ComputeMode::PythonCompat);
         let (_, level_x) = solve_eigenproblem_pub(&laplacian, 2, 42, ComputeMode::RustNative);
 
         let approx_gap = (eigenvalues_s[1] - eigenvalues_s[0]).max(0.0);

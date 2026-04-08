@@ -14,17 +14,14 @@ mod sinv;
 // pub (not pub(crate)) so lib.rs can re-export it for integration tests.
 pub use dense::dense_evd;
 
+use crate::config::ComputeMode;
+use crate::metrics::{
+    DENSE_EVD_QUALITY_THRESHOLD, LOBPCG_QUALITY_THRESHOLD, RSVD_QUALITY_THRESHOLD,
+    SINV_LOBPCG_QUALITY_THRESHOLD, max_eigenpair_residual,
+};
+use crate::operator::CsrOperator;
 use ndarray::{Array1, Array2};
 use sprs::CsMatI;
-use crate::config::ComputeMode;
-use crate::operator::CsrOperator;
-use crate::metrics::{
-    max_eigenpair_residual,
-    DENSE_EVD_QUALITY_THRESHOLD,
-    LOBPCG_QUALITY_THRESHOLD,
-    SINV_LOBPCG_QUALITY_THRESHOLD,
-    RSVD_QUALITY_THRESHOLD,
-};
 
 /// Eigendecomposition result: (eigenvalues shape [k], eigenvectors shape [n, k]).
 pub type EigenResult = (Array1<f64>, Array2<f64>);
@@ -50,7 +47,6 @@ fn dense_n_threshold() -> usize {
 fn dense_n_threshold() -> usize {
     DENSE_N_THRESHOLD
 }
-
 
 /// Enforce the mathematical PSD contract on solver output.
 ///
@@ -208,9 +204,7 @@ fn solve_eigenproblem_with_op<O: crate::operator::LinearOperator>(
         eprintln!("[timing:level_4] {}µs", _t4.elapsed().as_micros());
         let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
         if quality < RSVD_QUALITY_THRESHOLD {
-            log::debug!(
-                "[spectral] Level 4 (rSVD) succeeded (n={n}, max_residual={quality:.2e})"
-            );
+            log::debug!("[spectral] Level 4 (rSVD) succeeded (n={n}, max_residual={quality:.2e})");
             #[cfg(feature = "testing")]
             eprintln!("[timing:level_total] {}µs", _t_solve.elapsed().as_micros());
             return (enforce_psd_contract((eigs, vecs)), 4);
@@ -275,7 +269,9 @@ pub(crate) fn solve_eigenproblem(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::metrics::{max_eigenpair_residual, DENSE_EVD_QUALITY_THRESHOLD, LOBPCG_QUALITY_THRESHOLD};
+    use crate::metrics::{
+        DENSE_EVD_QUALITY_THRESHOLD, LOBPCG_QUALITY_THRESHOLD, max_eigenpair_residual,
+    };
 
     /// Build a 6-node path-graph Laplacian in CSR format.
     ///
@@ -292,19 +288,19 @@ mod tests {
             vec![0usize, 2, 5, 8, 11, 14, 16],
             vec![
                 0usize, 1, // row 0
-                0, 1, 2,   // row 1
-                1, 2, 3,   // row 2
-                2, 3, 4,   // row 3
-                3, 4, 5,   // row 4
-                4, 5,      // row 5
+                0, 1, 2, // row 1
+                1, 2, 3, // row 2
+                2, 3, 4, // row 3
+                3, 4, 5, // row 4
+                4, 5, // row 5
             ],
             vec![
-                1.0_f64, -1.0,        // row 0
-                -1.0, 2.0, -1.0,      // row 1
-                -1.0, 2.0, -1.0,      // row 2
-                -1.0, 2.0, -1.0,      // row 3
-                -1.0, 2.0, -1.0,      // row 4
-                -1.0, 1.0,            // row 5
+                1.0_f64, -1.0, // row 0
+                -1.0, 2.0, -1.0, // row 1
+                -1.0, 2.0, -1.0, // row 2
+                -1.0, 2.0, -1.0, // row 3
+                -1.0, 2.0, -1.0, // row 4
+                -1.0, 1.0, // row 5
             ],
         )
     }
@@ -312,7 +308,13 @@ mod tests {
     #[test]
     fn solve_eigenproblem_eigenvalues_nonneg_and_sorted() {
         let laplacian = path_graph_laplacian_6();
-        let ((eigvals, _), _) = solve_eigenproblem(&laplacian, 2, 42, &ndarray::Array1::ones(6), ComputeMode::PythonCompat);
+        let ((eigvals, _), _) = solve_eigenproblem(
+            &laplacian,
+            2,
+            42,
+            &ndarray::Array1::ones(6),
+            ComputeMode::PythonCompat,
+        );
 
         // All eigenvalues must be non-negative
         for &v in eigvals.iter() {
@@ -324,7 +326,10 @@ mod tests {
             assert!(
                 eigvals[i] >= eigvals[i - 1] - 1e-10,
                 "eigenvalues not sorted: eigvals[{}]={} > eigvals[{}]={}",
-                i - 1, eigvals[i - 1], i, eigvals[i]
+                i - 1,
+                eigvals[i - 1],
+                i,
+                eigvals[i]
             );
         }
     }
@@ -332,9 +337,19 @@ mod tests {
     #[test]
     fn solve_eigenproblem_returns_k_plus_one_pairs() {
         // 6-node path graph (n=6 < 2000 → Level 0 dense EVD)
-        let ((eigs, vecs), _) = solve_eigenproblem(&path_graph_laplacian_6(), 2, 42, &ndarray::Array1::ones(6), ComputeMode::PythonCompat);
+        let ((eigs, vecs), _) = solve_eigenproblem(
+            &path_graph_laplacian_6(),
+            2,
+            42,
+            &ndarray::Array1::ones(6),
+            ComputeMode::PythonCompat,
+        );
         assert_eq!(eigs.len(), 3, "expected n_components+1=3 eigenvalues");
-        assert_eq!(vecs.shape(), &[6, 3], "expected [n, n_components+1] = [6, 3] eigenvectors");
+        assert_eq!(
+            vecs.shape(),
+            &[6, 3],
+            "expected [n, n_components+1] = [6, 3] eigenvectors"
+        );
     }
 
     /// Build a sparse diagonal n×n CSR Laplacian with eigenvalues [0, 1/(n-1), ..., 1].
@@ -343,9 +358,7 @@ mod tests {
     fn diagonal_laplacian(n: usize) -> CsMatI<f64, usize> {
         let indptr: Vec<usize> = (0..=n).collect();
         let indices: Vec<usize> = (0..n).collect();
-        let data: Vec<f64> = (0..n)
-            .map(|i| i as f64 / (n - 1).max(1) as f64)
-            .collect();
+        let data: Vec<f64> = (0..n).map(|i| i as f64 / (n - 1).max(1) as f64).collect();
         CsMatI::new((n, n), indptr, indices, data)
     }
 
@@ -358,10 +371,24 @@ mod tests {
         let n_components = 2;
         let laplacian = diagonal_laplacian(n);
 
-        let ((eigvals, eigvecs), _) = solve_eigenproblem(&laplacian, n_components, 42, &ndarray::Array1::ones(n), ComputeMode::PythonCompat);
+        let ((eigvals, eigvecs), _) = solve_eigenproblem(
+            &laplacian,
+            n_components,
+            42,
+            &ndarray::Array1::ones(n),
+            ComputeMode::PythonCompat,
+        );
 
-        assert_eq!(eigvals.len(), n_components + 1, "expected n_components+1 eigenvalues");
-        assert_eq!(eigvecs.shape(), &[n, n_components + 1], "expected [n, n_components+1] shape");
+        assert_eq!(
+            eigvals.len(),
+            n_components + 1,
+            "expected n_components+1 eigenvalues"
+        );
+        assert_eq!(
+            eigvecs.shape(),
+            &[n, n_components + 1],
+            "expected [n, n_components+1] shape"
+        );
 
         for &v in eigvals.iter() {
             assert!(v >= -1e-6, "eigenvalue is negative: {v:.2e}");
@@ -375,7 +402,13 @@ mod tests {
         // For a well-conditioned diagonal Laplacian, Level 1 (plain LOBPCG) succeeds.
         let n = 2001;
         let laplacian = diagonal_laplacian(n);
-        let (_, level) = solve_eigenproblem(&laplacian, 2, 42, &ndarray::Array1::ones(n), ComputeMode::PythonCompat);
+        let (_, level) = solve_eigenproblem(
+            &laplacian,
+            2,
+            42,
+            &ndarray::Array1::ones(n),
+            ComputeMode::PythonCompat,
+        );
         assert!(
             level >= 1 && level <= 5,
             "expected level in {{1,2,3,4,5}}, got {level}"
@@ -421,7 +454,11 @@ mod tests {
         // v = v0 + δ·v1: perturbs the exact λ=0 eigenvector toward the λ=1 eigenvector.
         let eigenvectors = Array2::from_shape_vec(
             (3, 1),
-            vec![inv_sqrt3 + delta * inv_sqrt2, inv_sqrt3, inv_sqrt3 - delta * inv_sqrt2],
+            vec![
+                inv_sqrt3 + delta * inv_sqrt2,
+                inv_sqrt3,
+                inv_sqrt3 - delta * inv_sqrt2,
+            ],
         )
         .unwrap();
         let eigenvalues = Array1::from_vec(vec![0.0_f64]);
@@ -441,7 +478,13 @@ mod tests {
     fn level0_result_passes_dense_evd_quality_gate() {
         // 6-node path graph, n=6 < 2000 → Level 0 dense EVD.
         let laplacian = path_graph_laplacian_6();
-        let ((eigs, vecs), _) = solve_eigenproblem(&laplacian, 2, 42, &ndarray::Array1::ones(6), ComputeMode::PythonCompat);
+        let ((eigs, vecs), _) = solve_eigenproblem(
+            &laplacian,
+            2,
+            42,
+            &ndarray::Array1::ones(6),
+            ComputeMode::PythonCompat,
+        );
         let residual = max_eigenpair_residual(&laplacian, &eigs, &vecs);
         assert!(
             residual < DENSE_EVD_QUALITY_THRESHOLD,
@@ -452,7 +495,9 @@ mod tests {
     #[test]
     fn dense_n_threshold_returns_default_when_env_unset() {
         // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
-        unsafe { std::env::remove_var("SPECTRAL_DENSE_N_THRESHOLD"); }
+        unsafe {
+            std::env::remove_var("SPECTRAL_DENSE_N_THRESHOLD");
+        }
         assert_eq!(dense_n_threshold(), DENSE_N_THRESHOLD);
     }
 
@@ -460,17 +505,25 @@ mod tests {
     #[test]
     fn dense_n_threshold_reads_env_override() {
         // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
-        unsafe { std::env::set_var("SPECTRAL_DENSE_N_THRESHOLD", "50"); }
+        unsafe {
+            std::env::set_var("SPECTRAL_DENSE_N_THRESHOLD", "50");
+        }
         assert_eq!(dense_n_threshold(), 50);
-        unsafe { std::env::remove_var("SPECTRAL_DENSE_N_THRESHOLD"); }
+        unsafe {
+            std::env::remove_var("SPECTRAL_DENSE_N_THRESHOLD");
+        }
     }
 
     #[test]
     fn dense_n_threshold_falls_back_on_parse_error() {
         // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
-        unsafe { std::env::set_var("SPECTRAL_DENSE_N_THRESHOLD", "not_a_number"); }
+        unsafe {
+            std::env::set_var("SPECTRAL_DENSE_N_THRESHOLD", "not_a_number");
+        }
         assert_eq!(dense_n_threshold(), DENSE_N_THRESHOLD);
-        unsafe { std::env::remove_var("SPECTRAL_DENSE_N_THRESHOLD"); }
+        unsafe {
+            std::env::remove_var("SPECTRAL_DENSE_N_THRESHOLD");
+        }
     }
 
     #[test]
@@ -479,11 +532,18 @@ mod tests {
         let raw_eigenvalues = ndarray::arr1(&[-1.657e-10_f64, 2.668e-3, 7.235e-3]);
         let dummy_vecs = ndarray::Array2::zeros((10, 3));
         let contracted = enforce_psd_contract((raw_eigenvalues, dummy_vecs.clone()));
-        assert_eq!(contracted.0[0], 0.0,
-            "smallest eigenvalue must be clamped from -1.657e-10 to 0.0");
-        assert!(contracted.0[1] > 0.0 && contracted.0[2] > 0.0,
-            "non-trivial eigenvalues must be unchanged");
-        assert_eq!(contracted.1, dummy_vecs, "eigenvectors must pass through unmodified");
+        assert_eq!(
+            contracted.0[0], 0.0,
+            "smallest eigenvalue must be clamped from -1.657e-10 to 0.0"
+        );
+        assert!(
+            contracted.0[1] > 0.0 && contracted.0[2] > 0.0,
+            "non-trivial eigenvalues must be unchanged"
+        );
+        assert_eq!(
+            contracted.1, dummy_vecs,
+            "eigenvectors must pass through unmodified"
+        );
     }
 
     #[test]
@@ -492,9 +552,14 @@ mod tests {
         let raw_eigenvalues = ndarray::arr1(&[0.0_f64, 1.5, 2.0 + 1.3e-15]);
         let dummy_vecs = ndarray::Array2::zeros((10, 3));
         let contracted = enforce_psd_contract((raw_eigenvalues, dummy_vecs.clone()));
-        assert_eq!(contracted.0[2], 2.0,
-            "eigenvalue above 2.0 must be clamped to exactly 2.0");
-        assert_eq!(contracted.1, dummy_vecs, "eigenvectors must pass through unmodified");
+        assert_eq!(
+            contracted.0[2], 2.0,
+            "eigenvalue above 2.0 must be clamped to exactly 2.0"
+        );
+        assert_eq!(
+            contracted.1, dummy_vecs,
+            "eigenvectors must pass through unmodified"
+        );
     }
 
     #[test]
@@ -503,8 +568,10 @@ mod tests {
         let raw_eigenvalues = ndarray::arr1(&[0.0_f64, 0.5, 1.0]);
         let dummy_vecs = ndarray::Array2::zeros((10, 3));
         let contracted = enforce_psd_contract((raw_eigenvalues.clone(), dummy_vecs));
-        assert_eq!(contracted.0, raw_eigenvalues,
-            "clean eigenvalues must pass through unmodified");
+        assert_eq!(
+            contracted.0, raw_eigenvalues,
+            "clean eigenvalues must pass through unmodified"
+        );
     }
 
     #[test]
@@ -513,7 +580,9 @@ mod tests {
         let raw_eigenvalues = ndarray::arr1(&[-8.2e-9_f64, 1.1e-3, 3.4e-3]);
         let dummy_vecs = ndarray::Array2::zeros((10, 3));
         let contracted = enforce_psd_contract((raw_eigenvalues, dummy_vecs));
-        assert_eq!(contracted.0[0], 0.0,
-            "rSVD cancellation artifact must be clamped to 0.0");
+        assert_eq!(
+            contracted.0[0], 0.0,
+            "rSVD cancellation artifact must be clamped to 0.0"
+        );
     }
 }

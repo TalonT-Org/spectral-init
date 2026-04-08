@@ -1,9 +1,9 @@
 #[path = "../common/mod.rs"]
 mod common;
 
-use spectral_init::lobpcg_sinv_solve;
 use ndarray::Array1;
 use ndarray_npy::NpzReader;
+use spectral_init::lobpcg_sinv_solve;
 
 const N_COMPONENTS: usize = 2;
 
@@ -12,8 +12,8 @@ fn load_n_conn_components(dataset: &str) -> usize {
     let path = common::fixture_path(dataset, "comp_c_components.npz");
     let file = std::fs::File::open(&path)
         .unwrap_or_else(|e| panic!("dataset {dataset}: cannot open {path:?}: {e}"));
-    let mut npz = NpzReader::new(file)
-        .unwrap_or_else(|e| panic!("dataset {dataset}: NpzReader failed: {e}"));
+    let mut npz =
+        NpzReader::new(file).unwrap_or_else(|e| panic!("dataset {dataset}: NpzReader failed: {e}"));
     npz.by_name::<ndarray::OwnedRepr<i32>, ndarray::Ix0>("n_components")
         .unwrap_or_else(|e| panic!("dataset {dataset}: n_components key missing: {e}"))
         .into_scalar() as usize
@@ -38,7 +38,9 @@ fn run_sinv_test(dataset: &str) {
     // Skip disconnected datasets.
     let n_conn = load_n_conn_components(dataset);
     if n_conn > 1 {
-        eprintln!("SKIP: {dataset} has {n_conn} connected components — sinv operates on single component");
+        eprintln!(
+            "SKIP: {dataset} has {n_conn} connected components — sinv operates on single component"
+        );
         return;
     }
 
@@ -48,7 +50,10 @@ fn run_sinv_test(dataset: &str) {
 
     // Skip if graph is too small for sinv (k >= n would trigger the None guard).
     if n <= N_COMPONENTS + 1 {
-        eprintln!("SKIP: {dataset} n={n} <= N_COMPONENTS+1={}", N_COMPONENTS + 1);
+        eprintln!(
+            "SKIP: {dataset} n={n} <= N_COMPONENTS+1={}",
+            N_COMPONENTS + 1
+        );
         return;
     }
 
@@ -58,7 +63,8 @@ fn run_sinv_test(dataset: &str) {
     assert_eq!(
         sqrt_deg.len(),
         n,
-        "dataset={dataset}: sqrt_deg length {}, expected {n}", sqrt_deg.len()
+        "dataset={dataset}: sqrt_deg length {}, expected {n}",
+        sqrt_deg.len()
     );
 
     // Load reference eigenvalues from dense EVD.
@@ -80,7 +86,8 @@ fn run_sinv_test(dataset: &str) {
         assert!(
             diff < 1e-8,
             "dataset={dataset}, eigenvalue[{i}]: got {}, ref {}, diff {diff:.2e}",
-            eigvals[i], ref_eigvals[i]
+            eigvals[i],
+            ref_eigvals[i]
         );
     }
 
@@ -106,9 +113,21 @@ macro_rules! make_sinv_tests {
     };
 }
 
-make_sinv_tests!(sinv_eigenvalue_accuracy_blobs_50, sinv_residual_quality_blobs_50, "blobs_50");
-make_sinv_tests!(sinv_eigenvalue_accuracy_blobs_500, sinv_residual_quality_blobs_500, "blobs_500");
-make_sinv_tests!(sinv_eigenvalue_accuracy_blobs_5000, sinv_residual_quality_blobs_5000, "blobs_5000");
+make_sinv_tests!(
+    sinv_eigenvalue_accuracy_blobs_50,
+    sinv_residual_quality_blobs_50,
+    "blobs_50"
+);
+make_sinv_tests!(
+    sinv_eigenvalue_accuracy_blobs_500,
+    sinv_residual_quality_blobs_500,
+    "blobs_500"
+);
+make_sinv_tests!(
+    sinv_eigenvalue_accuracy_blobs_5000,
+    sinv_residual_quality_blobs_5000,
+    "blobs_5000"
+);
 make_sinv_tests!(
     sinv_eigenvalue_accuracy_blobs_connected_200,
     sinv_residual_quality_blobs_connected_200,
@@ -119,13 +138,21 @@ make_sinv_tests!(
     sinv_residual_quality_blobs_connected_2000,
     "blobs_connected_2000"
 );
-make_sinv_tests!(sinv_eigenvalue_accuracy_circles_300, sinv_residual_quality_circles_300, "circles_300");
+make_sinv_tests!(
+    sinv_eigenvalue_accuracy_circles_300,
+    sinv_residual_quality_circles_300,
+    "circles_300"
+);
 make_sinv_tests!(
     sinv_eigenvalue_accuracy_disconnected_200,
     sinv_residual_quality_disconnected_200,
     "disconnected_200"
 );
-make_sinv_tests!(sinv_eigenvalue_accuracy_moons_200, sinv_residual_quality_moons_200, "moons_200");
+make_sinv_tests!(
+    sinv_eigenvalue_accuracy_moons_200,
+    sinv_residual_quality_moons_200,
+    "moons_200"
+);
 make_sinv_tests!(
     sinv_eigenvalue_accuracy_near_dupes_100,
     sinv_residual_quality_near_dupes_100,

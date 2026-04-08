@@ -23,13 +23,7 @@ pub trait LinearOperator {
 /// precondition assertions; `pub(crate)` otherwise with `debug_assert!` guards.
 #[cfg(feature = "testing")]
 #[doc(hidden)]
-pub fn spmv_csr(
-    indptr: &[usize],
-    indices: &[usize],
-    data: &[f64],
-    x: &[f64],
-    y: &mut [f64],
-) {
+pub fn spmv_csr(indptr: &[usize], indices: &[usize], data: &[f64], x: &[f64], y: &mut [f64]) {
     assert!(
         indptr.len() == y.len() + 1,
         "CSR invariant violated: indptr.len()={} != y.len()+1={}",
@@ -107,7 +101,7 @@ unsafe fn spmv_avx2_gather_inner(
     let n = y.len();
     for i in 0..n {
         let start = indptr[i];
-        let end   = indptr[i + 1];
+        let end = indptr[i + 1];
 
         let (mut result, mut base) = unsafe {
             let mut acc = _mm256_setzero_pd();
@@ -118,7 +112,7 @@ unsafe fn spmv_avx2_gather_inner(
                     indices[base + 3] as i32,
                     indices[base + 2] as i32,
                     indices[base + 1] as i32,
-                    indices[base]     as i32,
+                    indices[base] as i32,
                 );
                 let xv = _mm256_i32gather_pd(x.as_ptr(), vi, 8);
                 let dv = _mm256_loadu_pd(data.as_ptr().add(base));
@@ -126,8 +120,8 @@ unsafe fn spmv_avx2_gather_inner(
                 base += 4;
             }
 
-            let lo     = _mm256_castpd256_pd128(acc);
-            let hi     = _mm256_extractf128_pd(acc, 1);
+            let lo = _mm256_castpd256_pd128(acc);
+            let hi = _mm256_extractf128_pd(acc, 1);
             let sum128 = _mm_add_pd(lo, hi);
             let halved = _mm_hadd_pd(sum128, sum128);
             let result = _mm_cvtsd_f64(halved);
@@ -176,14 +170,18 @@ pub struct CsrOperator<'a>(pub &'a CsMatI<f64, usize>);
 impl<'a> LinearOperator for CsrOperator<'a> {
     fn apply(&self, x: ArrayView2<f64>, y: &mut Array2<f64>) {
         debug_assert_eq!(
-            x.shape()[0], self.0.rows(),
+            x.shape()[0],
+            self.0.rows(),
             "CsrOperator::apply: x row count {} != matrix rows {}",
-            x.shape()[0], self.0.rows()
+            x.shape()[0],
+            self.0.rows()
         );
         debug_assert_eq!(
-            y.shape()[0], self.0.rows(),
+            y.shape()[0],
+            self.0.rows(),
             "CsrOperator::apply: y row count {} != matrix rows {}",
-            y.shape()[0], self.0.rows()
+            y.shape()[0],
+            self.0.rows()
         );
         y.fill(0.0);
         let k = x.shape()[1];
@@ -205,11 +203,23 @@ impl<'a> LinearOperator for CsrOperator<'a> {
             // y: write into the column slice directly when possible; scatter otherwise.
             match y.column_mut(0).as_slice_mut() {
                 Some(y_col) => {
-                    spmv_csr(mat.indptr().raw_storage(), mat.indices(), mat.data(), x_col, y_col);
+                    spmv_csr(
+                        mat.indptr().raw_storage(),
+                        mat.indices(),
+                        mat.data(),
+                        x_col,
+                        y_col,
+                    );
                 }
                 None => {
                     let mut y_col = vec![0.0_f64; mat.rows()];
-                    spmv_csr(mat.indptr().raw_storage(), mat.indices(), mat.data(), x_col, &mut y_col);
+                    spmv_csr(
+                        mat.indptr().raw_storage(),
+                        mat.indices(),
+                        mat.data(),
+                        x_col,
+                        &mut y_col,
+                    );
                     for (i, v) in y_col.into_iter().enumerate() {
                         y[[i, 0]] = v;
                     }
@@ -259,14 +269,18 @@ impl<'a> CsrOperatorSimd<'a> {
 impl<'a> LinearOperator for CsrOperatorSimd<'a> {
     fn apply(&self, x: ArrayView2<f64>, y: &mut Array2<f64>) {
         debug_assert_eq!(
-            x.shape()[0], self.0.rows(),
+            x.shape()[0],
+            self.0.rows(),
             "CsrOperatorSimd::apply: x row count {} != matrix rows {}",
-            x.shape()[0], self.0.rows()
+            x.shape()[0],
+            self.0.rows()
         );
         debug_assert_eq!(
-            y.shape()[0], self.0.rows(),
+            y.shape()[0],
+            self.0.rows(),
             "CsrOperatorSimd::apply: y row count {} != matrix rows {}",
-            y.shape()[0], self.0.rows()
+            y.shape()[0],
+            self.0.rows()
         );
         y.fill(0.0);
         let k = x.shape()[1];
@@ -329,7 +343,7 @@ impl<'a> LinearOperator for CsrOperatorSimd<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ndarray::{array, Array1, Array2};
+    use ndarray::{Array1, Array2, array};
 
     // Build the 3×3 path-graph Laplacian [[2,-1,0],[-1,2,-1],[0,-1,2]] as CSR.
     fn laplacian_3x3() -> CsMatI<f64, usize> {
@@ -433,8 +447,7 @@ mod tests {
         let op = CsrOperator(&mat);
 
         let x_vec = vec![1.0_f64, -1.0, 2.0];
-        let x_arr: Array2<f64> = ndarray::Array1::from(x_vec.clone())
-            .insert_axis(ndarray::Axis(1));
+        let x_arr: Array2<f64> = ndarray::Array1::from(x_vec.clone()).insert_axis(ndarray::Axis(1));
         let mut y_op = Array2::zeros((3, 1));
         op.apply(x_arr.view(), &mut y_op);
 
@@ -505,7 +518,7 @@ mod tests {
             3, 4, 5, // row 4
             4, 5, 6, // row 5
             5, 6, 7, // row 6
-            6, 7,   // row 7
+            6, 7, // row 7
         ];
         let data = vec![
             2.0_f64, -1.0, // row 0
@@ -515,7 +528,7 @@ mod tests {
             -1.0, 2.0, -1.0, // row 4
             -1.0, 2.0, -1.0, // row 5
             -1.0, 2.0, -1.0, // row 6
-            -1.0, 2.0,      // row 7
+            -1.0, 2.0, // row 7
         ];
 
         // Fixed input vector (hardcoded for determinism).
@@ -568,7 +581,8 @@ mod tests {
             assert!(
                 (y_avx2[i] - y_scalar[i]).abs() < 1e-13,
                 "avx2 vs scalar mismatch at row {i}: avx2={}, scalar={}",
-                y_avx2[i], y_scalar[i]
+                y_avx2[i],
+                y_scalar[i]
             );
         }
     }
@@ -581,17 +595,18 @@ mod tests {
         }
         let mat = laplacian_3x3();
         let op_scalar = CsrOperator(&mat);
-        let op_simd   = CsrOperatorSimd(&mat);
+        let op_simd = CsrOperatorSimd(&mat);
         let x: ndarray::Array2<f64> = ndarray::array![[1.0], [2.0], [3.0]];
         let mut y_scalar = ndarray::Array2::zeros((3, 1));
-        let mut y_simd   = ndarray::Array2::zeros((3, 1));
+        let mut y_simd = ndarray::Array2::zeros((3, 1));
         op_scalar.apply(x.view(), &mut y_scalar);
         op_simd.apply(x.view(), &mut y_simd);
         for i in 0..3 {
             assert!(
                 (y_simd[[i, 0]] - y_scalar[[i, 0]]).abs() < 1e-13,
                 "CsrOperatorSimd vs CsrOperator mismatch at row {i}: simd={}, scalar={}",
-                y_simd[[i, 0]], y_scalar[[i, 0]]
+                y_simd[[i, 0]],
+                y_scalar[[i, 0]]
             );
         }
     }
@@ -629,8 +644,8 @@ mod tests {
         use std::path::Path;
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/fixtures/blobs_connected_200/comp_b_laplacian.npz");
-        let file = std::fs::File::open(&path)
-            .unwrap_or_else(|e| panic!("cannot open {:?}: {}", path, e));
+        let file =
+            std::fs::File::open(&path).unwrap_or_else(|e| panic!("cannot open {:?}: {}", path, e));
         let mut npz = NpzReader::new(file)
             .unwrap_or_else(|e| panic!("NpzReader error for {:?}: {}", path, e));
         let data: Vec<f64> = npz
@@ -654,8 +669,7 @@ mod tests {
         assert_eq!(shape_arr.len(), 2, "shape array must have 2 elements");
         let rows = shape_arr[0] as usize;
         let cols = shape_arr[1] as usize;
-        CsMatI::try_new((rows, cols), indptr, indices, data)
-            .expect("fixture Laplacian CSR invalid")
+        CsMatI::try_new((rows, cols), indptr, indices, data).expect("fixture Laplacian CSR invalid")
     }
 
     #[test]

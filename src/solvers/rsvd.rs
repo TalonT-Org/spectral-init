@@ -1,10 +1,10 @@
-use sprs::{CsMatI, TriMat};
+use super::EigenResult;
+use faer::linalg::solvers::{Qr, SelfAdjointEigen};
+use faer::{Mat as FaerMat, Side};
 use ndarray::{Array1, Array2};
 use rand::SeedableRng;
 use rand_distr::{Distribution, StandardNormal};
-use faer::{Mat as FaerMat, Side};
-use faer::linalg::solvers::{Qr, SelfAdjointEigen};
-use super::EigenResult;
+use sprs::{CsMatI, TriMat};
 
 /// Forms M = 2I − L by negating off-diagonal entries and mapping diagonal 1→1.
 ///
@@ -18,9 +18,9 @@ fn two_i_minus_laplacian(laplacian: &CsMatI<f64, usize>) -> CsMatI<f64, usize> {
     let mut tri = TriMat::with_capacity((n, n), laplacian.nnz());
     for (val, (row, col)) in laplacian.iter() {
         let new_val = if row == col {
-            2.0 - val   // diagonal: 2 − 1 = 1.0
+            2.0 - val // diagonal: 2 − 1 = 1.0
         } else {
-            -val        // off-diagonal: negate (L off-diag ≤ 0, M off-diag ≥ 0)
+            -val // off-diagonal: negate (L off-diag ≤ 0, M off-diag ≥ 0)
         };
         tri.add_triplet(row, col, new_val);
     }
@@ -31,7 +31,10 @@ fn two_i_minus_laplacian(laplacian: &CsMatI<f64, usize>) -> CsMatI<f64, usize> {
 /// Uses `sprs::prod::csr_mulacc_dense_rowmaj` for a single row-major SpMM call
 /// with zero per-column heap allocations.
 fn sparse_dense_mult(m: &CsMatI<f64, usize>, x: &Array2<f64>) -> Array2<f64> {
-    debug_assert!(m.is_csr(), "sparse_dense_mult: m must be in CSR format; csr_mulacc_dense_rowmaj requires CSR storage");
+    debug_assert!(
+        m.is_csr(),
+        "sparse_dense_mult: m must be in CSR format; csr_mulacc_dense_rowmaj requires CSR storage"
+    );
     let (n, ncols) = x.dim();
     let mut y = Array2::<f64>::zeros((n, ncols));
     sprs::prod::csr_mulacc_dense_rowmaj(m.view(), x.view(), y.view_mut());
@@ -138,7 +141,10 @@ pub(crate) fn rsvd_solve(
     seed: u64,
 ) -> EigenResult {
     let n = laplacian.rows();
-    assert!(n_components > 0, "rsvd_solve: n_components must be >= 1, got 0");
+    assert!(
+        n_components > 0,
+        "rsvd_solve: n_components must be >= 1, got 0"
+    );
     assert!(
         n_components < n,
         "rsvd_solve: n_components ({n_components}) must be < n ({n})"
@@ -147,7 +153,7 @@ pub(crate) fn rsvd_solve(
     let rank = n_components + 1;
     // k = total random vectors; see rsvd_k_sub for the oversampling formula.
     let k = rsvd_k_sub_effective(n, rank);
-    let nbiter = rsvd_nbiter_effective();  // QR-stabilized subspace iterations (Halko-Tropp Algorithm 4.4)
+    let nbiter = rsvd_nbiter_effective(); // QR-stabilized subspace iterations (Halko-Tropp Algorithm 4.4)
 
     // ── Step A: Form M = 2I - L ──────────────────────────────────────────────
     let m = two_i_minus_laplacian(laplacian);
@@ -161,26 +167,26 @@ pub(crate) fn rsvd_solve(
     // Each iteration squares the effective singular value decay of M,
     // improving accuracy for clustered eigenvalues.
     for _ in 0..nbiter {
-        let y = sparse_dense_mult(&m, &omega);   // Y = M Ω [n, k]
-        omega = qr_thin_q(&y);                   // Ω ← QR(Y).Q [n, k]
-        let z = sparse_dense_mult(&m, &omega);   // Z = M Ω [n, k]
-        omega = qr_thin_q(&z);                   // Ω ← QR(Z).Q [n, k]
+        let y = sparse_dense_mult(&m, &omega); // Y = M Ω [n, k]
+        omega = qr_thin_q(&y); // Ω ← QR(Y).Q [n, k]
+        let z = sparse_dense_mult(&m, &omega); // Z = M Ω [n, k]
+        omega = qr_thin_q(&z); // Ω ← QR(Z).Q [n, k]
     }
 
     // ── Step D: Final sketch and orthonormal basis ────────────────────────────
-    let y = sparse_dense_mult(&m, &omega);       // Y = M Ω [n, k]
-    let q = qr_thin_q(&y);                       // Q = QR(Y).Q [n, k]
+    let y = sparse_dense_mult(&m, &omega); // Y = M Ω [n, k]
+    let q = qr_thin_q(&y); // Q = QR(Y).Q [n, k]
 
     // ── Step E: Form small projected matrix B = Q^T M Q ──────────────────────
-    let mq = sparse_dense_mult(&m, &q);          // M Q [n, k]
-    let b = q.t().dot(&mq);                      // B = Q^T (M Q) [k, k]  symmetric PSD
+    let mq = sparse_dense_mult(&m, &q); // M Q [n, k]
+    let b = q.t().dot(&mq); // B = Q^T (M Q) [k, k]  symmetric PSD
 
     // ── Step F: Eigendecompose B (small k×k symmetric matrix) ─────────────────
     // eigenvalues ascending (smallest M eigenvalue first = largest L eigenvalue)
-    let (m_eigenvals, u_b) = sym_eig(&b);       // m_eigenvals[k-1] ≈ 2 (trivial)
+    let (m_eigenvals, u_b) = sym_eig(&b); // m_eigenvals[k-1] ≈ 2 (trivial)
 
     // ── Step G: Recover full eigenvectors V = Q U_B ───────────────────────────
-    let v = q.dot(&u_b);                         // [n, k]
+    let v = q.dot(&u_b); // [n, k]
 
     // ── Step I: Build output — trivial vector first, then n_components non-trivial ──
     //
@@ -251,18 +257,18 @@ pub(crate) fn rsvd_solve_accurate(
         omega = qr_thin_q(&z);
     }
     let y = sparse_dense_mult(&m, &omega);
-    let q = qr_thin_q(&y);  // [n, k] orthonormal subspace basis
+    let q = qr_thin_q(&y); // [n, k] orthonormal subspace basis
 
     // ── Step B: Project L directly onto subspace: B_L = Q^T L Q ─────────────
     // This avoids the λ_L = 2 − λ_M cancellation for near-zero eigenvalues.
-    let lq = sparse_dense_mult(laplacian, &q);  // L·Q [n, k]
-    let b_l = q.t().dot(&lq);                   // B_L [k, k]  symmetric PSD
+    let lq = sparse_dense_mult(laplacian, &q); // L·Q [n, k]
+    let b_l = q.t().dot(&lq); // B_L [k, k]  symmetric PSD
 
     // ── Step C: Dense EVD of B_L (ascending = smallest L eigenvalue first) ──
     let (l_eigenvals, u_b) = sym_eig(&b_l);
 
     // ── Step D: Recover full Ritz vectors V = Q U_B ──────────────────────────
-    let v = q.dot(&u_b);  // [n, k]
+    let v = q.dot(&u_b); // [n, k]
 
     // ── Step E: Build output — trivial first (index 0), then non-trivials ────
     // l_eigenvals[0] ≈ 0 (trivial), l_eigenvals[1..=n_components] non-trivials
@@ -278,8 +284,8 @@ pub(crate) fn rsvd_solve_accurate(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::laplacian::build_normalized_laplacian;
     use crate::ComputeMode;
+    use crate::laplacian::build_normalized_laplacian;
 
     /// Build a sparse graph (CSR f32/u32) from a list of undirected (row, col, weight) edges.
     fn make_graph(n: usize, edges: &[(usize, usize, f32)]) -> sprs::CsMatI<f32, u32, usize> {
@@ -287,7 +293,7 @@ mod tests {
         for &(r, c, w) in edges {
             tri.add_triplet(r, c, w);
             if r != c {
-                tri.add_triplet(c, r, w);  // symmetric
+                tri.add_triplet(c, r, w); // symmetric
             }
         }
         let csr_usize: sprs::CsMatI<f32, usize> = tri.to_csr();
@@ -330,7 +336,8 @@ mod tests {
                 let m_val = m.get(r, c).copied().unwrap_or(0.0);
                 assert!(
                     (m_val - (-l_val)).abs() < 1e-14,
-                    "M[{r},{c}] = {m_val:.6}, expected {:.6}", -l_val
+                    "M[{r},{c}] = {m_val:.6}, expected {:.6}",
+                    -l_val
                 );
                 assert!(m_val >= -1e-14, "M[{r},{c}] = {m_val:.6} should be ≥ 0");
             }
@@ -361,8 +368,16 @@ mod tests {
         let n_components = 2;
         let (eigenvalues, eigenvectors) = rsvd_solve(&l, n_components, 42);
 
-        assert_eq!(eigenvalues.shape(), &[n_components + 1], "eigenvalues shape");
-        assert_eq!(eigenvectors.shape(), &[n, n_components + 1], "eigenvectors shape");
+        assert_eq!(
+            eigenvalues.shape(),
+            &[n_components + 1],
+            "eigenvalues shape"
+        );
+        assert_eq!(
+            eigenvectors.shape(),
+            &[n, n_components + 1],
+            "eigenvectors shape"
+        );
 
         // Eigenvalue range: [0, 2] for normalized Laplacian
         for &lambda in eigenvalues.iter() {
@@ -396,8 +411,7 @@ mod tests {
     #[test]
     fn test_rsvd_solve_residuals_ring_6() {
         let n = 6;
-        let edges: Vec<(usize, usize, f32)> =
-            (0..n).map(|i| (i, (i + 1) % n, 1.0f32)).collect();
+        let edges: Vec<(usize, usize, f32)> = (0..n).map(|i| (i, (i + 1) % n, 1.0f32)).collect();
         let graph = make_graph(n, &edges);
         let (_, sqrt_deg) = crate::laplacian::compute_degrees(&graph, ComputeMode::PythonCompat);
         let inv_sqrt_deg = sqrt_deg.mapv(|x| if x == 0.0 { 0.0 } else { 1.0 / x });
@@ -411,7 +425,8 @@ mod tests {
         // Index 0 is the trivial eigenvector (λ ≈ 0)
         assert!(
             eig_slice[0].abs() < 1e-3,
-            "trivial eigenvalue={:.8}, expected ≈ 0", eig_slice[0]
+            "trivial eigenvalue={:.8}, expected ≈ 0",
+            eig_slice[0]
         );
 
         // Non-trivial eigenvalues of the 6-ring are 0.5 (indices 1..=n_components)
@@ -420,7 +435,8 @@ mod tests {
             assert!(
                 err < 1e-4,
                 "eigenvalue[{i}] = {:.8}, expected 0.5, err = {:.2e} (threshold 1e-4)",
-                eig_slice[i], err
+                eig_slice[i],
+                err
             );
         }
 
@@ -447,7 +463,9 @@ mod tests {
     #[test]
     fn rsvd_k_sub_returns_default_when_env_unset() {
         // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
-        unsafe { std::env::remove_var("SPECTRAL_RSVD_OVERSAMPLING"); }
+        unsafe {
+            std::env::remove_var("SPECTRAL_RSVD_OVERSAMPLING");
+        }
         let n = 200_usize;
         let rank = 3_usize;
         let oversampling = (n / 10).max(rank.max(5)).min(n.saturating_sub(rank));
@@ -460,31 +478,41 @@ mod tests {
     #[test]
     fn rsvd_k_sub_reads_env_override() {
         // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
-        unsafe { std::env::set_var("SPECTRAL_RSVD_OVERSAMPLING", "10"); }
+        unsafe {
+            std::env::set_var("SPECTRAL_RSVD_OVERSAMPLING", "10");
+        }
         let n = 200_usize;
         let rank = 3_usize;
         assert_eq!(rsvd_k_sub_effective(n, rank), rank + 10);
-        unsafe { std::env::remove_var("SPECTRAL_RSVD_OVERSAMPLING"); }
+        unsafe {
+            std::env::remove_var("SPECTRAL_RSVD_OVERSAMPLING");
+        }
     }
 
     // T3 — unparseable value falls back to formula
     #[test]
     fn rsvd_k_sub_falls_back_on_parse_error() {
         // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
-        unsafe { std::env::set_var("SPECTRAL_RSVD_OVERSAMPLING", "abc"); }
+        unsafe {
+            std::env::set_var("SPECTRAL_RSVD_OVERSAMPLING", "abc");
+        }
         let n = 200_usize;
         let rank = 3_usize;
         let oversampling = (n / 10).max(rank.max(5)).min(n.saturating_sub(rank));
         let expected = (rank + oversampling).min(n);
         assert_eq!(rsvd_k_sub_effective(n, rank), expected);
-        unsafe { std::env::remove_var("SPECTRAL_RSVD_OVERSAMPLING"); }
+        unsafe {
+            std::env::remove_var("SPECTRAL_RSVD_OVERSAMPLING");
+        }
     }
 
     // T-NBE-1 — rsvd_nbiter_effective returns 2 when env var is absent
     #[test]
     fn rsvd_nbiter_returns_default_when_env_unset() {
         // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
-        unsafe { std::env::remove_var("SPECTRAL_RSVD_NBITER"); }
+        unsafe {
+            std::env::remove_var("SPECTRAL_RSVD_NBITER");
+        }
         assert_eq!(rsvd_nbiter_effective(), 2);
     }
 
@@ -493,17 +521,25 @@ mod tests {
     #[test]
     fn rsvd_nbiter_reads_env_override() {
         // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
-        unsafe { std::env::set_var("SPECTRAL_RSVD_NBITER", "4"); }
+        unsafe {
+            std::env::set_var("SPECTRAL_RSVD_NBITER", "4");
+        }
         assert_eq!(rsvd_nbiter_effective(), 4);
-        unsafe { std::env::remove_var("SPECTRAL_RSVD_NBITER"); }
+        unsafe {
+            std::env::remove_var("SPECTRAL_RSVD_NBITER");
+        }
     }
 
     // T-NBE-3 — rsvd_nbiter_effective falls back to 2 on parse error
     #[test]
     fn rsvd_nbiter_falls_back_on_parse_error() {
         // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
-        unsafe { std::env::set_var("SPECTRAL_RSVD_NBITER", "xyz"); }
+        unsafe {
+            std::env::set_var("SPECTRAL_RSVD_NBITER", "xyz");
+        }
         assert_eq!(rsvd_nbiter_effective(), 2);
-        unsafe { std::env::remove_var("SPECTRAL_RSVD_NBITER"); }
+        unsafe {
+            std::env::remove_var("SPECTRAL_RSVD_NBITER");
+        }
     }
 }

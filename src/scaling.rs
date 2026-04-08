@@ -61,10 +61,17 @@ pub(crate) fn noisy_scale_coords(
 /// `scale_and_add_noise`.
 pub(crate) fn normalize_signs(coords: &mut Array2<f64>) {
     for col in 0..coords.ncols() {
-        let sign = coords.column(col)
+        let sign = coords
+            .column(col)
             .iter()
             .copied()
-            .reduce(|a, b| if b.abs().total_cmp(&a.abs()).is_gt() { b } else { a })
+            .reduce(|a, b| {
+                if b.abs().total_cmp(&a.abs()).is_gt() {
+                    b
+                } else {
+                    a
+                }
+            })
             .map(|v| v.signum())
             .unwrap_or(1.0);
         if sign < 0.0 {
@@ -135,11 +142,7 @@ mod tests {
         }
 
         // Verify max absolute value ≈ 10.0
-        let max_abs = result
-            .iter()
-            .cloned()
-            .map(f32::abs)
-            .fold(0.0f32, f32::max);
+        let max_abs = result.iter().cloned().map(f32::abs).fold(0.0f32, f32::max);
         // Tolerance is 1e-6f32: scale_coords computes expansion = 10.0 / max_abs_f64,
         // then casts each element to f32. The maximum element maps to exactly 10.0
         // modulo f32 rounding (~9.5e-7, one ULP at 10.0 = 2^(3-23)); 1e-6 is just
@@ -171,15 +174,15 @@ mod tests {
         let embedding = npz_array2::<f64>(&e_path, "embedding").expect("embedding key missing");
         let n = embedding.len();
 
-        let final_result = scale_and_add_noise(embedding.clone(), 42).expect("scale_and_add_noise failed");
+        let final_result =
+            scale_and_add_noise(embedding.clone(), 42).expect("scale_and_add_noise failed");
         let pre_noise = scale_coords(&embedding, 10.0).expect("scale_coords failed");
 
         let noise: ndarray::Array2<f32> = &final_result - &pre_noise;
         let noise_flat: Vec<f32> = noise.iter().cloned().collect();
 
         let mean: f32 = noise_flat.iter().sum::<f32>() / n as f32;
-        let variance: f32 =
-            noise_flat.iter().map(|x| (x - mean).powi(2)).sum::<f32>() / n as f32;
+        let variance: f32 = noise_flat.iter().map(|x| (x - mean).powi(2)).sum::<f32>() / n as f32;
         let std_dev = variance.sqrt();
 
         // 3-sigma test for mean ≈ 0
@@ -206,8 +209,7 @@ mod tests {
                 panic!("test_max_abs_is_10({dataset}): fixture absent");
             }
 
-            let embedding =
-                npz_array2::<f64>(&e_path, "embedding").expect("embedding key missing");
+            let embedding = npz_array2::<f64>(&e_path, "embedding").expect("embedding key missing");
             let pre_noise = scale_coords(&embedding, 10.0).expect("scale_coords failed");
             let max_abs = pre_noise
                 .iter()
@@ -231,11 +233,17 @@ mod tests {
         };
     }
 
-    make_scale_test!(scale_pre_noise_matches_blobs_500,            "blobs_500");
-    make_scale_test!(scale_pre_noise_matches_blobs_5000,           "blobs_5000");
-    make_scale_test!(scale_pre_noise_matches_blobs_connected_200,  "blobs_connected_200");
-    make_scale_test!(scale_pre_noise_matches_blobs_connected_2000, "blobs_connected_2000");
-    make_scale_test!(scale_pre_noise_matches_near_dupes_100,       "near_dupes_100");
+    make_scale_test!(scale_pre_noise_matches_blobs_500, "blobs_500");
+    make_scale_test!(scale_pre_noise_matches_blobs_5000, "blobs_5000");
+    make_scale_test!(
+        scale_pre_noise_matches_blobs_connected_200,
+        "blobs_connected_200"
+    );
+    make_scale_test!(
+        scale_pre_noise_matches_blobs_connected_2000,
+        "blobs_connected_2000"
+    );
+    make_scale_test!(scale_pre_noise_matches_near_dupes_100, "near_dupes_100");
 
     #[test]
     #[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]

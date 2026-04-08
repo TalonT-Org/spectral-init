@@ -7,8 +7,8 @@
 //! - Diagnostic functions (spectral gap, condition number, tolerance margin)
 //! - Data structures for structured metric reporting (behind `#[cfg(feature = "testing")]`)
 
-use faer::{Mat as FaerMat, Side};
 use faer::linalg::solvers::SelfAdjointEigen;
+use faer::{Mat as FaerMat, Side};
 use ndarray::{Array1, Array2, ArrayView1, ArrayView2};
 use rayon::prelude::*;
 use sprs::CsMatI;
@@ -121,7 +121,11 @@ pub fn orthogonality_error(eigenvectors: &Array2<f64>) -> f64 {
 /// - `in_range`: all `λ ∈ [−tol, 2+tol]`
 /// - `sorted_ascending`: `λ[i] ≤ λ[i+1] + tol` for all `i`
 pub fn check_eigenvalue_bounds(eigenvalues: &Array1<f64>, tol: f64) -> (bool, bool) {
-    assert!(tol >= 0.0, "check_eigenvalue_bounds: tol must be non-negative, got {}", tol);
+    assert!(
+        tol >= 0.0,
+        "check_eigenvalue_bounds: tol must be non-negative, got {}",
+        tol
+    );
     let in_range = eigenvalues.iter().all(|&v| v >= -tol && v <= 2.0 + tol);
     let sorted = eigenvalues
         .windows(2)
@@ -137,7 +141,11 @@ pub fn check_eigenvalue_bounds(eigenvalues: &Array1<f64>, tol: f64) -> (bool, bo
 /// Returns `f64::INFINITY` when `max_intra == 0.0` (all points collapse to centroids).
 pub fn separation_ratio(embedding: ArrayView2<f64>, labels: &[usize]) -> f64 {
     let n = labels.len();
-    assert_eq!(embedding.nrows(), n, "embedding rows must match labels length");
+    assert_eq!(
+        embedding.nrows(),
+        n,
+        "embedding rows must match labels length"
+    );
     let n_dims = embedding.ncols();
 
     let n_components = labels.iter().copied().max().map(|m| m + 1).unwrap_or(0);
@@ -221,9 +229,21 @@ pub fn eigenvalue_abs_errors(computed: &Array1<f64>, reference: &Array1<f64>) ->
 /// `G[i,j] = dot(r_i / ‖r_i‖, u_j / ‖u_j‖)`.
 /// Returns `|a·d − b·c|` where `[[a,b],[c,d]]` is the normalized 2×2 Gram matrix.
 pub fn subspace_gram_det(u: ArrayView2<f64>, r: ArrayView2<f64>) -> f64 {
-    assert_eq!(u.ncols(), 2, "subspace_gram_det: u must have exactly 2 columns");
-    assert_eq!(r.ncols(), 2, "subspace_gram_det: r must have exactly 2 columns");
-    assert_eq!(u.nrows(), r.nrows(), "subspace_gram_det: u and r must have the same number of rows");
+    assert_eq!(
+        u.ncols(),
+        2,
+        "subspace_gram_det: u must have exactly 2 columns"
+    );
+    assert_eq!(
+        r.ncols(),
+        2,
+        "subspace_gram_det: r must have exactly 2 columns"
+    );
+    assert_eq!(
+        u.nrows(),
+        r.nrows(),
+        "subspace_gram_det: u and r must have the same number of rows"
+    );
 
     let norm = |v: ArrayView1<f64>| v.iter().map(|x| x * x).sum::<f64>().sqrt().max(1e-300);
     let dot = |a: ArrayView1<f64>, b: ArrayView1<f64>| -> f64 {
@@ -353,7 +373,10 @@ pub fn tolerance_margin(threshold: f64, worst_value: f64) -> f64 {
 /// # Panics
 /// Panics if `eigenvalues` has fewer than 2 elements.
 pub fn spectral_gap(eigenvalues: &Array1<f64>) -> f64 {
-    assert!(eigenvalues.len() >= 2, "spectral_gap: need at least 2 eigenvalues");
+    assert!(
+        eigenvalues.len() >= 2,
+        "spectral_gap: need at least 2 eigenvalues"
+    );
     eigenvalues[1] - eigenvalues[0]
 }
 
@@ -382,7 +405,11 @@ pub fn eigenvalue_condition_number(eigenvalues: &Array1<f64>) -> f64 {
 /// # Safety
 /// Both slices must have at least 10 elements (enforced by the `d_x >= 10` guard at the
 /// call site). Two 4-wide loads cover elements 0..8; a scalar tail handles 8..n.
-#[cfg(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))]
+#[cfg(all(
+    target_arch = "x86_64",
+    target_feature = "avx2",
+    target_feature = "fma"
+))]
 #[target_feature(enable = "avx2,fma")]
 unsafe fn dist_sq_avx2(xi: &[f64], xj: &[f64]) -> f64 {
     use std::arch::x86_64::*;
@@ -420,15 +447,13 @@ unsafe fn dist_sq_avx2(xi: &[f64], xj: &[f64]) -> f64 {
 /// Called only when `d_y == 2`, `y.is_standard_layout()`, and `avx2` is detected at runtime.
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2")]
-unsafe fn dist_sq_2d_avx2_batch(
-    yi: &[f64],
-    y_flat: &[f64],
-    n: usize,
-    out: &mut [f64],
-) {
+unsafe fn dist_sq_2d_avx2_batch(yi: &[f64], y_flat: &[f64], n: usize, out: &mut [f64]) {
     use std::arch::x86_64::*;
     debug_assert!(yi.len() >= 2, "yi must have at least 2 elements");
-    debug_assert!(y_flat.len() >= n * 2, "y_flat must have at least n*2 elements");
+    debug_assert!(
+        y_flat.len() >= n * 2,
+        "y_flat must have at least n*2 elements"
+    );
     debug_assert!(out.len() >= n, "out must have at least n elements");
     // Broadcast query: [yi[1], yi[0], yi[1], yi[0]] — _mm256_set_pd args are (e3,e2,e1,e0)
     let yi_bc = _mm256_set_pd(yi[1], yi[0], yi[1], yi[0]);
@@ -438,10 +463,10 @@ unsafe fn dist_sq_2d_avx2_batch(
         debug_assert!(j * 2 + 3 < y_flat.len(), "y_flat bounds exceeded at j={j}");
         let yj_pair = _mm256_loadu_pd(y_flat.as_ptr().add(j * 2));
         let diff = _mm256_sub_pd(yi_bc, yj_pair);
-        let sq   = _mm256_mul_pd(diff, diff);
+        let sq = _mm256_mul_pd(diff, diff);
         // hadd: lower 128-bit → sq[0]+sq[1] = dist_j; upper 128-bit → sq[2]+sq[3] = dist_{j+1}
         let hadd = _mm256_hadd_pd(sq, sq);
-        out[j]     = _mm_cvtsd_f64(_mm256_castpd256_pd128(hadd));
+        out[j] = _mm_cvtsd_f64(_mm256_castpd256_pd128(hadd));
         out[j + 1] = _mm_cvtsd_f64(_mm256_extractf128_pd(hadd, 1));
         j += 2;
     }
@@ -478,12 +503,18 @@ unsafe fn dist_sq_2d_avx2_batch(
 pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 {
     use std::cell::RefCell;
     let n = x.nrows();
-    assert_eq!(y.nrows(), n, "trustworthiness: x and y must have the same number of rows");
+    assert_eq!(
+        y.nrows(),
+        n,
+        "trustworthiness: x and y must have the same number of rows"
+    );
     assert!(k > 0, "trustworthiness: k must be > 0");
-    assert!(k < n / 2,
+    assert!(
+        k < n / 2,
         "trustworthiness: k must be < n/2 (got k={k}, n={n}, n/2={}); \
         this constraint is required by the normalization denominator and matches sklearn's ValueError",
-        n / 2);
+        n / 2
+    );
 
     #[cfg(feature = "profiling")]
     {
@@ -502,19 +533,21 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
     let d_y = y.ncols();
 
     #[cfg(target_arch = "x86_64")]
-    let use_avx2_y = {
-        d_y == 2
-            && y.is_standard_layout()
-            && is_x86_feature_detected!("avx2")
-    };
+    let use_avx2_y = { d_y == 2 && y.is_standard_layout() && is_x86_feature_detected!("avx2") };
     #[cfg(not(target_arch = "x86_64"))]
     let use_avx2_y = false;
 
     // Validate contiguity once before the parallel loop: SIMD dispatch requires C-contiguous rows.
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))]
+    #[cfg(all(
+        target_arch = "x86_64",
+        target_feature = "avx2",
+        target_feature = "fma"
+    ))]
     if use_avx2 && d_x >= 10 {
-        assert!(x.is_standard_layout(),
-            "trustworthiness: x must be in C-contiguous (standard) layout for SIMD dispatch");
+        assert!(
+            x.is_standard_layout(),
+            "trustworthiness: x must be in C-contiguous (standard) layout for SIMD dispatch"
+        );
     }
 
     thread_local! {
@@ -528,153 +561,187 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
     }
 
     #[cfg(feature = "profiling")]
-    static X_DIST_NS:  std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    static X_DIST_NS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     #[cfg(feature = "profiling")]
-    static X_SORT_NS:  std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    static X_SORT_NS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     #[cfg(feature = "profiling")]
-    static Y_DIST_NS:  std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    static Y_DIST_NS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     #[cfg(feature = "profiling")]
     static PENALTY_NS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-    let penalty_sum: f64 = (0..n).into_par_iter().map(|i| {
-        let xi = x.row(i);
-        let yi = y.row(i);
+    let penalty_sum: f64 = (0..n)
+        .into_par_iter()
+        .map(|i| {
+            let xi = x.row(i);
+            let yi = y.row(i);
 
-        COMB_DIST_X.with(|dist_x_cell| {
-            COMB_INDICES.with(|indices_cell| {
-                let mut dist_x = dist_x_cell.borrow_mut();
-                let mut indices = indices_cell.borrow_mut();
+            COMB_DIST_X.with(|dist_x_cell| {
+                COMB_INDICES.with(|indices_cell| {
+                    let mut dist_x = dist_x_cell.borrow_mut();
+                    let mut indices = indices_cell.borrow_mut();
 
-                // ── x_dist step ──────────────────────────────────────────────
-                #[cfg(feature = "profiling")]
-                let t_x_dist = std::time::Instant::now();
+                    // ── x_dist step ──────────────────────────────────────────────
+                    #[cfg(feature = "profiling")]
+                    let t_x_dist = std::time::Instant::now();
 
-                dist_x.clear();
-                dist_x.resize(n, 0.0f64);
-                for j in 0..n {
-                    let xj = x.row(j);
-                    dist_x[j] = {
-                        #[cfg(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))]
-                        {
-                            if use_avx2 && d_x >= 10 {
-                                let si = xi.as_slice().expect("x row must be contiguous");
-                                let sj = xj.as_slice().expect("x row must be contiguous");
-                                // SAFETY: runtime + d_x check guarantees AVX2+FMA and >= 8 elements.
-                                unsafe { dist_sq_avx2(si, sj) }
+                    dist_x.clear();
+                    dist_x.resize(n, 0.0f64);
+                    for j in 0..n {
+                        let xj = x.row(j);
+                        dist_x[j] = {
+                            #[cfg(all(
+                                target_arch = "x86_64",
+                                target_feature = "avx2",
+                                target_feature = "fma"
+                            ))]
+                            {
+                                if use_avx2 && d_x >= 10 {
+                                    let si = xi.as_slice().expect("x row must be contiguous");
+                                    let sj = xj.as_slice().expect("x row must be contiguous");
+                                    // SAFETY: runtime + d_x check guarantees AVX2+FMA and >= 8 elements.
+                                    unsafe { dist_sq_avx2(si, sj) }
+                                } else {
+                                    xi.iter()
+                                        .zip(xj.iter())
+                                        .map(|(&a, &b)| (a - b) * (a - b))
+                                        .sum()
+                                }
+                            }
+                            #[cfg(not(all(
+                                target_arch = "x86_64",
+                                target_feature = "avx2",
+                                target_feature = "fma"
+                            )))]
+                            {
+                                xi.iter()
+                                    .zip(xj.iter())
+                                    .map(|(&a, &b)| (a - b) * (a - b))
+                                    .sum()
+                            }
+                        };
+                    }
+
+                    #[cfg(feature = "profiling")]
+                    X_DIST_NS.fetch_add(
+                        t_x_dist.elapsed().as_nanos() as u64,
+                        std::sync::atomic::Ordering::Relaxed,
+                    );
+
+                    // ── x_sort step ──────────────────────────────────────────────
+                    #[cfg(feature = "profiling")]
+                    let t_x_sort = std::time::Instant::now();
+
+                    indices.clear();
+                    indices.extend(0..n);
+                    indices.select_nth_unstable_by(k, |&a, &b| {
+                        dist_x[a].total_cmp(&dist_x[b]).then(a.cmp(&b))
+                    });
+
+                    let knn_x_set: HashSet<usize> =
+                        indices[..=k].iter().filter(|&&m| m != i).copied().collect();
+
+                    #[cfg(feature = "profiling")]
+                    X_SORT_NS.fetch_add(
+                        t_x_sort.elapsed().as_nanos() as u64,
+                        std::sync::atomic::Ordering::Relaxed,
+                    );
+
+                    // ── y_dist step (flat_simd, replaces BinaryHeap) ─────────────
+                    #[cfg(feature = "profiling")]
+                    let t_y_dist = std::time::Instant::now();
+
+                    COMB_DIST_Y.with(|dy_cell| {
+                        COMB_INDICES_Y.with(|iy_cell| {
+                            let mut dist_y = dy_cell.borrow_mut();
+                            let mut indices_y = iy_cell.borrow_mut();
+
+                            dist_y.clear();
+                            dist_y.resize(n, 0.0f64);
+
+                            // Fill Y distances: AVX2 2D batch or scalar fallback.
+                            #[cfg(target_arch = "x86_64")]
+                            if use_avx2_y {
+                                let y_flat = y
+                                    .as_slice()
+                                    .expect("y must be standard layout for AVX2 dispatch");
+                                let yi_slice = &y_flat[i * 2..(i + 1) * 2];
+                                // SAFETY: y_flat has n*d_y elements; yi_slice has 2 elements;
+                                // dist_y has n elements; use_avx2_y guarantees d_y==2,
+                                // standard_layout, and runtime AVX2.
+                                unsafe {
+                                    dist_sq_2d_avx2_batch(yi_slice, y_flat, n, &mut dist_y);
+                                }
                             } else {
-                                xi.iter().zip(xj.iter()).map(|(&a, &b)| (a - b) * (a - b)).sum()
+                                for j in 0..n {
+                                    let yj = y.row(j);
+                                    dist_y[j] = yi
+                                        .iter()
+                                        .zip(yj.iter())
+                                        .map(|(&a, &b)| (a - b) * (a - b))
+                                        .sum();
+                                }
                             }
-                        }
-                        #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma")))]
-                        {
-                            xi.iter().zip(xj.iter()).map(|(&a, &b)| (a - b) * (a - b)).sum()
-                        }
-                    };
-                }
-
-                #[cfg(feature = "profiling")]
-                X_DIST_NS.fetch_add(t_x_dist.elapsed().as_nanos() as u64,
-                    std::sync::atomic::Ordering::Relaxed);
-
-                // ── x_sort step ──────────────────────────────────────────────
-                #[cfg(feature = "profiling")]
-                let t_x_sort = std::time::Instant::now();
-
-                indices.clear();
-                indices.extend(0..n);
-                indices.select_nth_unstable_by(k, |&a, &b| {
-                    dist_x[a].total_cmp(&dist_x[b]).then(a.cmp(&b))
-                });
-
-                let knn_x_set: HashSet<usize> =
-                    indices[..=k].iter().filter(|&&m| m != i).copied().collect();
-
-                #[cfg(feature = "profiling")]
-                X_SORT_NS.fetch_add(t_x_sort.elapsed().as_nanos() as u64,
-                    std::sync::atomic::Ordering::Relaxed);
-
-                // ── y_dist step (flat_simd, replaces BinaryHeap) ─────────────
-                #[cfg(feature = "profiling")]
-                let t_y_dist = std::time::Instant::now();
-
-                COMB_DIST_Y.with(|dy_cell| {
-                    COMB_INDICES_Y.with(|iy_cell| {
-                        let mut dist_y    = dy_cell.borrow_mut();
-                        let mut indices_y = iy_cell.borrow_mut();
-
-                        dist_y.clear();
-                        dist_y.resize(n, 0.0f64);
-
-                        // Fill Y distances: AVX2 2D batch or scalar fallback.
-                        #[cfg(target_arch = "x86_64")]
-                        if use_avx2_y {
-                            let y_flat = y.as_slice()
-                                .expect("y must be standard layout for AVX2 dispatch");
-                            let yi_slice = &y_flat[i * 2..(i + 1) * 2];
-                            // SAFETY: y_flat has n*d_y elements; yi_slice has 2 elements;
-                            // dist_y has n elements; use_avx2_y guarantees d_y==2,
-                            // standard_layout, and runtime AVX2.
-                            unsafe { dist_sq_2d_avx2_batch(yi_slice, y_flat, n, &mut dist_y); }
-                        } else {
-                            for j in 0..n {
-                                let yj = y.row(j);
-                                dist_y[j] = yi.iter().zip(yj.iter())
-                                    .map(|(&a, &b)| (a - b) * (a - b)).sum();
+                            #[cfg(not(target_arch = "x86_64"))]
+                            {
+                                for j in 0..n {
+                                    let yj = y.row(j);
+                                    dist_y[j] = yi
+                                        .iter()
+                                        .zip(yj.iter())
+                                        .map(|(&a, &b)| (a - b) * (a - b))
+                                        .sum();
+                                }
                             }
-                        }
-                        #[cfg(not(target_arch = "x86_64"))]
-                        {
-                            for j in 0..n {
-                                let yj = y.row(j);
-                                dist_y[j] = yi.iter().zip(yj.iter())
-                                    .map(|(&a, &b)| (a - b) * (a - b)).sum();
+
+                            dist_y[i] = f64::INFINITY; // self-exclusion
+
+                            indices_y.clear();
+                            indices_y.extend(0..n);
+                            indices_y.select_nth_unstable_by(k, |&a, &b| {
+                                dist_y[a].total_cmp(&dist_y[b]).then(a.cmp(&b))
+                            });
+
+                            #[cfg(feature = "profiling")]
+                            Y_DIST_NS.fetch_add(
+                                t_y_dist.elapsed().as_nanos() as u64,
+                                std::sync::atomic::Ordering::Relaxed,
+                            );
+
+                            // ── penalty step ──────────────────────────────────────
+                            #[cfg(feature = "profiling")]
+                            let t_penalty = std::time::Instant::now();
+
+                            let mut row_penalty = 0u64;
+                            for &j in &indices_y[..k] {
+                                if !knn_x_set.contains(&j) {
+                                    let dj = dist_x[j];
+                                    let rank: usize = (0..n)
+                                        .filter(|&m| dist_x[m] < dj || (dist_x[m] == dj && m < j))
+                                        .count();
+                                    row_penalty += (rank - k) as u64;
+                                }
                             }
-                        }
 
-                        dist_y[i] = f64::INFINITY; // self-exclusion
+                            #[cfg(feature = "profiling")]
+                            PENALTY_NS.fetch_add(
+                                t_penalty.elapsed().as_nanos() as u64,
+                                std::sync::atomic::Ordering::Relaxed,
+                            );
 
-                        indices_y.clear();
-                        indices_y.extend(0..n);
-                        indices_y.select_nth_unstable_by(k, |&a, &b| {
-                            dist_y[a].total_cmp(&dist_y[b]).then(a.cmp(&b))
-                        });
-
-                        #[cfg(feature = "profiling")]
-                        Y_DIST_NS.fetch_add(t_y_dist.elapsed().as_nanos() as u64,
-                            std::sync::atomic::Ordering::Relaxed);
-
-                        // ── penalty step ──────────────────────────────────────
-                        #[cfg(feature = "profiling")]
-                        let t_penalty = std::time::Instant::now();
-
-                        let mut row_penalty = 0u64;
-                        for &j in &indices_y[..k] {
-                            if !knn_x_set.contains(&j) {
-                                let dj = dist_x[j];
-                                let rank: usize = (0..n)
-                                    .filter(|&m| dist_x[m] < dj || (dist_x[m] == dj && m < j))
-                                    .count();
-                                row_penalty += (rank - k) as u64;
-                            }
-                        }
-
-                        #[cfg(feature = "profiling")]
-                        PENALTY_NS.fetch_add(t_penalty.elapsed().as_nanos() as u64,
-                            std::sync::atomic::Ordering::Relaxed);
-
-                        row_penalty as f64
+                            row_penalty as f64
+                        })
                     })
                 })
             })
         })
-    }).sum();
+        .sum();
 
     #[cfg(feature = "profiling")]
     {
         use std::sync::atomic::Ordering;
-        eprintln!("[timing:x_dist] {}",  X_DIST_NS.load(Ordering::Relaxed));
-        eprintln!("[timing:x_sort] {}",  X_SORT_NS.load(Ordering::Relaxed));
-        eprintln!("[timing:y_dist] {}",  Y_DIST_NS.load(Ordering::Relaxed));
+        eprintln!("[timing:x_dist] {}", X_DIST_NS.load(Ordering::Relaxed));
+        eprintln!("[timing:x_sort] {}", X_SORT_NS.load(Ordering::Relaxed));
+        eprintln!("[timing:y_dist] {}", Y_DIST_NS.load(Ordering::Relaxed));
         eprintln!("[timing:penalty] {}", PENALTY_NS.load(Ordering::Relaxed));
     }
 
@@ -779,11 +846,8 @@ mod tests {
         let s = 1.0_f64 / 3.0_f64.sqrt();
         // Non-eigenvector at λ=0: large residual
         let eigenvalues = Array1::from_vec(vec![0.0_f64, 0.0_f64]);
-        let eigenvectors = Array2::from_shape_vec(
-            (3, 2),
-            vec![s, 1.0_f64, s, 0.0_f64, s, 0.0_f64],
-        )
-        .unwrap();
+        let eigenvectors =
+            Array2::from_shape_vec((3, 2), vec![s, 1.0_f64, s, 0.0_f64, s, 0.0_f64]).unwrap();
         let max_res = max_eigenpair_residual(&laplacian, &eigenvalues, &eigenvectors);
         // The second column [1,0,0] has a large residual; max must reflect that.
         assert!(
@@ -798,7 +862,10 @@ mod tests {
     fn t_ortho_01_identity_columns_zero_error() {
         let v = Array2::<f64>::eye(3);
         let err = orthogonality_error(&v);
-        assert!(err < 1e-14, "identity orthogonality_error={err:.2e}, expected ≈ 0");
+        assert!(
+            err < 1e-14,
+            "identity orthogonality_error={err:.2e}, expected ≈ 0"
+        );
     }
 
     #[test]
@@ -809,7 +876,10 @@ mod tests {
         )
         .unwrap();
         let err = orthogonality_error(&v);
-        assert!(err > 0.0, "non-orthogonal matrix should have positive error, got {err:.2e}");
+        assert!(
+            err > 0.0,
+            "non-orthogonal matrix should have positive error, got {err:.2e}"
+        );
     }
 
     // ── Accuracy: check_eigenvalue_bounds ────────────────────────────────────
@@ -841,7 +911,10 @@ mod tests {
         let embedding = Array2::from_shape_vec((4, 2), data).unwrap();
         let labels = vec![0usize, 0, 1, 1];
         let ratio = separation_ratio(embedding.view(), &labels);
-        assert!(ratio > 1.0, "well-separated clusters should have ratio > 1.0, got {ratio:.4}");
+        assert!(
+            ratio > 1.0,
+            "well-separated clusters should have ratio > 1.0, got {ratio:.4}"
+        );
     }
 
     #[test]
@@ -900,7 +973,10 @@ mod tests {
         let u = Array2::from_shape_vec((4, 2), u_data).unwrap();
         let r = Array2::from_shape_vec((4, 2), r_data).unwrap();
         let det = subspace_gram_det(u.view(), r.view());
-        assert!(det < 1e-12, "orthogonal subspaces: det={det:.6e}, expected ≈ 0.0");
+        assert!(
+            det < 1e-12,
+            "orthogonal subspaces: det={det:.6e}, expected ≈ 0.0"
+        );
     }
 
     // ── Parity: subspace_gram_det_kd ─────────────────────────────────────────
@@ -924,7 +1000,10 @@ mod tests {
         let comp = Array2::from_shape_vec((4, 2), comp_data).unwrap();
         let reff = Array2::from_shape_vec((4, 2), ref_data).unwrap();
         let det = subspace_gram_det_kd(comp.view(), reff.view());
-        assert!(det < 1e-10, "orthogonal subspaces: det={det:.6e}, expected ≈ 0.0");
+        assert!(
+            det < 1e-10,
+            "orthogonal subspaces: det={det:.6e}, expected ≈ 0.0"
+        );
     }
 
     // ── Parity: sign_agnostic_max_error ──────────────────────────────────────
@@ -944,7 +1023,10 @@ mod tests {
         let computed = Array2::from_shape_vec((4, 1), computed_data).unwrap();
         let reference = Array2::from_shape_vec((4, 1), reference_data).unwrap();
         let err = sign_agnostic_max_error(&computed, &reference);
-        assert_eq!(err, 0.0, "fully negated column: error={err:.2e}, expected 0.0");
+        assert_eq!(
+            err, 0.0,
+            "fully negated column: error={err:.2e}, expected 0.0"
+        );
     }
 
     #[test]
@@ -1019,7 +1101,7 @@ mod tests {
 
     #[test]
     fn t_tw_02_result_in_unit_interval() {
-        use rand::{SeedableRng, Rng};
+        use rand::{Rng, SeedableRng};
         let mut rng = rand::rngs::SmallRng::seed_from_u64(99);
         let x = ndarray::Array2::from_shape_fn((20, 10), |_| rng.random::<f64>());
         let y = ndarray::Array2::from_shape_fn((20, 2), |_| rng.random::<f64>());
@@ -1046,11 +1128,13 @@ mod tests {
         let x = ndarray::Array2::from_shape_vec(
             (4, 2),
             vec![0.0f64, 0.0, 1.0, 0.0, 0.0, 1.5, 0.0, 100.0],
-        ).unwrap();
+        )
+        .unwrap();
         let y = ndarray::Array2::from_shape_vec(
             (4, 2),
             vec![0.0f64, 0.0, 1.0, 0.0, 0.0, 0.5, 0.0, 100.0],
-        ).unwrap();
+        )
+        .unwrap();
         let t = trustworthiness(x.view(), y.view(), 1);
         let expected = 7.0 / 8.0;
         assert!(
@@ -1061,7 +1145,7 @@ mod tests {
 
     #[test]
     fn t_tw_04_k_less_than_half_n() {
-        use rand::{SeedableRng, Rng};
+        use rand::{Rng, SeedableRng};
         let mut rng = rand::rngs::SmallRng::seed_from_u64(7);
         let n = 20usize;
         let k = n / 2 - 1; // 9, just below the boundary
@@ -1082,24 +1166,34 @@ mod tests {
         let _ = trustworthiness(x.view(), y.view(), k);
     }
 
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))]
+    #[cfg(all(
+        target_arch = "x86_64",
+        target_feature = "avx2",
+        target_feature = "fma"
+    ))]
     #[test]
     fn t_tw_06_avx2_kernel_matches_scalar() {
-        use rand::{SeedableRng, Rng};
+        use rand::{Rng, SeedableRng};
         let mut rng = rand::rngs::SmallRng::seed_from_u64(42);
         for len in [10, 16, 33, 100] {
             let a: Vec<f64> = (0..len).map(|_| rng.random::<f64>()).collect();
             let b: Vec<f64> = (0..len).map(|_| rng.random::<f64>()).collect();
-            let scalar: f64 = a.iter().zip(b.iter()).map(|(&x, &y)| (x - y) * (x - y)).sum();
+            let scalar: f64 = a
+                .iter()
+                .zip(b.iter())
+                .map(|(&x, &y)| (x - y) * (x - y))
+                .sum();
             let avx2 = unsafe { super::dist_sq_avx2(&a, &b) };
-            assert!((avx2 - scalar).abs() < 1e-10,
-                "dist_sq_avx2 mismatch at len={len}: avx2={avx2}, scalar={scalar}");
+            assert!(
+                (avx2 - scalar).abs() < 1e-10,
+                "dist_sq_avx2 mismatch at len={len}: avx2={avx2}, scalar={scalar}"
+            );
         }
     }
 
     #[test]
     fn t_tw_07_partial_rank_matches_full_sort() {
-        use rand::{SeedableRng, Rng};
+        use rand::{Rng, SeedableRng};
         use std::collections::HashSet;
         let mut rng = rand::rngs::SmallRng::seed_from_u64(77);
         let n = 30;
@@ -1109,7 +1203,12 @@ mod tests {
         for i in 0..n {
             let xi = x.row(i);
             let dist_x: Vec<f64> = (0..n)
-                .map(|j| xi.iter().zip(x.row(j).iter()).map(|(&a, &b)| (a - b) * (a - b)).sum())
+                .map(|j| {
+                    xi.iter()
+                        .zip(x.row(j).iter())
+                        .map(|(&a, &b)| (a - b) * (a - b))
+                        .sum()
+                })
                 .collect();
 
             // Full-sort baseline: knn_x_set via sort + rank scatter
@@ -1125,8 +1224,7 @@ mod tests {
             let knn_partial: HashSet<usize> =
                 indices[..=k].iter().filter(|&&m| m != i).copied().collect();
 
-            assert_eq!(knn_baseline, knn_partial,
-                "knn_x_set mismatch at row {i}");
+            assert_eq!(knn_baseline, knn_partial, "knn_x_set mismatch at row {i}");
 
             // Verify rank values for all non-knn points
             let mut rank_x = vec![0usize; n];
@@ -1134,58 +1232,82 @@ mod tests {
                 rank_x[j] = rank;
             }
             for j in 0..n {
-                if j == i || knn_baseline.contains(&j) { continue; }
+                if j == i || knn_baseline.contains(&j) {
+                    continue;
+                }
                 let dj = dist_x[j];
                 let scan_rank: usize = (0..n)
                     .filter(|&m| dist_x[m] < dj || (dist_x[m] == dj && m < j))
                     .count();
-                assert_eq!(rank_x[j], scan_rank,
-                    "rank mismatch for point {j} from row {i}: sort={}, scan={scan_rank}", rank_x[j]);
+                assert_eq!(
+                    rank_x[j], scan_rank,
+                    "rank mismatch for point {j} from row {i}: sort={}, scan={scan_rank}",
+                    rank_x[j]
+                );
             }
         }
     }
 
     /// Brute-force O(n²) reference: full-sort X distances, sort-based Y-kNN.
-    fn trustworthiness_brute_force(x: ndarray::ArrayView2<f64>, y: ndarray::ArrayView2<f64>, k: usize) -> f64 {
+    fn trustworthiness_brute_force(
+        x: ndarray::ArrayView2<f64>,
+        y: ndarray::ArrayView2<f64>,
+        k: usize,
+    ) -> f64 {
         use std::collections::HashSet;
         let n = x.nrows();
-        let penalty_sum: f64 = (0..n).map(|i| {
-            let xi = x.row(i);
-            let yi = y.row(i);
+        let penalty_sum: f64 = (0..n)
+            .map(|i| {
+                let xi = x.row(i);
+                let yi = y.row(i);
 
-            let mut dist_x: Vec<(f64, usize)> = (0..n).map(|j| {
-                let d: f64 = xi.iter().zip(x.row(j).iter()).map(|(&a, &b)| (a - b) * (a - b)).sum();
-                (d, j)
-            }).collect();
-            dist_x.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
-            let knn_x: HashSet<usize> = dist_x[1..=k].iter().map(|&(_, j)| j).collect();
-            let mut rank_x = vec![0usize; n];
-            for (rank, &(_, j)) in dist_x.iter().enumerate() {
-                rank_x[j] = rank;
-            }
-
-            let mut dist_y: Vec<(f64, usize)> = (0..n).filter(|&j| j != i).map(|j| {
-                let d: f64 = yi.iter().zip(y.row(j).iter()).map(|(&a, &b)| (a - b) * (a - b)).sum();
-                (d, j)
-            }).collect();
-            dist_y.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
-            let knn_y: HashSet<usize> = dist_y[..k].iter().map(|&(_, j)| j).collect();
-
-            let mut row_penalty = 0u64;
-            for j in &knn_y {
-                if !knn_x.contains(j) {
-                    row_penalty += (rank_x[*j] - k) as u64;
+                let mut dist_x: Vec<(f64, usize)> = (0..n)
+                    .map(|j| {
+                        let d: f64 = xi
+                            .iter()
+                            .zip(x.row(j).iter())
+                            .map(|(&a, &b)| (a - b) * (a - b))
+                            .sum();
+                        (d, j)
+                    })
+                    .collect();
+                dist_x.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+                let knn_x: HashSet<usize> = dist_x[1..=k].iter().map(|&(_, j)| j).collect();
+                let mut rank_x = vec![0usize; n];
+                for (rank, &(_, j)) in dist_x.iter().enumerate() {
+                    rank_x[j] = rank;
                 }
-            }
-            row_penalty as f64
-        }).sum();
+
+                let mut dist_y: Vec<(f64, usize)> = (0..n)
+                    .filter(|&j| j != i)
+                    .map(|j| {
+                        let d: f64 = yi
+                            .iter()
+                            .zip(y.row(j).iter())
+                            .map(|(&a, &b)| (a - b) * (a - b))
+                            .sum();
+                        (d, j)
+                    })
+                    .collect();
+                dist_y.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+                let knn_y: HashSet<usize> = dist_y[..k].iter().map(|&(_, j)| j).collect();
+
+                let mut row_penalty = 0u64;
+                for j in &knn_y {
+                    if !knn_x.contains(j) {
+                        row_penalty += (rank_x[*j] - k) as u64;
+                    }
+                }
+                row_penalty as f64
+            })
+            .sum();
         let denom = n as f64 * k as f64 * (2 * n).saturating_sub(3 * k + 1) as f64;
         1.0 - penalty_sum * 2.0 / denom
     }
 
     #[test]
     fn t_tw_08_combined_matches_baseline() {
-        use rand::{SeedableRng, Rng};
+        use rand::{Rng, SeedableRng};
         let mut rng = rand::rngs::SmallRng::seed_from_u64(123);
         let n = 50;
         let x = ndarray::Array2::from_shape_fn((n, 6), |_| rng.random::<f64>());
@@ -1196,8 +1318,10 @@ mod tests {
             let t_ref = trustworthiness_brute_force(x.view(), y.view(), k);
             assert!(t.is_finite(), "T(k={k}) must be finite, got {t}");
             assert!(t >= 0.0 && t <= 1.0, "T(k={k}) out of [0,1]: {t}");
-            assert!((t - t_ref).abs() < 1e-12,
-                "T(k={k}) combined={t} diverges from brute-force reference={t_ref}");
+            assert!(
+                (t - t_ref).abs() < 1e-12,
+                "T(k={k}) combined={t} diverges from brute-force reference={t_ref}"
+            );
         }
     }
 
@@ -1207,16 +1331,19 @@ mod tests {
         if !is_x86_feature_detected!("avx2") {
             return; // skip on CPUs without AVX2
         }
-        use rand::{SeedableRng, Rng};
+        use rand::{Rng, SeedableRng};
         let mut rng = rand::rngs::SmallRng::seed_from_u64(55);
         for n in [0usize, 1, 2, 3, 10, 20, 51] {
             let y_flat: Vec<f64> = (0..n * 2).map(|_| rng.random::<f64>()).collect();
             let yi: Vec<f64> = (0..2).map(|_| rng.random::<f64>()).collect();
             let mut out_avx2 = vec![0.0f64; n];
             // SAFETY: runtime check above guarantees AVX2; y_flat has n*2, yi has 2, out has n.
-            unsafe { super::dist_sq_2d_avx2_batch(&yi, &y_flat, n, &mut out_avx2); }
+            unsafe {
+                super::dist_sq_2d_avx2_batch(&yi, &y_flat, n, &mut out_avx2);
+            }
             for j in 0..n {
-                let scalar: f64 = yi.iter()
+                let scalar: f64 = yi
+                    .iter()
                     .zip(y_flat[j * 2..j * 2 + 2].iter())
                     .map(|(&a, &b)| (a - b) * (a - b))
                     .sum();
@@ -1234,7 +1361,7 @@ mod tests {
         // Verify that the self-exclusion (dist_y[i] = INFINITY) prevents point i
         // from appearing in its own k-NN result. Catching a regression where the
         // INFINITY assignment is accidentally dropped.
-        use rand::{SeedableRng, Rng};
+        use rand::{Rng, SeedableRng};
         let mut rng = rand::rngs::SmallRng::seed_from_u64(77);
         let n = 20;
         let k = 3;
@@ -1244,16 +1371,21 @@ mod tests {
         // We verify correctness by comparing against brute-force which also applies self-exclusion.
         let t = trustworthiness(x.view(), y.view(), k);
         let t_ref = trustworthiness_brute_force(x.view(), y.view(), k);
-        assert!((t - t_ref).abs() < 1e-12,
-            "self-exclusion regression: combined={t} diverges from brute-force={t_ref}");
+        assert!(
+            (t - t_ref).abs() < 1e-12,
+            "self-exclusion regression: combined={t} diverges from brute-force={t_ref}"
+        );
         // Additionally, verify directly via brute-force that no point is its own neighbor.
         for i in 0..n {
             let yi = y.row(i);
             let mut dists: Vec<(f64, usize)> = (0..n)
                 .filter(|&j| j != i)
                 .map(|j| {
-                    let d: f64 = yi.iter().zip(y.row(j).iter())
-                        .map(|(&a, &b)| (a-b)*(a-b)).sum();
+                    let d: f64 = yi
+                        .iter()
+                        .zip(y.row(j).iter())
+                        .map(|(&a, &b)| (a - b) * (a - b))
+                        .sum();
                     (d, j)
                 })
                 .collect();

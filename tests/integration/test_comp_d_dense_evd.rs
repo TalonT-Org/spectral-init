@@ -1,8 +1,8 @@
 #[path = "../common/mod.rs"]
 mod common;
 
-use spectral_init::dense_evd;
 use ndarray::Array1;
+use spectral_init::dense_evd;
 
 fn run_comp_d_test(dataset: &str, expected_n: usize) {
     let base = common::fixture_path(dataset, "");
@@ -22,8 +22,7 @@ fn run_comp_d_test(dataset: &str, expected_n: usize) {
     let k = ref_eigenvalues.len();
 
     // Call dense_evd
-    let (eigenvalues, eigenvectors) = dense_evd(&laplacian, k)
-        .expect("dense_evd failed");
+    let (eigenvalues, eigenvectors) = dense_evd(&laplacian, k).expect("dense_evd failed");
 
     // Eigenvalue accuracy check
     for i in 0..k {
@@ -31,17 +30,16 @@ fn run_comp_d_test(dataset: &str, expected_n: usize) {
         assert!(
             diff < 1e-9,
             "eigenvalue[{i}]: got {}, ref {}, diff {}",
-            eigenvalues[i], ref_eigenvalues[i], diff
+            eigenvalues[i],
+            ref_eigenvalues[i],
+            diff
         );
     }
 
     // Eigenvector residual check (sign-independent)
     for j in 0..k {
         let r = common::residual_spmv(&laplacian, eigenvectors.column(j), eigenvalues[j]);
-        assert!(
-            r < 1e-10,
-            "eigenvector residual[{j}] = {r} >= 1e-10"
-        );
+        assert!(r < 1e-10, "eigenvector residual[{j}] = {r} >= 1e-10");
     }
 
     // Near-degenerate subspace check

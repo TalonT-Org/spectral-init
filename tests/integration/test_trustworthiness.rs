@@ -17,11 +17,16 @@ fn sklearn_parity_synthetic() {
     let x: ndarray::Array2<f64> = npz.by_name("X").expect("missing X in fixture");
     let y: ndarray::Array2<f64> = npz.by_name("Y").expect("missing Y in fixture");
     let k_arr: ndarray::Array0<i64> = npz.by_name("k").expect("missing k in fixture");
-    let sklearn_score_arr: ndarray::Array0<f64> =
-        npz.by_name("sklearn_score").expect("missing sklearn_score in fixture");
+    let sklearn_score_arr: ndarray::Array0<f64> = npz
+        .by_name("sklearn_score")
+        .expect("missing sklearn_score in fixture");
 
     let k = *k_arr.as_slice_memory_order().unwrap().first().unwrap() as usize;
-    let sklearn_score = *sklearn_score_arr.as_slice_memory_order().unwrap().first().unwrap();
+    let sklearn_score = *sklearn_score_arr
+        .as_slice_memory_order()
+        .unwrap()
+        .first()
+        .unwrap();
 
     assert!(
         sklearn_score > 0.0 && sklearn_score <= 1.0,

@@ -3,18 +3,17 @@ mod common;
 
 use common::load_sparse_csr_f32_u32;
 use ndarray_npy::write_npy;
-use spectral_init::{spectral_init, SpectralInitConfig};
 use spectral_init::{
-    compute_degrees, build_normalized_laplacian, solve_eigenproblem_pub, ComputeMode,
+    ComputeMode, build_normalized_laplacian, compute_degrees, solve_eigenproblem_pub,
 };
+use spectral_init::{SpectralInitConfig, spectral_init};
 use std::path::Path;
 use std::time::Instant;
 
 #[test]
 #[ignore = "requires MERFISH 10K subset data"]
 fn export_merfish_init_10k() {
-    let output_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/visual_eval/output");
+    let output_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/visual_eval/output");
 
     if !output_dir.exists() {
         panic!(
@@ -55,8 +54,19 @@ fn export_merfish_init_10k() {
         .unwrap_or_else(|e| panic!("spectral_init failed on merfish_10k: {e}"));
     let elapsed = start.elapsed();
 
-    assert_eq!(coords.nrows(), n, "coords row count {} != graph node count {}", coords.nrows(), n);
-    assert_eq!(coords.ncols(), 2, "expected 2-dimensional embedding, got {} columns", coords.ncols());
+    assert_eq!(
+        coords.nrows(),
+        n,
+        "coords row count {} != graph node count {}",
+        coords.nrows(),
+        n
+    );
+    assert_eq!(
+        coords.ncols(),
+        2,
+        "expected 2-dimensional embedding, got {} columns",
+        coords.ncols()
+    );
     assert!(
         coords.iter().all(|x| x.is_finite()),
         "coords contain NaN or Inf values"
@@ -74,8 +84,7 @@ fn export_merfish_init_10k() {
 #[test]
 #[ignore = "requires MERFISH 20K subset data in temp/merfish_20k/"]
 fn export_merfish_init_20k() {
-    let output_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("temp/merfish_20k/output");
+    let output_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("temp/merfish_20k/output");
 
     if !output_dir.exists() {
         panic!(
@@ -124,8 +133,19 @@ fn export_merfish_init_20k() {
         })
         .unwrap_or(0);
 
-    assert_eq!(coords.nrows(), n, "coords row count {} != graph node count {}", coords.nrows(), n);
-    assert_eq!(coords.ncols(), 2, "expected 2-dimensional embedding, got {} columns", coords.ncols());
+    assert_eq!(
+        coords.nrows(),
+        n,
+        "coords row count {} != graph node count {}",
+        coords.nrows(),
+        n
+    );
+    assert_eq!(
+        coords.ncols(),
+        2,
+        "expected 2-dimensional embedding, got {} columns",
+        coords.ncols()
+    );
     assert!(
         coords.iter().all(|x| x.is_finite()),
         "coords contain NaN or Inf values"
@@ -137,8 +157,11 @@ fn export_merfish_init_20k() {
 
     // Write perf file: elapsed_s rss_kb  (format expected by run_compare in Python)
     let perf_path = output_dir.join("merfish_20k_rust_perf.txt");
-    std::fs::write(&perf_path, format!("{:.4} {}\n", elapsed.as_secs_f64(), peak_rss_kb))
-        .unwrap_or_else(|e| panic!("failed to write merfish_20k_rust_perf.txt: {e}"));
+    std::fs::write(
+        &perf_path,
+        format!("{:.4} {}\n", elapsed.as_secs_f64(), peak_rss_kb),
+    )
+    .unwrap_or_else(|e| panic!("failed to write merfish_20k_rust_perf.txt: {e}"));
 
     println!("Elapsed: {:.2}s", elapsed.as_secs_f64());
     println!("Peak RSS: {} KB", peak_rss_kb);
@@ -149,8 +172,7 @@ fn export_merfish_init_20k() {
 #[test]
 #[ignore = "requires MERFISH 100K subset data"]
 fn export_merfish_init_100k() {
-    let output_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/visual_eval/output");
+    let output_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/visual_eval/output");
 
     if !output_dir.exists() {
         panic!(
@@ -191,8 +213,19 @@ fn export_merfish_init_100k() {
         .unwrap_or_else(|e| panic!("spectral_init failed on merfish_100k: {e}"));
     let elapsed = start.elapsed();
 
-    assert_eq!(coords.nrows(), n, "coords row count {} != graph node count {}", coords.nrows(), n);
-    assert_eq!(coords.ncols(), 2, "expected 2-dimensional embedding, got {} columns", coords.ncols());
+    assert_eq!(
+        coords.nrows(),
+        n,
+        "coords row count {} != graph node count {}",
+        coords.nrows(),
+        n
+    );
+    assert_eq!(
+        coords.ncols(),
+        2,
+        "expected 2-dimensional embedding, got {} columns",
+        coords.ncols()
+    );
     assert!(
         coords.iter().all(|x| x.is_finite()),
         "coords contain NaN or Inf values"
@@ -213,8 +246,11 @@ fn export_merfish_init_100k() {
         .unwrap_or(0);
 
     let perf_path = output_dir.join("merfish_100k_rust_perf.txt");
-    std::fs::write(&perf_path, format!("{:.4} {}\n", elapsed.as_secs_f64(), peak_rss_kb))
-        .unwrap_or_else(|e| panic!("failed to write merfish_100k_rust_perf.txt: {e}"));
+    std::fs::write(
+        &perf_path,
+        format!("{:.4} {}\n", elapsed.as_secs_f64(), peak_rss_kb),
+    )
+    .unwrap_or_else(|e| panic!("failed to write merfish_100k_rust_perf.txt: {e}"));
 
     println!("Elapsed: {:.2}s", elapsed.as_secs_f64());
     println!("Peak RSS: {} KB", peak_rss_kb);
@@ -225,8 +261,7 @@ fn export_merfish_init_100k() {
 #[test]
 #[ignore = "requires MERFISH 250K subset data"]
 fn export_merfish_init_250k() {
-    let output_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/visual_eval/output");
+    let output_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/visual_eval/output");
 
     if !output_dir.exists() {
         panic!(
@@ -264,8 +299,19 @@ fn export_merfish_init_250k() {
         .unwrap_or_else(|e| panic!("spectral_init failed on merfish_250k: {e}"));
     let elapsed = start.elapsed();
 
-    assert_eq!(coords.nrows(), n, "coords row count {} != graph node count {}", coords.nrows(), n);
-    assert_eq!(coords.ncols(), 2, "expected 2-dimensional embedding, got {} columns", coords.ncols());
+    assert_eq!(
+        coords.nrows(),
+        n,
+        "coords row count {} != graph node count {}",
+        coords.nrows(),
+        n
+    );
+    assert_eq!(
+        coords.ncols(),
+        2,
+        "expected 2-dimensional embedding, got {} columns",
+        coords.ncols()
+    );
     assert!(
         coords.iter().all(|x| x.is_finite()),
         "coords contain NaN or Inf values"
@@ -286,8 +332,11 @@ fn export_merfish_init_250k() {
         .unwrap_or(0);
 
     let perf_path = output_dir.join("merfish_250k_rust_perf.txt");
-    std::fs::write(&perf_path, format!("{:.4} {}\n", elapsed.as_secs_f64(), peak_rss_kb))
-        .unwrap_or_else(|e| panic!("failed to write merfish_250k_rust_perf.txt: {e}"));
+    std::fs::write(
+        &perf_path,
+        format!("{:.4} {}\n", elapsed.as_secs_f64(), peak_rss_kb),
+    )
+    .unwrap_or_else(|e| panic!("failed to write merfish_250k_rust_perf.txt: {e}"));
 
     println!("Elapsed: {:.2}s", elapsed.as_secs_f64());
     println!("Peak RSS: {} KB", peak_rss_kb);

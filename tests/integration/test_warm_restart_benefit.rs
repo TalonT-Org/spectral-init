@@ -11,14 +11,14 @@ mod common;
 extern crate ndarray16;
 use ndarray16 as nd16;
 
-use linfa_linalg::lobpcg::{lobpcg, Order};
+use linfa_linalg::lobpcg::{Order, lobpcg};
 use ndarray::{Array1, Array2};
-use rand::rngs::StdRng;
 use rand::SeedableRng;
+use rand::rngs::StdRng;
 use rand_distr::{Distribution, StandardNormal};
-use sprs::CsMatI;
 use spectral_init::operator::{CsrOperator, LinearOperator};
 use spectral_init::solvers::lobpcg::lobpcg_solve;
+use sprs::CsMatI;
 
 // ─── ndarray 0.16 ↔ 0.17 conversion helpers ──────────────────────────────────
 
@@ -132,7 +132,10 @@ fn epsilon_bridge_laplacian(cluster_size: usize, bridge_weight: f64) -> CsMatI<f
                 }
             }
             if i == cs {
-                row_entries.push((cs - 1, -bridge_weight * inv_sqrt_deg[i] * inv_sqrt_deg[cs - 1]));
+                row_entries.push((
+                    cs - 1,
+                    -bridge_weight * inv_sqrt_deg[i] * inv_sqrt_deg[cs - 1],
+                ));
             }
         }
         row_entries.sort_unstable_by_key(|&(col, _)| col);
@@ -193,7 +196,9 @@ fn build_lobpcg_x_init<O: LinearOperator>(
         Array2::from_shape_fn((n, k), |_| StandardNormal.sample(&mut rng));
     let sqrt_deg_norm = sqrt_deg.dot(sqrt_deg).sqrt();
     if sqrt_deg_norm > 0.0 {
-        x_init.column_mut(0).assign(&sqrt_deg.mapv(|x| x / sqrt_deg_norm));
+        x_init
+            .column_mut(0)
+            .assign(&sqrt_deg.mapv(|x| x / sqrt_deg_norm));
     }
     const CHEB_MIN_N: usize = 1000;
     if n >= CHEB_MIN_N {
@@ -241,7 +246,15 @@ fn single_pass_lobpcg<O: LinearOperator>(
         op.apply(x17.view(), &mut y17);
         to_nd16_array2(y17)
     };
-    let result = lobpcg(op_fn, x_init, |_: nd16::ArrayViewMut2<f64>| {}, None, tol, maxiter, Order::Smallest);
+    let result = lobpcg(
+        op_fn,
+        x_init,
+        |_: nd16::ArrayViewMut2<f64>| {},
+        None,
+        tol,
+        maxiter,
+        Order::Smallest,
+    );
     match result {
         Ok(r) => Some((from_nd16_array1(r.eigvals), from_nd16_array2(r.eigvecs))),
         Err((_, Some(r))) => Some((from_nd16_array1(r.eigvals), from_nd16_array2(r.eigvecs))),
@@ -385,7 +398,10 @@ fn test_ring_2000_warm_restart_converges() {
     let op = CsrOperator(&lap);
 
     let result = lobpcg_solve(&op, 2, 42, false, &sqrt_deg);
-    assert!(result.is_some(), "lobpcg_solve returned None for ring_2000 seed=42");
+    assert!(
+        result.is_some(),
+        "lobpcg_solve returned None for ring_2000 seed=42"
+    );
 
     let ((eigs, vecs), restart_count) = result.unwrap();
     assert!(

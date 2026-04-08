@@ -5,12 +5,12 @@
 #[path = "../common/mod.rs"]
 mod common;
 
-use spectral_init::operator::CsrOperator;
-use spectral_init::solvers::lobpcg::lobpcg_solve;
 use spectral_init::lobpcg_sinv_solve;
+use spectral_init::operator::CsrOperator;
 use spectral_init::rsvd_solve;
-use spectral_init::{solve_eigenproblem_pub, ComputeMode};
-use spectral_init::{spectral_init, SpectralInitConfig};
+use spectral_init::solvers::lobpcg::lobpcg_solve;
+use spectral_init::{ComputeMode, solve_eigenproblem_pub};
+use spectral_init::{SpectralInitConfig, spectral_init};
 
 /// Two-component graph: disjoint paths P_{n1} (nodes 0..n1) and P_{n2} (nodes n1..n1+n2).
 /// No edges cross the component boundary. Adjacency is weight 1.0 for each path edge.
@@ -58,7 +58,8 @@ fn make_two_component_graph(n1: u32, n2: u32) -> sprs::CsMatI<f32, u32, usize> {
 fn test_inv_eigenvalue_ascending_order() {
     let lap_path = common::fixture_path("blobs_50", "comp_b_laplacian.npz");
     let lap = common::load_sparse_csr(&lap_path);
-    let ((eigvals, _eigvecs), _level) = solve_eigenproblem_pub(&lap, 2, 42, ComputeMode::PythonCompat);
+    let ((eigvals, _eigvecs), _level) =
+        solve_eigenproblem_pub(&lap, 2, 42, ComputeMode::PythonCompat);
     for i in 0..eigvals.len().saturating_sub(1) {
         assert!(
             eigvals[i] <= eigvals[i + 1] + 1e-12,
@@ -85,9 +86,13 @@ fn test_inv_escalation_routing_large_n() {
 
     // Forced path: threshold=0 forces all n away from dense → level ≥ 1.
     // Safe because nextest runs each test in a dedicated process.
-    unsafe { std::env::set_var("SPECTRAL_DENSE_N_THRESHOLD", "0"); }
+    unsafe {
+        std::env::set_var("SPECTRAL_DENSE_N_THRESHOLD", "0");
+    }
     let (_, level_forced) = solve_eigenproblem_pub(&lap, 2, 42, ComputeMode::PythonCompat);
-    unsafe { std::env::remove_var("SPECTRAL_DENSE_N_THRESHOLD"); }
+    unsafe {
+        std::env::remove_var("SPECTRAL_DENSE_N_THRESHOLD");
+    }
     assert!(
         level_forced >= 1,
         "expected level ≥ 1 with SPECTRAL_DENSE_N_THRESHOLD=0, got {level_forced}"
@@ -185,9 +190,8 @@ fn test_inv_eigenvalue_non_negative() {
     let lap = common::ring_laplacian(500);
     let sqrt_deg = common::ring_sqrt_deg(500);
     let op = CsrOperator(&lap);
-    let ((eigvals, _eigvecs), _) =
-        lobpcg_solve(&op, 2, 42, false, &sqrt_deg)
-            .expect("lobpcg_solve returned None on ring C_500");
+    let ((eigvals, _eigvecs), _) = lobpcg_solve(&op, 2, 42, false, &sqrt_deg)
+        .expect("lobpcg_solve returned None on ring C_500");
     for (i, &lambda) in eigvals.iter().enumerate() {
         assert!(
             lambda >= -1e-9,
@@ -211,9 +215,7 @@ fn test_inv_lobpcg_convergence_ill_conditioned() {
     let sqrt_deg = common::ring_sqrt_deg(2000);
     let op = CsrOperator(&lap);
     let result = lobpcg_solve(&op, 2, 42, false, &sqrt_deg);
-    let (_, restart_count) = result.expect(
-        "lobpcg_solve returned None for ring C_2000 seed=42"
-    );
+    let (_, restart_count) = result.expect("lobpcg_solve returned None for ring C_2000 seed=42");
     if restart_count == 1 {
         eprintln!(
             "[NOTE] B6 gap: restart_count=1 — ring C_2000 converged in exactly 1 restart \

@@ -7,8 +7,8 @@
 mod common;
 
 use ndarray::{Array1, Array2, Axis, s};
+use spectral_init::{SpectralError, SpectralInitConfig, spectral_init};
 use sprs::CsMatI;
-use spectral_init::{spectral_init, SpectralError, SpectralInitConfig};
 
 // ─── Graph builder helpers ─────────────────────────────────────────────────────
 
@@ -36,7 +36,6 @@ fn make_barbell(clique_size: u32) -> CsMatI<f32, u32, usize> {
     make_epsilon_bridge(clique_size, 1.0f32)
 }
 
-
 /// Star S_n: hub node 0, leaf nodes 1..n, edges (0, i) weight 1.0.
 fn make_star(n: u32) -> CsMatI<f32, u32, usize> {
     let n_usize = n as usize;
@@ -57,7 +56,6 @@ fn make_star(n: u32) -> CsMatI<f32, u32, usize> {
     }
     CsMatI::<f32, u32, usize>::new((n_usize, n_usize), indptr, indices, data)
 }
-
 
 /// Complete bipartite K_{m,n}: left nodes 0..m, right nodes m..m+n.
 fn make_complete_bipartite(m: u32, n: u32) -> CsMatI<f32, u32, usize> {
@@ -208,9 +206,7 @@ fn make_lollipop(clique_size: u32, path_len: u32) -> CsMatI<f32, u32, usize> {
 fn large_diagonal_laplacian(n: usize) -> CsMatI<f64, usize> {
     let indptr: Vec<usize> = (0..=n).collect();
     let indices: Vec<usize> = (0..n).collect();
-    let data: Vec<f64> = (0..n)
-        .map(|i| i as f64 / (n - 1).max(1) as f64)
-        .collect();
+    let data: Vec<f64> = (0..n).map(|i| i as f64 / (n - 1).max(1) as f64).collect();
     CsMatI::new((n, n), indptr, indices, data)
 }
 
@@ -361,20 +357,20 @@ fn path_laplacian_6() -> CsMatI<f64, usize> {
         (6, 6),
         vec![0usize, 2, 5, 8, 11, 14, 16],
         vec![
-            0usize, 1,   // row 0
-            0, 1, 2,     // row 1
-            1, 2, 3,     // row 2
-            2, 3, 4,     // row 3
-            3, 4, 5,     // row 4
-            4, 5,        // row 5
+            0usize, 1, // row 0
+            0, 1, 2, // row 1
+            1, 2, 3, // row 2
+            2, 3, 4, // row 3
+            3, 4, 5, // row 4
+            4, 5, // row 5
         ],
         vec![
-            1.0_f64, -1.0,       // row 0
-            -1.0, 2.0, -1.0,     // row 1
-            -1.0, 2.0, -1.0,     // row 2
-            -1.0, 2.0, -1.0,     // row 3
-            -1.0, 2.0, -1.0,     // row 4
-            -1.0, 1.0,           // row 5
+            1.0_f64, -1.0, // row 0
+            -1.0, 2.0, -1.0, // row 1
+            -1.0, 2.0, -1.0, // row 2
+            -1.0, 2.0, -1.0, // row 3
+            -1.0, 2.0, -1.0, // row 4
+            -1.0, 1.0, // row 5
         ],
     )
 }
@@ -395,7 +391,8 @@ fn max_intra_1d_spread(emb: &Array2<f32>, range: std::ops::Range<usize>, dim: us
 #[test]
 fn test_barbell_valid_embedding() {
     let graph = make_barbell(20); // n = 40
-    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default()).expect("barbell should not fail");
+    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
+        .expect("barbell should not fail");
     assert_eq!(result.shape(), &[40, 2]);
     assert!(
         result.iter().all(|v| v.is_finite()),
@@ -406,7 +403,8 @@ fn test_barbell_valid_embedding() {
 #[test]
 fn test_path_valid_embedding() {
     let graph = common::make_path(100); // n = 100
-    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default()).expect("path should not fail");
+    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
+        .expect("path should not fail");
     assert_eq!(result.shape(), &[100, 2]);
     assert!(
         result.iter().all(|v| v.is_finite()),
@@ -417,7 +415,8 @@ fn test_path_valid_embedding() {
 #[test]
 fn test_star_valid_embedding() {
     let graph = make_star(50); // n = 50
-    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default()).expect("star should not fail");
+    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
+        .expect("star should not fail");
     assert_eq!(result.shape(), &[50, 2]);
     assert!(
         result.iter().all(|v| v.is_finite()),
@@ -428,8 +427,8 @@ fn test_star_valid_embedding() {
 #[test]
 fn test_epsilon_bridge_valid_embedding() {
     let graph = make_epsilon_bridge(20, 1e-6f32); // n = 40
-    let result =
-        spectral_init(&graph, 2, 42, None, SpectralInitConfig::default()).expect("epsilon-bridge should not fail");
+    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
+        .expect("epsilon-bridge should not fail");
     assert_eq!(result.shape(), &[40, 2]);
     assert!(
         result.iter().all(|v| v.is_finite()),
@@ -440,8 +439,8 @@ fn test_epsilon_bridge_valid_embedding() {
 #[test]
 fn test_complete_bipartite_valid_embedding() {
     let graph = make_complete_bipartite(10, 10); // n = 20
-    let result =
-        spectral_init(&graph, 2, 42, None, SpectralInitConfig::default()).expect("complete bipartite should not fail");
+    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
+        .expect("complete bipartite should not fail");
     assert_eq!(result.shape(), &[20, 2]);
     assert!(
         result.iter().all(|v| v.is_finite()),
@@ -452,7 +451,8 @@ fn test_complete_bipartite_valid_embedding() {
 #[test]
 fn test_ring_valid_embedding() {
     let graph = common::make_ring(100); // n = 100
-    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default()).expect("ring should not fail");
+    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
+        .expect("ring should not fail");
     assert_eq!(result.shape(), &[100, 2]);
     assert!(
         result.iter().all(|v| v.is_finite()),
@@ -486,7 +486,8 @@ fn test_single_edge_returns_too_few_nodes() {
 #[test]
 fn test_complete_k20_valid_embedding() {
     let graph = make_complete(20); // n = 20
-    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default()).expect("K_20 should not fail");
+    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
+        .expect("K_20 should not fail");
     assert_eq!(result.shape(), &[20, 2]);
     assert!(
         result.iter().all(|v| v.is_finite()),
@@ -497,7 +498,8 @@ fn test_complete_k20_valid_embedding() {
 #[test]
 fn test_lollipop_valid_embedding() {
     let graph = make_lollipop(10, 20); // n = 30
-    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default()).expect("lollipop should not fail");
+    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
+        .expect("lollipop should not fail");
     assert_eq!(result.shape(), &[30, 2]);
     assert!(
         result.iter().all(|v| v.is_finite()),
@@ -520,8 +522,7 @@ fn test_barbell_separates_communities() {
     let c1_x = emb.slice(s![20..40, 0]).mean_axis(Axis(0)).unwrap()[[]];
     let centroid_gap: f32 = (c0_x - c1_x).abs();
 
-    let max_intra = max_intra_1d_spread(&emb, 0..20, 0)
-        .max(max_intra_1d_spread(&emb, 20..40, 0));
+    let max_intra = max_intra_1d_spread(&emb, 0..20, 0).max(max_intra_1d_spread(&emb, 20..40, 0));
 
     assert!(
         centroid_gap > max_intra,
@@ -542,8 +543,7 @@ fn test_epsilon_bridge_separates_communities() {
     let c1_x = emb.slice(s![20..40, 0]).mean_axis(Axis(0)).unwrap()[[]];
     let centroid_gap: f32 = (c0_x - c1_x).abs();
 
-    let max_intra = max_intra_1d_spread(&emb, 0..20, 0)
-        .max(max_intra_1d_spread(&emb, 20..40, 0));
+    let max_intra = max_intra_1d_spread(&emb, 0..20, 0).max(max_intra_1d_spread(&emb, 20..40, 0));
 
     assert!(
         centroid_gap > max_intra,
@@ -581,14 +581,24 @@ fn test_complete_bipartite_coordinate_stability() {
 #[test]
 fn test_level_0_dense_evd_for_small_n() {
     let laplacian = path_laplacian_6(); // n=6 < 2000 → Level 0
-    let (_, level) = spectral_init::solve_eigenproblem_pub(&laplacian, 2, 42, spectral_init::ComputeMode::PythonCompat);
+    let (_, level) = spectral_init::solve_eigenproblem_pub(
+        &laplacian,
+        2,
+        42,
+        spectral_init::ComputeMode::PythonCompat,
+    );
     assert_eq!(level, 0, "n=6 must use Level 0 dense EVD");
 }
 
 #[test]
 fn test_level_1_lobpcg_for_large_well_conditioned_n() {
     let laplacian = large_diagonal_laplacian(2001); // n=2001 >= 2000, eigengap ≈ 0.5
-    let (_, level) = spectral_init::solve_eigenproblem_pub(&laplacian, 2, 42, spectral_init::ComputeMode::PythonCompat);
+    let (_, level) = spectral_init::solve_eigenproblem_pub(
+        &laplacian,
+        2,
+        42,
+        spectral_init::ComputeMode::PythonCompat,
+    );
     assert_eq!(
         level, 1,
         "n=2001 well-conditioned diagonal must use Level 1 LOBPCG"
@@ -633,7 +643,11 @@ fn test_level_3_rsvd_valid_on_large_path() {
     let laplacian = large_path_laplacian(2001);
     let (eigs, vecs): (ndarray::Array1<f64>, ndarray::Array2<f64>) =
         spectral_init::rsvd_solve(&laplacian, 2, 42);
-    assert_eq!(eigs.len(), 3, "rsvd_solve must return n_components+1=3 eigenpairs (trivial at index 0, non-trivial at 1..=n_components)");
+    assert_eq!(
+        eigs.len(),
+        3,
+        "rsvd_solve must return n_components+1=3 eigenpairs (trivial at index 0, non-trivial at 1..=n_components)"
+    );
     assert!(
         eigs.iter().all(|&v| v >= -1e-3),
         "rSVD eigenvalues must be non-negative"
@@ -691,12 +705,12 @@ fn large_epsilon_bridge_laplacian_shape_and_symmetry() {
     // Check symmetry: L[i,j] == L[j,i] for a sample of pairs
     let pairs: [(usize, usize); 3] = [(0, 1), (cs - 1, cs), (cs, cs + 1)];
     for (i, j) in pairs {
-        let lij: Option<f64> = lap.outer_view(i).and_then(|row| {
-            row.iter().find(|(col, _)| *col == j).map(|(_, val)| *val)
-        });
-        let lji: Option<f64> = lap.outer_view(j).and_then(|row| {
-            row.iter().find(|(col, _)| *col == i).map(|(_, val)| *val)
-        });
+        let lij: Option<f64> = lap
+            .outer_view(i)
+            .and_then(|row| row.iter().find(|(col, _)| *col == j).map(|(_, val)| *val));
+        let lji: Option<f64> = lap
+            .outer_view(j)
+            .and_then(|row| row.iter().find(|(col, _)| *col == i).map(|(_, val)| *val));
         match (lij, lji) {
             (Some(a), Some(b)) => assert!(
                 (a - b).abs() < 1e-14,

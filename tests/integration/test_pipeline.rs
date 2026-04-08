@@ -1,7 +1,7 @@
 #[path = "../common/mod.rs"]
 mod common;
 
-use spectral_init::{spectral_init, SpectralInitConfig};
+use spectral_init::{SpectralInitConfig, spectral_init};
 use sprs::CsMatI;
 
 #[test]
@@ -98,22 +98,34 @@ fn spectral_init_synthetic_disconnected_produces_valid_embedding() {
     let data_arr = ndarray::Array2::from_shape_vec((6, 2), {
         let mut v = vec![0.0f32; 12];
         // node 0: (0.0, 0.0)
-        v[0] = 0.0; v[1] = 0.0;
+        v[0] = 0.0;
+        v[1] = 0.0;
         // node 1: (0.1, 0.0)
-        v[2] = 0.1; v[3] = 0.0;
+        v[2] = 0.1;
+        v[3] = 0.0;
         // node 2: (0.2, 0.0)
-        v[4] = 0.2; v[5] = 0.0;
+        v[4] = 0.2;
+        v[5] = 0.0;
         // node 3: (100.0, 0.0)
-        v[6] = 100.0; v[7] = 0.0;
+        v[6] = 100.0;
+        v[7] = 0.0;
         // node 4: (100.1, 0.0)
-        v[8] = 100.1; v[9] = 0.0;
+        v[8] = 100.1;
+        v[9] = 0.0;
         // node 5: (100.2, 0.0)
-        v[10] = 100.2; v[11] = 0.0;
+        v[10] = 100.2;
+        v[11] = 0.0;
         v
     })
     .unwrap();
 
-    let result = spectral_init(&g, 2, 42, Some(data_arr.view()), SpectralInitConfig::default());
+    let result = spectral_init(
+        &g,
+        2,
+        42,
+        Some(data_arr.view()),
+        SpectralInitConfig::default(),
+    );
     let arr = result.expect("spectral_init on disconnected graph should succeed");
     assert_eq!(arr.shape(), &[6, 2]);
     for &v in arr.iter() {
@@ -214,7 +226,10 @@ fn spectral_init_single_point() {
     let g = CsMatI::<f32, u32, usize>::new((1, 1), indptr, indices, data);
     let result = spectral_init(&g, 2, 42, None, SpectralInitConfig::default());
     assert!(
-        matches!(result, Err(spectral_init::SpectralError::TooFewNodes { n: 1, dims: 2 })),
+        matches!(
+            result,
+            Err(spectral_init::SpectralError::TooFewNodes { n: 1, dims: 2 })
+        ),
         "single-point graph should return TooFewNodes, got: {:?}",
         result
     );
@@ -229,7 +244,10 @@ fn spectral_init_two_points_connected() {
     let g = CsMatI::<f32, u32, usize>::new((2, 2), indptr, indices, data);
     let result = spectral_init(&g, 2, 42, None, SpectralInitConfig::default());
     assert!(
-        matches!(result, Err(spectral_init::SpectralError::TooFewNodes { n: 2, dims: 2 })),
+        matches!(
+            result,
+            Err(spectral_init::SpectralError::TooFewNodes { n: 2, dims: 2 })
+        ),
         "two-point graph with n_components=2 should return TooFewNodes, got: {:?}",
         result
     );
@@ -301,7 +319,13 @@ fn spectral_init_ten_component_graph() {
         }
     }
     let data_arr = ndarray::Array2::from_shape_vec((n, 2), flat).unwrap();
-    let result = spectral_init(&g, 2, 42, Some(data_arr.view()), SpectralInitConfig::default());
+    let result = spectral_init(
+        &g,
+        2,
+        42,
+        Some(data_arr.view()),
+        SpectralInitConfig::default(),
+    );
     let arr = result.expect("spectral_init on 10-component graph should succeed");
     assert_eq!(arr.shape(), &[n, 2]);
     for &v in arr.iter() {

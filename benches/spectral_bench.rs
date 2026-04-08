@@ -5,12 +5,12 @@
 //! Inputs: deterministic synthetic ring graphs — no fixture files required.
 //! Each benchmark uses `black_box` to prevent dead-code elimination.
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
+use spectral_init::operator::{CsrOperator, spmv_csr};
 use spectral_init::{
-    build_normalized_laplacian, compute_degrees, dense_evd, find_components, lobpcg_solve,
-    rsvd_solve, spectral_init, ComputeMode, SpectralInitConfig,
+    ComputeMode, SpectralInitConfig, build_normalized_laplacian, compute_degrees, dense_evd,
+    find_components, lobpcg_solve, rsvd_solve, spectral_init,
 };
-use spectral_init::operator::{spmv_csr, CsrOperator};
 use std::hint::black_box;
 
 // ─── Synthetic Graph Helpers ──────────────────────────────────────────────────
@@ -133,7 +133,12 @@ fn bench_laplacian_build(c: &mut Criterion) {
         .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
         .collect();
     c.bench_function("laplacian_build_2000", |b| {
-        b.iter(|| black_box(build_normalized_laplacian(black_box(&graph), black_box(&inv_sqrt_deg))))
+        b.iter(|| {
+            black_box(build_normalized_laplacian(
+                black_box(&graph),
+                black_box(&inv_sqrt_deg),
+            ))
+        })
     });
 }
 
