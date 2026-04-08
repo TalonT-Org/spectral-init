@@ -4,6 +4,16 @@ version = "0.1.0"
 edition = "2024"
 description = "Spectral initialization for UMAP embeddings"
 license = "MIT"
+repository = "https://github.com/TalonT-Org/spectral-init"
+readme = "README.md"
+documentation = "https://docs.rs/spectral-init"
+rust-version = "1.85"
+keywords = ["umap", "dimensionality-reduction", "spectral", "eigenvectors", "embeddings"]
+categories = ["science", "mathematics", "algorithms"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--html-in-header", "docs/katex-header.html"]
 
 [features]
 # Expose internal solver functions for integration tests.
