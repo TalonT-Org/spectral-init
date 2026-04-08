@@ -179,7 +179,7 @@ The `penalty` step at ~6% on MERFISH is not worth optimizing in isolation. Even 
 
 Within the scope of this exploratory single-invocation study, the evidence strongly supports that **X-space distance computation (`x_dist`) is the dominant bottleneck for trustworthiness on MERFISH data**, consuming 58.9% of thread-aggregate compute time at n=10K and 58.4% at n=50K. Combined X-space operations account for 68.3% [67.4%, 69.1%] of total thread-aggregate time. (The 50% dominance threshold was set post-hoc after observing 56.2% in the historical baseline; these results should not be interpreted as a pre-specified statistical decision.)
 
-This represents a 10pp increase over the Gaussian baseline (58.1%), consistent with the higher dimensionality of MERFISH features (d=50 vs d=10), though dimensionality and data geometry are confounded in this comparison. The profile is stable across scales and reproducible with low within-run variance.
+This represents a 10pp increase over the Gaussian baseline (58.1%), consistent with the higher dimensionality of MERFISH features (d=50 vs d=10), though dimensionality and data geometry are confounded in this comparison. The profile is stable across scales and reproducible with low within-run variance. **Proxy caveat:** `x_space_pct` measures compute-share in thread-aggregate nanoseconds, not wall-clock share. SIMD-heavy steps (e.g., `x_dist` at d=50 with AVX-512) accumulate more thread-ns per wall-clock second than scalar-bound steps, so the wall-clock optimization ROI may differ from the thread-ns fraction reported here.
 
 ## Recommendations
 
