@@ -418,14 +418,14 @@ This function must:
 
 ### 7.2 Eigensolver Options
 
-#### Option A: LOBPCG via `ndarray-linalg` (RECOMMENDED)
+#### Option A: LOBPCG via `linfa-linalg` (ACTUAL IMPLEMENTATION)
 
-**Crate:** `ndarray-linalg` v0.18.1 (active, 64k downloads/mo)
+**Crate:** `linfa-linalg` v0.2 (pure Rust, no LAPACK dependency)
 
 **Key feature:** The `lobpcg()` function accepts a **closure-based operator** — you pass a function that does sparse matrix-vector multiply, so you never densify the Laplacian:
 
 ```rust
-use ndarray_linalg::lobpcg::{lobpcg, Order};
+use linfa_linalg::lobpcg::{lobpcg, Order};
 
 // Build Laplacian as sprs CSR matrix
 let laplacian: CsMat<f64> = build_normalized_laplacian(&graph);
@@ -448,30 +448,31 @@ let result = lobpcg(
 
 **SPD requirement:** LOBPCG requires **strictly positive definite** matrices. The graph Laplacian is positive **semi**-definite (eigenvalue 0 exists). Standard practice: add regularization `L + epsilon * I` where `epsilon ~ 1e-7`. This shifts all eigenvalues by epsilon, preserving eigenvector ordering while making the matrix SPD. This is Level 2 in our escalation chain; Level 1 attempts LOBPCG without regularization first (it often works despite the theoretical requirement, since the trivial eigenvector is being discarded anyway).
 
-**Dependency:** Requires LAPACK (openblas-src, netlib-src, or intel-mkl-src).
+**Dependency:** Pure Rust — no LAPACK, no openblas-src, no netlib-src. Uses ndarray 0.16 internally; bridged via the `ndarray16` alias in Cargo.toml.
 
-#### Option B: Randomized SVD via `annembed` (PURE RUST)
+#### Option B: Randomized SVD via custom Halko-Tropp + `faer` (ACTUAL IMPLEMENTATION)
 
 **The 2I - L Trick (used by uwot/R):**
 
 For the normalized Laplacian `L = I - D^{-1/2} A D^{-1/2}`:
 - The matrix `M = 2I - L = I + D^{-1/2} A D^{-1/2}` has **largest** eigenvectors that correspond to **smallest** eigenvectors of `L`
 - This converts the hard "smallest eigenvalues" problem into a "largest singular values" problem
-- Solvable by randomized SVD (Halko-Tropp algorithm), which is well-implemented for sparse matrices
+- Solvable by randomized SVD (Halko-Tropp algorithm)
 
-**The `annembed` crate** implements randomized SVD for `sprs` CSR matrices:
-- `subspace_iteration_csr` — QR-stabilized, more accurate
-- `adaptative_range_finder_matrep` — faster, less accurate for very large matrices
+**The custom implementation** uses a randomized range finder with power iteration for accuracy, followed by dense QR and eigendecomposition via `faer`:
+- Randomized range finder: sample random projections of `M`, stabilize with QR
+- Power iteration: iterate `(M * M^T)^q * Omega` to sharpen the range approximation
+- Dense phase: project `M` onto the range sketch, extract eigenpairs via `faer`
 
 ```rust
 // Pseudocode for the 2I-L approach
 let m = two_i_minus_l(&laplacian);  // Form M = 2I - L as sprs CSR
-let (u, s, _vt) = randomized_svd(&m, n_components + 1, oversampling);
-// u[:, 0..n_components] are the spectral embedding coordinates
+let (eigenvalues, eigenvectors) = rsvd_solve(&m, n_components + 1, seed);
+// eigenvectors[:, 0..n_components] are the spectral embedding coordinates
 // (skip column 0 which corresponds to the trivial eigenvector)
 ```
 
-**Advantage:** No LAPACK dependency. Pure Rust. Already production-tested in `annembed`.
+**Advantage:** No LAPACK dependency. Pure Rust. Uses `faer` for dense QR and eigendecomposition.
 
 #### Option C: Dense Fallback via `faer` (Small Datasets Only)
 
@@ -497,7 +498,7 @@ The LOBPCG algorithm is ~150 lines of dense linear algebra:
 4. Extract best `k` eigenpairs as new `X`
 5. Repeat until convergence
 
-The `ndarray-linalg` implementation is MIT-licensed and can serve as a reference.
+The `linfa-linalg` implementation is MIT-licensed and can serve as a reference.
 
 ### 7.3 Crates to AVOID
 
@@ -517,14 +518,14 @@ The `ndarray-linalg` implementation is MIT-licensed and can serve as a reference
             faer dense EVD ─────────┤ exact, cannot fail for small n
                                     |
             Level 1                 |
-            ndarray-linalg LOBPCG ──┤ fast, closure-based sparse operator
+            linfa-linalg LOBPCG ────┤ fast, closure-based sparse operator
                                     |
             Level 2                 |
             LOBPCG + ε*I reg ───────┤ widens eigengap, fixes near-singular L
                                     |
             Level 3                 |
             Randomized SVD ─────────┤ 2I-L trick, entirely different algorithm
-            (annembed / custom)     │ pure Rust, no LAPACK needed
+            custom Halko-Tropp/faer │ pure Rust, no LAPACK needed
                                     |
             Level 4 (nuclear)       |
             Dense EVD forced ───────┘ O(n³) but spectral theorem guarantees it
@@ -842,32 +843,25 @@ In practice, Level 3 (randomized SVD) is the terminal solver for all realistic i
 
 ### 8.4 Dependency Summary
 
-**Minimum viable (LOBPCG path):**
+**Minimum viable — LOBPCG path (pure Rust, no LAPACK):**
 ```toml
 [dependencies]
-sprs = "0.11"
-ndarray = "0.16"
-ndarray-linalg = { version = "0.18", features = ["openblas-static"] }
-rand = "0.8"
+linfa-linalg = "0.2"
+ndarray16 = { package = "ndarray", version = "0.16" }  # version bridge for linfa-linalg
 ```
 
-**Pure Rust (randomized SVD path):**
+**Randomized SVD path — custom Halko-Tropp using faer:**
 ```toml
 [dependencies]
-sprs = "0.11"
-ndarray = "0.16"
-rand = "0.8"
-# annembed or custom randomized SVD implementation
+faer = "0.24"   # dense QR and eigendecomposition for rSVD
 ```
 
-**Both paths + dense fallback:**
+**Dense fallback and Laplacian construction:**
 ```toml
 [dependencies]
+faer = "0.24"   # already above
+ndarray = "0.17"
 sprs = "0.11"
-ndarray = "0.16"
-ndarray-linalg = { version = "0.18", features = ["openblas-static"] }
-faer = "0.24"
-rand = "0.8"
 ```
 
 ---
@@ -1486,8 +1480,7 @@ For typical UMAP: `n=50k`, `k=15 neighbors`, `nnz ~ 750k`, requesting 2–3 eige
 |-----|--------|------------|
 | No Rust `eigsh` with shift-invert | Fundamental gap | Use LOBPCG or randomized SVD |
 | `sprs` has no graph algorithms | Expected | Implement BFS for connected components (~30 lines) |
-| `ndarray-linalg` LOBPCG needs LAPACK | Structural dependency | Accept LAPACK dep, or use randomized SVD path |
-| No preconditioning support in `ndarray-linalg` LOBPCG | Performance impact at scale | Implement diagonal preconditioner `M = diag(L)^{-1}`; or escalate to randomized SVD which doesn't need preconditioning |
+| No preconditioning support in `linfa-linalg` LOBPCG | Performance impact at scale | Implement diagonal preconditioner `M = diag(L)^{-1}`; or escalate to randomized SVD which doesn't need preconditioning |
 
 ---
 
@@ -1621,7 +1614,7 @@ A 10-agent audit examined every source file, test file, tolerance, and architect
 
 ### 14.8 Stale References in Earlier Sections
 
-Sections 7.2 and 8.4 reference `ndarray-linalg` as the LOBPCG provider. The actual implementation uses `linfa-linalg` (pure Rust, no LAPACK dependency). Section 8.2 mentions `annembed` for rSVD; the actual implementation is a custom Halko-Tropp implementation using `faer` for dense QR and eigendecomposition. These sections remain as historical design documentation; the actual implementation details are in Section 13.2 and the source code.
+**Resolved.** Sections 7.2 and 8.4 have been updated to reflect the actual implementation: `linfa-linalg` for LOBPCG and a custom Halko-Tropp rSVD using `faer`. No `ndarray-linalg` or `annembed` runtime dependency exists in this crate.
 
 ---
 
@@ -1748,7 +1741,7 @@ Full specification: `temp/umap-visual-evaluation-prompt.md`
 
 ### Rust Crates
 - [sprs](https://crates.io/crates/sprs) — Sparse matrix library
-- [ndarray-linalg](https://github.com/rust-ndarray/ndarray-linalg) — LOBPCG implementation
+- [linfa-linalg](https://github.com/rust-ml/linfa) — pure-Rust LOBPCG implementation (no LAPACK dependency)
 - [faer](https://docs.rs/faer/latest/faer/) — Dense linear algebra
 - [annembed](https://lib.rs/crates/annembed) — UMAP-like with randomized SVD
 - [linfa](https://github.com/rust-ml/linfa) — ML framework with spectral methods
