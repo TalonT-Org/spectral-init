@@ -38,18 +38,21 @@ cargo add spectral-init
 use spectral_init::{spectral_init, SpectralInitConfig};
 use sprs::{CsMatI, TriMatI};
 
-// Build a small synthetic graph (replace with your real UMAP graph)
-let n = 10usize;
-let mut tri: TriMatI<f32, u32> = TriMatI::new((n, n));
-for i in 0..n {
-    let next = (i + 1) % n;
-    tri.add_triplet(i, next, 1.0_f32);
-    tri.add_triplet(next, i, 1.0_f32);
-}
-let graph: CsMatI<f32, u32, usize> = tri.to_csr();
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Build a small synthetic graph (replace with your real UMAP graph)
+    let n = 10usize;
+    let mut tri: TriMatI<f32, u32> = TriMatI::new((n, n));
+    for i in 0..n {
+        let next = (i + 1) % n;
+        tri.add_triplet(i, next, 1.0_f32);
+        tri.add_triplet(next, i, 1.0_f32);
+    }
+    let graph: CsMatI<f32, u32, usize> = tri.to_csr();
 
-let embedding = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())?;
-assert_eq!(embedding.shape(), &[n, 2]);
+    let embedding = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())?;
+    assert_eq!(embedding.shape(), &[n, 2]);
+    Ok(())
+}
 ```
 
 See [`examples/basic.rs`](examples/basic.rs) for the full runnable version.
