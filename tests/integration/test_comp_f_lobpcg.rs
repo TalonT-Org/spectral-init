@@ -50,11 +50,7 @@ fn run_lobpcg_test(dataset: &str, _expected_n: usize, regularized: bool) {
     } else {
         // Level 2: residuals against the unshifted Laplacian must be < 1e-5.
         for i in 0..eigvals.len() {
-            let residual = common::eigenpair_residual(
-                &op,
-                eigvecs.column(i),
-                eigvals[i],
-            );
+            let residual = common::eigenpair_residual(&op, eigvecs.column(i), eigvals[i]);
             assert!(
                 residual < 1e-5,
                 "dataset={dataset}, level2 residual for eigenpair {i}: {residual} >= 1e-5"
@@ -88,7 +84,12 @@ make_lobpcg_tests!(
     "blobs_connected_200",
     200
 );
-make_lobpcg_tests!(lobpcg_moons_200_eigenvalues, lobpcg_moons_200_level2, "moons_200", 200);
+make_lobpcg_tests!(
+    lobpcg_moons_200_eigenvalues,
+    lobpcg_moons_200_level2,
+    "moons_200",
+    200
+);
 make_lobpcg_tests!(
     lobpcg_circles_300_eigenvalues,
     lobpcg_circles_300_level2,

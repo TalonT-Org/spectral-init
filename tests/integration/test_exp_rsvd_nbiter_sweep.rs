@@ -20,8 +20,8 @@ mod common;
 
 use ndarray::s;
 use spectral_init::metrics::{
-    max_eigenpair_residual, orthogonality_error, sign_agnostic_max_error, spectral_gap,
-    subspace_gram_det_kd, RSVD_QUALITY_THRESHOLD,
+    RSVD_QUALITY_THRESHOLD, max_eigenpair_residual, orthogonality_error, sign_agnostic_max_error,
+    spectral_gap, subspace_gram_det_kd,
 };
 
 const SEED: u64 = 42;
@@ -102,10 +102,7 @@ fn direction_a_2il_vs_direct_l() {
 #[test]
 fn direction_b_sweep() {
     // Load both fixtures once outside all loops to avoid re-parsing per combo.
-    let fixture_data: Vec<_> = FIXTURES_AB
-        .iter()
-        .map(|&f| (f, load_fixture(f)))
-        .collect();
+    let fixture_data: Vec<_> = FIXTURES_AB.iter().map(|&f| (f, load_fixture(f))).collect();
 
     for (fixture, (lap, n, nc)) in &fixture_data {
         for &method in METHODS {
@@ -133,10 +130,7 @@ fn direction_b_sweep() {
 
 #[test]
 fn direction_c_subspace() {
-    let fixture_data: Vec<_> = FIXTURES_AB
-        .iter()
-        .map(|&f| (f, load_fixture(f)))
-        .collect();
+    let fixture_data: Vec<_> = FIXTURES_AB.iter().map(|&f| (f, load_fixture(f))).collect();
 
     for (fixture, (lap, n, nc)) in &fixture_data {
         // Reference: high-accuracy solve at nbiter=10, p=100.

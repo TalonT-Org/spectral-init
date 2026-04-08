@@ -1,24 +1,25 @@
 #[path = "../common/mod.rs"]
 mod common;
 
-use ndarray::{s, Array1, Array2};
+use ndarray::{Array1, Array2, s};
 use spectral_init::{
-    build_normalized_laplacian, compute_degrees, embed_disconnected, find_components,
-    select_eigenvectors, solve_eigenproblem_pub, spectral_init, ComputeMode, SpectralInitConfig,
+    ComputeMode, SpectralInitConfig, build_normalized_laplacian, compute_degrees,
+    embed_disconnected, find_components, select_eigenvectors, solve_eigenproblem_pub,
+    spectral_init,
 };
 use std::path::Path;
 
 /// (name, n, is_connected, expected_n_components)
 const DATASETS: &[(&str, usize, bool, usize)] = &[
-    ("blobs_50",              50,   false, 3),
-    ("blobs_500",             500,  false, 4),
-    ("blobs_5000",            5000, false, 2),
-    ("blobs_connected_200",   200,  true,  1),
-    ("blobs_connected_2000",  2000, true,  1),
-    ("circles_300",           300,  true,  1),
-    ("disconnected_200",      200,  false, 4),
-    ("moons_200",             200,  true,  1),
-    ("near_dupes_100",        100,  true,  1),
+    ("blobs_50", 50, false, 3),
+    ("blobs_500", 500, false, 4),
+    ("blobs_5000", 5000, false, 2),
+    ("blobs_connected_200", 200, true, 1),
+    ("blobs_connected_2000", 2000, true, 1),
+    ("circles_300", 300, true, 1),
+    ("disconnected_200", 200, false, 4),
+    ("moons_200", 200, true, 1),
+    ("near_dupes_100", 100, true, 1),
 ];
 
 #[allow(dead_code)]
@@ -36,8 +37,8 @@ struct DatasetMetrics {
     per_eigenvec_residuals: Vec<f64>,
     max_residual: f64,
     subspace_gram_det: Option<f64>,
-    pre_noise_max_err: f64,         // chained: Rust eigenvectors → Rust scaling vs Python ref
-    pre_noise_isolated_err: f64,     // isolated: Python eigenvectors → Rust scaling vs Python ref
+    pre_noise_max_err: f64, // chained: Rust eigenvectors → Rust scaling vs Python ref
+    pre_noise_isolated_err: f64, // isolated: Python eigenvectors → Rust scaling vs Python ref
     e2e_max_residual: Option<f64>,
     component_count_matches: bool,
     disconnected_path: Option<DisconnectedPathMetrics>,
@@ -102,10 +103,8 @@ fn extract_subgraph_local(
         if let Some(row_vec) = graph.outer_view(orig_row) {
             for (orig_col, &weight) in row_vec.iter() {
                 if lookup[orig_col] != usize::MAX {
-                    indices.push(
-                        u32::try_from(lookup[orig_col])
-                            .expect("local index overflows u32"),
-                    );
+                    indices
+                        .push(u32::try_from(lookup[orig_col]).expect("local index overflows u32"));
                     data.push(weight);
                 }
             }
@@ -162,21 +161,24 @@ fn process_disconnected_path(dataset: &str, n_embedding_dims: usize) -> Disconne
                 .collect();
             let lap_c = build_normalized_laplacian(&sub_graph, &inv_sqrt_c);
 
-            let ((evals, evecs), _) = solve_eigenproblem_pub(&lap_c, n_embedding_dims, 42, ComputeMode::PythonCompat);
+            let ((evals, evecs), _) =
+                solve_eigenproblem_pub(&lap_c, n_embedding_dims, 42, ComputeMode::PythonCompat);
             (0..evecs.ncols())
                 .map(|d| common::residual_spmv(&lap_c, evecs.column(d), evals[d]))
                 .fold(0.0f64, f64::max)
         })
         .collect();
 
-    let separation_ratio = spectral_init::metrics::separation_ratio(
-        embedding.view(),
-        &labels,
-    );
+    let separation_ratio = spectral_init::metrics::separation_ratio(embedding.view(), &labels);
 
-    let e2e_result =
-        spectral_init(&graph, n_embedding_dims, 42, Some(raw_data.view()), SpectralInitConfig::default())
-            .unwrap_or_else(|e| panic!("{dataset}: spectral_init failed: {e}"));
+    let e2e_result = spectral_init(
+        &graph,
+        n_embedding_dims,
+        42,
+        Some(raw_data.view()),
+        SpectralInitConfig::default(),
+    )
+    .unwrap_or_else(|e| panic!("{dataset}: spectral_init failed: {e}"));
     let e2e_output_is_finite = e2e_result.iter().all(|&v: &f32| v.is_finite());
 
     DisconnectedPathMetrics {
@@ -188,7 +190,12 @@ fn process_disconnected_path(dataset: &str, n_embedding_dims: usize) -> Disconne
     }
 }
 
-fn process_dataset(dataset: &str, n: usize, is_connected: bool, expected_n_components: usize) -> DatasetMetrics {
+fn process_dataset(
+    dataset: &str,
+    n: usize,
+    is_connected: bool,
+    expected_n_components: usize,
+) -> DatasetMetrics {
     let base = common::fixture_path(dataset, "");
 
     let graph = common::load_sparse_csr_f32_u32(&base.join("step5a_pruned.npz"));
@@ -238,11 +245,13 @@ fn process_dataset(dataset: &str, n: usize, is_connected: bool, expected_n_compo
     let ((eigenvalues, eigenvectors), solver_level) =
         solve_eigenproblem_pub(&laplacian, n_components_dim, 42, ComputeMode::PythonCompat);
 
-    let eigenvalue_abs_errors: Vec<f64> = eigenvalues.iter()
+    let eigenvalue_abs_errors: Vec<f64> = eigenvalues
+        .iter()
         .zip(ref_eigenvalues.iter())
         .map(|(r, re)| (r - re).abs())
         .collect();
-    let eigenvalue_rel_errors: Vec<f64> = eigenvalues.iter()
+    let eigenvalue_rel_errors: Vec<f64> = eigenvalues
+        .iter()
         .zip(ref_eigenvalues.iter())
         .map(|(r, re)| (r - re).abs() / re.abs().max(1e-300))
         .collect();
@@ -250,7 +259,10 @@ fn process_dataset(dataset: &str, n: usize, is_connected: bool, expected_n_compo
     let per_eigenvec_residuals: Vec<f64> = (0..eigenvectors.ncols())
         .map(|j| common::residual_spmv(&laplacian, eigenvectors.column(j), eigenvalues[j]))
         .collect();
-    let max_residual = per_eigenvec_residuals.iter().cloned().fold(0.0f64, f64::max);
+    let max_residual = per_eigenvec_residuals
+        .iter()
+        .cloned()
+        .fold(0.0f64, f64::max);
 
     let subspace_gram_det = if k >= 3 && ref_eigenvectors.ncols() >= 3 {
         Some(spectral_init::metrics::subspace_gram_det(
@@ -262,26 +274,38 @@ fn process_dataset(dataset: &str, n: usize, is_connected: bool, expected_n_compo
     };
 
     let selected = select_eigenvectors(
-        eigenvalues.as_slice_memory_order().expect("eigenvalues contiguous"),
+        eigenvalues
+            .as_slice_memory_order()
+            .expect("eigenvalues contiguous"),
         &eigenvectors,
         n_components_dim,
     );
     let rust_pre_noise = compute_rust_pre_noise(&selected);
-    let pn_max_err = spectral_init::metrics::sign_agnostic_max_error(&rust_pre_noise, &ref_pre_noise);
+    let pn_max_err =
+        spectral_init::metrics::sign_agnostic_max_error(&rust_pre_noise, &ref_pre_noise);
 
     // Isolated scaling test: feed Python's comp_e embedding into Rust's scaler
     let ref_e_embedding: Array2<f64> =
         common::load_dense(&base.join("comp_e_selection.npz"), "embedding");
     let rust_pre_noise_isolated = compute_rust_pre_noise(&ref_e_embedding);
-    let pn_isolated_err = spectral_init::metrics::sign_agnostic_max_error(&rust_pre_noise_isolated, &ref_pre_noise);
+    let pn_isolated_err =
+        spectral_init::metrics::sign_agnostic_max_error(&rust_pre_noise_isolated, &ref_pre_noise);
 
     let e2e_max_residual = if is_connected {
-        let result = spectral_init(&graph, n_components_dim, 42, None, SpectralInitConfig::default())
-            .unwrap_or_else(|e| panic!("{dataset}: spectral_init failed: {e}"));
-        let e2e_max = (0..n_components_dim).map(|col| {
-            let evec: Array1<f64> = result.column(col).mapv(|v| v as f64 / expansion_val);
-            common::residual_spmv(&laplacian, evec.view(), ref_eigenvalues[col + 1])
-        }).fold(0.0f64, f64::max);
+        let result = spectral_init(
+            &graph,
+            n_components_dim,
+            42,
+            None,
+            SpectralInitConfig::default(),
+        )
+        .unwrap_or_else(|e| panic!("{dataset}: spectral_init failed: {e}"));
+        let e2e_max = (0..n_components_dim)
+            .map(|col| {
+                let evec: Array1<f64> = result.column(col).mapv(|v| v as f64 / expansion_val);
+                common::residual_spmv(&laplacian, evec.view(), ref_eigenvalues[col + 1])
+            })
+            .fold(0.0f64, f64::max);
         Some(e2e_max)
     } else {
         None
@@ -332,7 +356,11 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
         tolerance: 3e-7,
         tolerance_type: "relative",
         worst_actual: worst_deg_rel,
-        margin_factor: if worst_deg_rel == 0.0 { f64::INFINITY } else { 3e-7 / worst_deg_rel },
+        margin_factor: if worst_deg_rel == 0.0 {
+            f64::INFINITY
+        } else {
+            3e-7 / worst_deg_rel
+        },
     });
 
     // comp_b isolated: Python sqrt_deg (from comp_a_degrees.npz) → Rust Laplacian
@@ -359,7 +387,11 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
         tolerance: 1e-14,
         tolerance_type: "absolute",
         worst_actual: worst_lap_iso,
-        margin_factor: if worst_lap_iso == 0.0 { f64::INFINITY } else { 1e-14 / worst_lap_iso },
+        margin_factor: if worst_lap_iso == 0.0 {
+            f64::INFINITY
+        } else {
+            1e-14 / worst_lap_iso
+        },
     });
 
     // comp_b chained: Rust compute_degrees() → Rust Laplacian
@@ -385,11 +417,16 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
         tolerance: 1e-14,
         tolerance_type: "absolute",
         worst_actual: worst_lap_chain,
-        margin_factor: if worst_lap_chain == 0.0 { f64::INFINITY } else { 1e-14 / worst_lap_chain },
+        margin_factor: if worst_lap_chain == 0.0 {
+            f64::INFINITY
+        } else {
+            1e-14 / worst_lap_chain
+        },
     });
 
     // comp_d: eigenvalue errors — split by n (dense EVD: n<2000, LOBPCG: n>=2000)
-    let worst_eig_dense = all_metrics.iter()
+    let worst_eig_dense = all_metrics
+        .iter()
         .filter(|m| m.is_connected)
         .filter(|m| m.n < 2000)
         .flat_map(|m| m.eigenvalue_abs_errors.iter())
@@ -400,10 +437,15 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
         tolerance: 1e-9,
         tolerance_type: "absolute",
         worst_actual: worst_eig_dense,
-        margin_factor: if worst_eig_dense == 0.0 { f64::INFINITY } else { 1e-9 / worst_eig_dense },
+        margin_factor: if worst_eig_dense == 0.0 {
+            f64::INFINITY
+        } else {
+            1e-9 / worst_eig_dense
+        },
     });
 
-    let worst_eig_lobpcg = all_metrics.iter()
+    let worst_eig_lobpcg = all_metrics
+        .iter()
         .filter(|m| m.is_connected)
         .filter(|m| m.n >= 2000)
         .flat_map(|m| m.eigenvalue_abs_errors.iter())
@@ -414,11 +456,16 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
         tolerance: 1e-6,
         tolerance_type: "absolute",
         worst_actual: worst_eig_lobpcg,
-        margin_factor: if worst_eig_lobpcg == 0.0 { f64::INFINITY } else { 1e-6 / worst_eig_lobpcg },
+        margin_factor: if worst_eig_lobpcg == 0.0 {
+            f64::INFINITY
+        } else {
+            1e-6 / worst_eig_lobpcg
+        },
     });
 
     // comp_d: residuals — split by n
-    let worst_res_dense = all_metrics.iter()
+    let worst_res_dense = all_metrics
+        .iter()
         .filter(|m| m.is_connected)
         .filter(|m| m.n < 2000)
         .map(|m| m.max_residual)
@@ -428,10 +475,15 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
         tolerance: 1e-10,
         tolerance_type: "absolute",
         worst_actual: worst_res_dense,
-        margin_factor: if worst_res_dense == 0.0 { f64::INFINITY } else { 1e-10 / worst_res_dense },
+        margin_factor: if worst_res_dense == 0.0 {
+            f64::INFINITY
+        } else {
+            1e-10 / worst_res_dense
+        },
     });
 
-    let worst_res_lobpcg = all_metrics.iter()
+    let worst_res_lobpcg = all_metrics
+        .iter()
         .filter(|m| m.is_connected)
         .filter(|m| m.n >= 2000)
         .map(|m| m.max_residual)
@@ -441,11 +493,16 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
         tolerance: 1e-4,
         tolerance_type: "absolute",
         worst_actual: worst_res_lobpcg,
-        margin_factor: if worst_res_lobpcg == 0.0 { f64::INFINITY } else { 1e-4 / worst_res_lobpcg },
+        margin_factor: if worst_res_lobpcg == 0.0 {
+            f64::INFINITY
+        } else {
+            1e-4 / worst_res_lobpcg
+        },
     });
 
     // E2E residuals (connected datasets only)
-    let worst_e2e = all_metrics.iter()
+    let worst_e2e = all_metrics
+        .iter()
         .filter_map(|m| m.e2e_max_residual)
         .fold(0.0f64, f64::max);
     margins.push(ToleranceMarginEntry {
@@ -453,11 +510,16 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
         tolerance: 5e-3,
         tolerance_type: "absolute",
         worst_actual: worst_e2e,
-        margin_factor: if worst_e2e == 0.0 { f64::INFINITY } else { 5e-3 / worst_e2e },
+        margin_factor: if worst_e2e == 0.0 {
+            f64::INFINITY
+        } else {
+            5e-3 / worst_e2e
+        },
     });
 
     // comp_f pre_noise scaling (isolated: Python eigenvectors → Rust scaler)
-    let worst_pn_isolated = all_metrics.iter()
+    let worst_pn_isolated = all_metrics
+        .iter()
         .map(|m| m.pre_noise_isolated_err)
         .fold(0.0f64, f64::max);
     let f32_eps = f32::EPSILON as f64;
@@ -466,12 +528,17 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
         tolerance: f32_eps,
         tolerance_type: "absolute",
         worst_actual: worst_pn_isolated,
-        margin_factor: if worst_pn_isolated == 0.0 { f64::INFINITY } else { f32_eps / worst_pn_isolated },
+        margin_factor: if worst_pn_isolated == 0.0 {
+            f64::INFINITY
+        } else {
+            f32_eps / worst_pn_isolated
+        },
     });
 
     // comp_f pre_noise scaling (chained: Rust eigenvectors → Rust scaler)
     // Includes eigenvector differences between Rust and Python solvers.
-    let worst_pn_chained = all_metrics.iter()
+    let worst_pn_chained = all_metrics
+        .iter()
         .map(|m| m.pre_noise_max_err)
         .fold(0.0f64, f64::max);
     margins.push(ToleranceMarginEntry {
@@ -479,18 +546,26 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
         tolerance: 5e-3,
         tolerance_type: "absolute",
         worst_actual: worst_pn_chained,
-        margin_factor: if worst_pn_chained == 0.0 { f64::INFINITY } else { 5e-3 / worst_pn_chained },
+        margin_factor: if worst_pn_chained == 0.0 {
+            f64::INFINITY
+        } else {
+            5e-3 / worst_pn_chained
+        },
     });
 
     // Per-component residuals — Dense EVD tier (component size < 2000)
     // 1e-6 matches DENSE_EVD_QUALITY_THRESHOLD: small components (n=16-17) produce
     // residuals ~2.5e-8 which pass the solver gate but would fail a tighter bound.
-    let worst_per_comp_dense = all_metrics.iter()
+    let worst_per_comp_dense = all_metrics
+        .iter()
         .filter_map(|m| m.disconnected_path.as_ref())
-        .flat_map(|dp| dp.per_comp_max_residual.iter()
-            .zip(dp.per_comp_size.iter())
-            .filter(|&(_, &sz)| sz < 2000)
-            .map(|(&r, _)| r))
+        .flat_map(|dp| {
+            dp.per_comp_max_residual
+                .iter()
+                .zip(dp.per_comp_size.iter())
+                .filter(|&(_, &sz)| sz < 2000)
+                .map(|(&r, _)| r)
+        })
         .fold(0.0f64, f64::max);
     margins.push(ToleranceMarginEntry {
         component: "per-comp residuals, Dense EVD (comp size < 2000)".to_string(),
@@ -505,12 +580,16 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
     });
 
     // Per-component residuals — LOBPCG tier (component size >= 2000)
-    let worst_per_comp_lobpcg = all_metrics.iter()
+    let worst_per_comp_lobpcg = all_metrics
+        .iter()
         .filter_map(|m| m.disconnected_path.as_ref())
-        .flat_map(|dp| dp.per_comp_max_residual.iter()
-            .zip(dp.per_comp_size.iter())
-            .filter(|&(_, &sz)| sz >= 2000)
-            .map(|(&r, _)| r))
+        .flat_map(|dp| {
+            dp.per_comp_max_residual
+                .iter()
+                .zip(dp.per_comp_size.iter())
+                .filter(|&(_, &sz)| sz >= 2000)
+                .map(|(&r, _)| r)
+        })
         .fold(0.0f64, f64::max);
     margins.push(ToleranceMarginEntry {
         component: "per-comp residuals, LOBPCG (comp size >= 2000)".to_string(),
@@ -530,51 +609,59 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
 fn to_json(report: &AccuracyReport) -> String {
     use serde_json::json;
 
-    let datasets: Vec<serde_json::Value> = report.datasets.iter().map(|m| {
-        let lambda_3_abs_err = m.eigenvalue_abs_errors.get(2).copied();
-        let lambda_3_rel_err = m.eigenvalue_rel_errors.get(2).copied();
-        json!({
-            "dataset": m.dataset,
-            "n": m.n,
-            "n_components": m.n_components,
-            "is_connected": m.is_connected,
-            "solver_level": m.solver_level,
-            "solver_name": m.solver_name,
-            "lambda_2_abs_err": m.eigenvalue_abs_errors.get(1).copied(),
-            "lambda_2_rel_err": m.eigenvalue_rel_errors.get(1).copied(),
-            "lambda_3_abs_err": lambda_3_abs_err,
-            "lambda_3_rel_err": lambda_3_rel_err,
-            "per_eigenvec_residuals": m.per_eigenvec_residuals,
-            "max_residual": m.max_residual,
-            "subspace_gram_det": m.subspace_gram_det,
-            "pre_noise_max_err": m.pre_noise_max_err,
-            "pre_noise_isolated_err": m.pre_noise_isolated_err,
-            "e2e_max_residual": m.e2e_max_residual,
-            "component_count_matches": m.component_count_matches,
-            "disconnected_path": m.disconnected_path.as_ref().map(|dp| json!({
-                "n_components": dp.n_components,
-                "per_comp_max_residual": dp.per_comp_max_residual,
-                "per_comp_size": dp.per_comp_size,
-                "separation_ratio": dp.separation_ratio,
-                "e2e_output_is_finite": dp.e2e_output_is_finite,
-            })),
+    let datasets: Vec<serde_json::Value> = report
+        .datasets
+        .iter()
+        .map(|m| {
+            let lambda_3_abs_err = m.eigenvalue_abs_errors.get(2).copied();
+            let lambda_3_rel_err = m.eigenvalue_rel_errors.get(2).copied();
+            json!({
+                "dataset": m.dataset,
+                "n": m.n,
+                "n_components": m.n_components,
+                "is_connected": m.is_connected,
+                "solver_level": m.solver_level,
+                "solver_name": m.solver_name,
+                "lambda_2_abs_err": m.eigenvalue_abs_errors.get(1).copied(),
+                "lambda_2_rel_err": m.eigenvalue_rel_errors.get(1).copied(),
+                "lambda_3_abs_err": lambda_3_abs_err,
+                "lambda_3_rel_err": lambda_3_rel_err,
+                "per_eigenvec_residuals": m.per_eigenvec_residuals,
+                "max_residual": m.max_residual,
+                "subspace_gram_det": m.subspace_gram_det,
+                "pre_noise_max_err": m.pre_noise_max_err,
+                "pre_noise_isolated_err": m.pre_noise_isolated_err,
+                "e2e_max_residual": m.e2e_max_residual,
+                "component_count_matches": m.component_count_matches,
+                "disconnected_path": m.disconnected_path.as_ref().map(|dp| json!({
+                    "n_components": dp.n_components,
+                    "per_comp_max_residual": dp.per_comp_max_residual,
+                    "per_comp_size": dp.per_comp_size,
+                    "separation_ratio": dp.separation_ratio,
+                    "e2e_output_is_finite": dp.e2e_output_is_finite,
+                })),
+            })
         })
-    }).collect();
+        .collect();
 
-    let margins: Vec<serde_json::Value> = report.tolerance_margins.iter().map(|m| {
-        let margin_factor = if m.margin_factor.is_infinite() || m.margin_factor.is_nan() {
-            json!(null)
-        } else {
-            json!(m.margin_factor)
-        };
-        json!({
-            "component": m.component,
-            "tolerance": m.tolerance,
-            "tolerance_type": m.tolerance_type,
-            "worst_actual": m.worst_actual,
-            "margin_factor": margin_factor,
+    let margins: Vec<serde_json::Value> = report
+        .tolerance_margins
+        .iter()
+        .map(|m| {
+            let margin_factor = if m.margin_factor.is_infinite() || m.margin_factor.is_nan() {
+                json!(null)
+            } else {
+                json!(m.margin_factor)
+            };
+            json!({
+                "component": m.component,
+                "tolerance": m.tolerance,
+                "tolerance_type": m.tolerance_type,
+                "worst_actual": m.worst_actual,
+                "margin_factor": margin_factor,
+            })
         })
-    }).collect();
+        .collect();
 
     let report_val = json!({
         "generated_at": report.generated_at,
@@ -597,13 +684,18 @@ fn to_markdown(report: &AccuracyReport) -> String {
 
     for m in &report.datasets {
         let (lambda2, lambda3, subspace, pn_err, max_res) = if m.is_connected {
-            let l2 = m.eigenvalue_abs_errors.get(1)
+            let l2 = m
+                .eigenvalue_abs_errors
+                .get(1)
                 .map(|v| format!("{:.2e}", v))
                 .unwrap_or_else(|| "—".to_string());
-            let l3 = m.eigenvalue_abs_errors.get(2)
+            let l3 = m
+                .eigenvalue_abs_errors
+                .get(2)
                 .map(|v| format!("{:.2e}", v))
                 .unwrap_or_else(|| "—".to_string());
-            let sub = m.subspace_gram_det
+            let sub = m
+                .subspace_gram_det
                 .map(|v| format!("{:.6}", v))
                 .unwrap_or_else(|| "—".to_string());
             let pn = if m.pre_noise_isolated_err == 0.0 {
@@ -614,7 +706,13 @@ fn to_markdown(report: &AccuracyReport) -> String {
             let mr = format!("{:.2e}", m.max_residual);
             (l2, l3, sub, pn, mr)
         } else {
-            ("—".to_string(), "—".to_string(), "—".to_string(), "—".to_string(), "—".to_string())
+            (
+                "—".to_string(),
+                "—".to_string(),
+                "—".to_string(),
+                "—".to_string(),
+                "—".to_string(),
+            )
         };
         let e2e = if m.is_connected {
             m.e2e_max_residual
@@ -626,8 +724,16 @@ fn to_markdown(report: &AccuracyReport) -> String {
 
         out.push_str(&format!(
             "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |\n",
-            m.dataset, m.n, m.n_components, m.solver_name,
-            lambda2, lambda3, max_res, subspace, pn_err, e2e,
+            m.dataset,
+            m.n,
+            m.n_components,
+            m.solver_name,
+            lambda2,
+            lambda3,
+            max_res,
+            subspace,
+            pn_err,
+            e2e,
         ));
     }
 
@@ -636,7 +742,11 @@ fn to_markdown(report: &AccuracyReport) -> String {
     out.push_str("|---------|------------|-------------------|------------------|------------|\n");
     for m in report.datasets.iter().filter(|m| !m.is_connected) {
         let dp = m.disconnected_path.as_ref().unwrap();
-        let max_comp_res = dp.per_comp_max_residual.iter().cloned().fold(0.0f64, f64::max);
+        let max_comp_res = dp
+            .per_comp_max_residual
+            .iter()
+            .cloned()
+            .fold(0.0f64, f64::max);
         out.push_str(&format!(
             "| {} | {} | {:.2e} | {:.4} | {} |\n",
             m.dataset, dp.n_components, max_comp_res, dp.separation_ratio, dp.e2e_output_is_finite,
@@ -680,13 +790,17 @@ fn generate_accuracy_report() {
 
     let target_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("target");
     std::fs::create_dir_all(&target_dir).expect("cannot create target/");
-    let md_path   = target_dir.join("accuracy-report.md");
+    let md_path = target_dir.join("accuracy-report.md");
     let json_path = target_dir.join("accuracy-report.json");
-    let md_text   = to_markdown(&report);
+    let md_text = to_markdown(&report);
     let json_text = to_json(&report);
-    std::fs::write(&md_path,   &md_text).expect("cannot write accuracy-report.md");
+    std::fs::write(&md_path, &md_text).expect("cannot write accuracy-report.md");
     std::fs::write(&json_path, &json_text).expect("cannot write accuracy-report.json");
-    println!("Accuracy report written to:\n  {}\n  {}", md_path.display(), json_path.display());
+    println!(
+        "Accuracy report written to:\n  {}\n  {}",
+        md_path.display(),
+        json_path.display()
+    );
 
     assert!(md_path.exists());
     assert!(json_path.exists());
@@ -697,16 +811,26 @@ fn generate_accuracy_report() {
     let margins_arr = json["tolerance_margins"].as_array().unwrap();
 
     let isolated_row = margins_arr.iter().find(|e| {
-        e["component"].as_str().unwrap_or("").contains("isolated: Python degrees")
+        e["component"]
+            .as_str()
+            .unwrap_or("")
+            .contains("isolated: Python degrees")
     });
-    assert!(isolated_row.is_some(),
-        "Expected a comp_b isolated (Python degrees) row in tolerance_margins");
+    assert!(
+        isolated_row.is_some(),
+        "Expected a comp_b isolated (Python degrees) row in tolerance_margins"
+    );
 
     let chained_row = margins_arr.iter().find(|e| {
-        e["component"].as_str().unwrap_or("").contains("chained: Rust degrees")
+        e["component"]
+            .as_str()
+            .unwrap_or("")
+            .contains("chained: Rust degrees")
     });
-    assert!(chained_row.is_some(),
-        "Expected a comp_b chained (Rust degrees) row in tolerance_margins");
+    assert!(
+        chained_row.is_some(),
+        "Expected a comp_b chained (Rust degrees) row in tolerance_margins"
+    );
 
     // REQ-SPLIT-002: isolated row tolerance must be 1e-14
     let iso_tol = isolated_row.unwrap()["tolerance"].as_f64().unwrap();
@@ -723,33 +847,41 @@ fn generate_accuracy_report() {
     );
 
     // REQ-SPLIT-004: the old conflated row must no longer exist
-    let old_row = margins_arr.iter().find(|e| {
-        e["component"].as_str().unwrap_or("") == "comp_b Laplacian entries (absolute)"
-    });
-    assert!(old_row.is_none(),
-        "Old conflated comp_b row must be removed from tolerance_margins");
+    let old_row = margins_arr
+        .iter()
+        .find(|e| e["component"].as_str().unwrap_or("") == "comp_b Laplacian entries (absolute)");
+    assert!(
+        old_row.is_none(),
+        "Old conflated comp_b row must be removed from tolerance_margins"
+    );
 
-    assert_eq!(json["datasets"].as_array().unwrap().len(), 9,
-        "Report must cover all 9 datasets");
+    assert_eq!(
+        json["datasets"].as_array().unwrap().len(),
+        9,
+        "Report must cover all 9 datasets"
+    );
     for entry in json["datasets"].as_array().unwrap() {
-        let max_r = entry["max_residual"].as_f64()
+        let max_r = entry["max_residual"]
+            .as_f64()
             .expect("max_residual must be a number");
-        assert!(max_r.is_finite(), "max_residual must be finite for {}", entry["dataset"]);
+        assert!(
+            max_r.is_finite(),
+            "max_residual must be finite for {}",
+            entry["dataset"]
+        );
         assert!(
             entry["component_count_matches"].as_bool().unwrap_or(false),
-            "component count mismatch for {}", entry["dataset"]
+            "component count mismatch for {}",
+            entry["dataset"]
         );
     }
     assert!(!json["tolerance_margins"].as_array().unwrap().is_empty());
 
     for entry in json["datasets"].as_array().unwrap() {
         if !entry["is_connected"].as_bool().unwrap_or(true) {
-            let dp = entry["disconnected_path"]
-                .as_object()
-                .unwrap_or_else(|| panic!(
-                    "disconnected_path must be present for {}",
-                    entry["dataset"]
-                ));
+            let dp = entry["disconnected_path"].as_object().unwrap_or_else(|| {
+                panic!("disconnected_path must be present for {}", entry["dataset"])
+            });
             assert!(
                 dp["e2e_output_is_finite"].as_bool().unwrap_or(false),
                 "e2e_output_is_finite must be true for {}",
@@ -763,28 +895,45 @@ fn generate_accuracy_report() {
                 "separation_ratio must be > 1.0 for {}, got {sep_ratio}",
                 entry["dataset"]
             );
-            let sizes = dp["per_comp_size"].as_array()
+            let sizes = dp["per_comp_size"]
+                .as_array()
                 .expect("per_comp_size must be present");
-            let residuals = dp["per_comp_max_residual"].as_array()
+            let residuals = dp["per_comp_max_residual"]
+                .as_array()
                 .expect("per_comp_max_residual must be present");
-            assert_eq!(sizes.len(), residuals.len(),
+            assert_eq!(
+                sizes.len(),
+                residuals.len(),
                 "per_comp_size and per_comp_max_residual length mismatch for {}",
-                entry["dataset"]);
+                entry["dataset"]
+            );
             for (size_val, residual_val) in sizes.iter().zip(residuals.iter()) {
-                let sz = size_val.as_u64().expect("per_comp_size element must be a number") as usize;
-                let r = residual_val.as_f64().expect("per_comp_max_residual element must be a number");
-                assert!(r.is_finite(),
-                    "per_comp_max_residual must be finite for {}", entry["dataset"]);
+                let sz = size_val
+                    .as_u64()
+                    .expect("per_comp_size element must be a number")
+                    as usize;
+                let r = residual_val
+                    .as_f64()
+                    .expect("per_comp_max_residual element must be a number");
+                assert!(
+                    r.is_finite(),
+                    "per_comp_max_residual must be finite for {}",
+                    entry["dataset"]
+                );
                 if sz < 2000 {
                     // REQ-THRESH-001
-                    assert!(r < 1e-6,
+                    assert!(
+                        r < 1e-6,
                         "per-comp residual {r:.2e} for component (size={sz}) in {} exceeds Dense EVD tolerance 1e-6",
-                        entry["dataset"]);
+                        entry["dataset"]
+                    );
                 } else {
                     // REQ-THRESH-002
-                    assert!(r < 1e-4,
+                    assert!(
+                        r < 1e-4,
                         "per-comp residual {r:.2e} for component (size={sz}) in {} exceeds LOBPCG tolerance 1e-4",
-                        entry["dataset"]);
+                        entry["dataset"]
+                    );
                 }
             }
         }
@@ -792,21 +941,37 @@ fn generate_accuracy_report() {
 
     // REQ-RESID-THRESH-001: Dense EVD per-comp residual row must exist with correct tolerance
     let dense_row = margins_arr.iter().find(|e| {
-        e["component"].as_str().unwrap_or("").contains("per-comp residuals, Dense EVD")
+        e["component"]
+            .as_str()
+            .unwrap_or("")
+            .contains("per-comp residuals, Dense EVD")
     });
-    assert!(dense_row.is_some(), "Expected per-comp Dense EVD residual row in tolerance_margins");
+    assert!(
+        dense_row.is_some(),
+        "Expected per-comp Dense EVD residual row in tolerance_margins"
+    );
     let dense_tol = dense_row.unwrap()["tolerance"].as_f64().unwrap();
-    assert!((dense_tol - 1e-6).abs() < 1e-12,
-        "per-comp Dense EVD tolerance must be 1e-6, got {dense_tol}");
+    assert!(
+        (dense_tol - 1e-6).abs() < 1e-12,
+        "per-comp Dense EVD tolerance must be 1e-6, got {dense_tol}"
+    );
 
     // REQ-RESID-THRESH-002: LOBPCG per-comp residual row must exist with correct tolerance
     let lobpcg_row = margins_arr.iter().find(|e| {
-        e["component"].as_str().unwrap_or("").contains("per-comp residuals, LOBPCG")
+        e["component"]
+            .as_str()
+            .unwrap_or("")
+            .contains("per-comp residuals, LOBPCG")
     });
-    assert!(lobpcg_row.is_some(), "Expected per-comp LOBPCG residual row in tolerance_margins");
+    assert!(
+        lobpcg_row.is_some(),
+        "Expected per-comp LOBPCG residual row in tolerance_margins"
+    );
     let lobpcg_tol = lobpcg_row.unwrap()["tolerance"].as_f64().unwrap();
-    assert!((lobpcg_tol - 1e-4).abs() < 1e-10,
-        "per-comp LOBPCG tolerance must be 1e-4, got {lobpcg_tol}");
+    assert!(
+        (lobpcg_tol - 1e-4).abs() < 1e-10,
+        "per-comp LOBPCG tolerance must be 1e-4, got {lobpcg_tol}"
+    );
 
     for entry in json["datasets"].as_array().unwrap() {
         if !entry["is_connected"].as_bool().unwrap_or(true) {

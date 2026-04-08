@@ -33,7 +33,12 @@ mod tests {
     use super::*;
     use ndarray::Array2;
 
-    fn assert_col_eq(result: &Array2<f64>, result_col: usize, source: &Array2<f64>, source_col: usize) {
+    fn assert_col_eq(
+        result: &Array2<f64>,
+        result_col: usize,
+        source: &Array2<f64>,
+        source_col: usize,
+    ) {
         let r = result.column(result_col);
         let s = source.column(source_col);
         assert_eq!(r.len(), s.len(), "column length mismatch");
@@ -47,11 +52,9 @@ mod tests {
         // eigenvalues already in ascending order: [0.001, 0.4, 1.2]
         // index 0 is trivial (smallest), should select indices 1 and 2
         let eigenvalues = vec![0.001_f64, 0.4, 1.2];
-        let eigenvectors = Array2::from_shape_vec(
-            (3, 3),
-            vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
-        )
-        .unwrap();
+        let eigenvectors =
+            Array2::from_shape_vec((3, 3), vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0])
+                .unwrap();
         let result = select_eigenvectors(&eigenvalues, &eigenvectors, 2);
         assert_eq!(result.shape(), &[3, 2]);
         // Columns 1 and 2 selected (trivial column 0 skipped)

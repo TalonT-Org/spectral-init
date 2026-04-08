@@ -30,13 +30,11 @@ fn run_comp_c_test(dataset: &str, expected_n_components: usize) {
     let py_labels: Vec<usize> = py_labels_arr.iter().map(|&x| x as usize).collect();
 
     assert_eq!(
-        n_components,
-        py_n as usize,
+        n_components, py_n as usize,
         "dataset {dataset}: n_components mismatch (rust={n_components}, python={py_n})"
     );
     assert_eq!(
-        n_components,
-        expected_n_components,
+        n_components, expected_n_components,
         "dataset {dataset}: expected {expected_n_components} components, got {n_components}"
     );
     assert_eq!(

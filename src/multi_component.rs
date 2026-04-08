@@ -2,8 +2,7 @@ use ndarray::{Array2, ArrayView1, ArrayView2};
 use sprs::{CsMatI, TriMat};
 
 use crate::{
-    ComputeMode,
-    SpectralError,
+    ComputeMode, SpectralError,
     laplacian::{build_normalized_laplacian, compute_degrees},
     scaling,
     selection::select_eigenvectors,
@@ -43,7 +42,7 @@ pub(crate) fn embed_disconnected(
                     "data is required for spectral meta-embedding when \
                      n_conn_components > 2 * n_embedding_dims"
                         .into(),
-                ))
+                ));
             }
         }
     } else {
@@ -105,7 +104,10 @@ fn extract_subgraph(
     let mut data: Vec<f32> = Vec::new();
 
     for (local_row, &orig_row) in node_indices.iter().enumerate() {
-        debug_assert!(orig_row < n_global, "node index {orig_row} out of bounds (graph has {n_global} rows)");
+        debug_assert!(
+            orig_row < n_global,
+            "node index {orig_row} out of bounds (graph has {n_global} rows)"
+        );
         if let Some(row_vec) = graph.outer_view(orig_row) {
             for (orig_col, &weight) in row_vec.iter() {
                 if lookup[orig_col] != usize::MAX {
@@ -204,7 +206,13 @@ fn spectral_meta_embedding(
     let centroid_laplacian = tri.to_csr();
 
     let sqrt_deg_meta = ndarray::Array1::from_iter(degrees.iter().map(|&d| d.sqrt()));
-    let ((evals, evecs), _) = solve_eigenproblem(&centroid_laplacian, n_embedding_dims, seed, &sqrt_deg_meta, compute_mode);
+    let ((evals, evecs), _) = solve_eigenproblem(
+        &centroid_laplacian,
+        n_embedding_dims,
+        seed,
+        &sqrt_deg_meta,
+        compute_mode,
+    );
     let evals_slice = evals
         .as_slice_memory_order()
         .ok_or(SpectralError::ConvergenceFailure)?;
@@ -288,7 +296,8 @@ fn embed_single_component(
         .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
         .collect();
     let laplacian = build_normalized_laplacian(&sub_graph, &inv_sqrt_deg);
-    let ((evals, evecs), _) = solve_eigenproblem(&laplacian, n_embedding_dims, seed, &sqrt_deg, compute_mode);
+    let ((evals, evecs), _) =
+        solve_eigenproblem(&laplacian, n_embedding_dims, seed, &sqrt_deg, compute_mode);
     let evals_slice = evals
         .as_slice_memory_order()
         .ok_or(SpectralError::ConvergenceFailure)?;
@@ -445,10 +454,26 @@ mod tests {
         let arr = result.expect("embed_disconnected should succeed for tiny components");
         assert_eq!(arr.shape(), &[2, 2]);
         let eps = 1e-10;
-        assert!((arr[[0, 0]] - 1.0).abs() < eps, "node 0 x: expected 1.0, got {}", arr[[0, 0]]);
-        assert!((arr[[0, 1]] - 0.0).abs() < eps, "node 0 y: expected 0.0, got {}", arr[[0, 1]]);
-        assert!((arr[[1, 0]] - 0.0).abs() < eps, "node 1 x: expected 0.0, got {}", arr[[1, 0]]);
-        assert!((arr[[1, 1]] - 1.0).abs() < eps, "node 1 y: expected 1.0, got {}", arr[[1, 1]]);
+        assert!(
+            (arr[[0, 0]] - 1.0).abs() < eps,
+            "node 0 x: expected 1.0, got {}",
+            arr[[0, 0]]
+        );
+        assert!(
+            (arr[[0, 1]] - 0.0).abs() < eps,
+            "node 0 y: expected 0.0, got {}",
+            arr[[0, 1]]
+        );
+        assert!(
+            (arr[[1, 0]] - 0.0).abs() < eps,
+            "node 1 x: expected 0.0, got {}",
+            arr[[1, 0]]
+        );
+        assert!(
+            (arr[[1, 1]] - 1.0).abs() < eps,
+            "node 1 y: expected 1.0, got {}",
+            arr[[1, 1]]
+        );
     }
 
     #[test]

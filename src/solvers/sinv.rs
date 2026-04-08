@@ -3,13 +3,13 @@
 extern crate ndarray16;
 use ndarray16 as nd16;
 
-use linfa_linalg::lobpcg::{lobpcg, Order};
-use ndarray::{Array1, Array2, ArrayView2};
-use sprs::CsMatI;
-use rand::rngs::StdRng;
-use rand::SeedableRng;
-use rand_distr::{Distribution, StandardNormal};
 use faer::prelude::Solve;
+use linfa_linalg::lobpcg::{Order, lobpcg};
+use ndarray::{Array1, Array2, ArrayView2};
+use rand::SeedableRng;
+use rand::rngs::StdRng;
+use rand_distr::{Distribution, StandardNormal};
+use sprs::CsMatI;
 
 use super::EigenResult;
 use crate::metrics::{SINV_LINFA_TOL, SINV_LOBPCG_QUALITY_THRESHOLD};
@@ -67,9 +67,8 @@ fn sprs_csc_to_faer(
         }
     }
 
-    let symbolic = faer::sparse::SymbolicSparseColMat::<usize>::new_checked(
-        n, n, col_ptr, None, row_idx,
-    );
+    let symbolic =
+        faer::sparse::SymbolicSparseColMat::<usize>::new_checked(n, n, col_ptr, None, row_idx);
     faer::sparse::SparseColMat::<usize, f64>::new(symbolic, values)
 }
 
@@ -130,7 +129,9 @@ pub fn lobpcg_sinv_solve(
         Array2::from_shape_fn((n, k), |_| StandardNormal.sample(&mut rng));
     let sqrt_deg_norm = sqrt_deg.dot(sqrt_deg).sqrt();
     if sqrt_deg_norm > 0.0 {
-        x_init_17.column_mut(0).assign(&sqrt_deg.mapv(|x| x / sqrt_deg_norm));
+        x_init_17
+            .column_mut(0)
+            .assign(&sqrt_deg.mapv(|x| x / sqrt_deg_norm));
     }
     let x_init = to_nd16_array2(x_init_17);
 
@@ -159,7 +160,13 @@ pub fn lobpcg_sinv_solve(
 
     let result_opt = match result {
         Ok(r) => Some(extract(r)),
-        Err((_, Some(r))) if r.rnorm.iter().all(|&norm| norm < SINV_LOBPCG_QUALITY_THRESHOLD) => Some(extract(r)),
+        Err((_, Some(r)))
+            if r.rnorm
+                .iter()
+                .all(|&norm| norm < SINV_LOBPCG_QUALITY_THRESHOLD) =>
+        {
+            Some(extract(r))
+        }
         _ => None,
     };
 
@@ -178,10 +185,9 @@ pub fn lobpcg_sinv_solve(
         pairs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
 
         let sorted_vals = Array1::from_iter(pairs.iter().map(|&(v, _)| v));
-        let sorted_vecs = Array2::from_shape_fn(
-            (eigvecs.nrows(), eigvecs.ncols()),
-            |(i, j)| eigvecs[[i, pairs[j].1]],
-        );
+        let sorted_vecs = Array2::from_shape_fn((eigvecs.nrows(), eigvecs.ncols()), |(i, j)| {
+            eigvecs[[i, pairs[j].1]]
+        });
         // Update eigvecs in-place by overwriting from sorted_vecs.
         eigvecs.assign(&sorted_vecs);
         (sorted_vals, eigvecs)
@@ -224,7 +230,8 @@ mod tests {
         for (i, &v) in vals.iter().enumerate() {
             assert!(
                 (v - expected[i]).abs() < 1e-15,
-                "val[{i}] = {v}, expected {}", expected[i]
+                "val[{i}] = {v}, expected {}",
+                expected[i]
             );
         }
     }
@@ -238,22 +245,28 @@ mod tests {
         let sqrt_deg = Array1::ones(6);
 
         let result = lobpcg_sinv_solve(&mat, 2, 42, &sqrt_deg);
-        assert!(result.is_some(), "lobpcg_sinv_solve returned None on diagonal matrix");
+        assert!(
+            result.is_some(),
+            "lobpcg_sinv_solve returned None on diagonal matrix"
+        );
         let (eigvals, eigvecs) = result.unwrap();
 
         // First two non-trivial eigenvalues match [0.1, 0.3] within 1e-8.
         assert!(
             (eigvals[1] - 0.1).abs() < 1e-8,
-            "eigvals[1] = {}, expected ≈ 0.1", eigvals[1]
+            "eigvals[1] = {}, expected ≈ 0.1",
+            eigvals[1]
         );
         assert!(
             (eigvals[2] - 0.3).abs() < 1e-8,
-            "eigvals[2] = {}, expected ≈ 0.3", eigvals[2]
+            "eigvals[2] = {}, expected ≈ 0.3",
+            eigvals[2]
         );
 
         // All residuals < 1e-8.
         for i in 0..eigvals.len() {
-            let r = crate::metrics::eigenpair_residual(&mat, &eigvecs.column(i).to_owned(), eigvals[i]);
+            let r =
+                crate::metrics::eigenpair_residual(&mat, &eigvecs.column(i).to_owned(), eigvals[i]);
             assert!(r < 1e-8, "residual for eigenpair {i}: {r} >= 1e-8");
         }
     }
@@ -270,10 +283,17 @@ mod tests {
         assert!(result.is_some(), "lobpcg_sinv_solve returned None for n=30");
         let (eigvals, eigvecs) = result.unwrap();
 
-        assert_eq!(eigvals.len(), 4, "expected k+1=4 eigenvalues, got {}", eigvals.len());
         assert_eq!(
-            eigvecs.shape(), &[n, 4],
-            "expected [{n}, 4] eigvecs, got {:?}", eigvecs.shape()
+            eigvals.len(),
+            4,
+            "expected k+1=4 eigenvalues, got {}",
+            eigvals.len()
+        );
+        assert_eq!(
+            eigvecs.shape(),
+            &[n, 4],
+            "expected [{n}, 4] eigvecs, got {:?}",
+            eigvecs.shape()
         );
     }
 
@@ -313,7 +333,8 @@ mod tests {
             let recovered = 1.0 / mu - SINV_SHIFT;
             assert!(
                 (recovered - lambda).abs() < 1e-15,
-                "recovery error for λ={lambda}: got {recovered}, diff={}", (recovered - lambda).abs()
+                "recovery error for λ={lambda}: got {recovered}, diff={}",
+                (recovered - lambda).abs()
             );
         }
     }

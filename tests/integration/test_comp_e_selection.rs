@@ -25,8 +25,8 @@ fn run_comp_e_test(dataset: &str, expected_n: usize) {
     let computed_order: Vec<i32> = indices[1..3].iter().map(|&i| i as i32).collect();
     assert_eq!(computed_order, expected_order.as_slice().unwrap());
 
-    let gap = (eigenvalues[computed_order[0] as usize] - eigenvalues[computed_order[1] as usize])
-        .abs();
+    let gap =
+        (eigenvalues[computed_order[0] as usize] - eigenvalues[computed_order[1] as usize]).abs();
 
     if gap < 1e-6 {
         // Near-degenerate pair: use 2×2 determinant subspace check
@@ -53,7 +53,8 @@ fn run_comp_e_test(dataset: &str, expected_n: usize) {
             for (rv, ev) in r.iter().zip(e.iter()) {
                 assert!(
                     (rv - sign * ev).abs() < 1e-10,
-                    "column {col} mismatch: got {rv}, expected {}", sign * ev
+                    "column {col} mismatch: got {rv}, expected {}",
+                    sign * ev
                 );
             }
         }

@@ -2,7 +2,7 @@
 //!
 //! Run with: cargo bench --features testing --bench simd_spmv_exp
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use ndarray_npy::NpzReader;
 use spectral_init::operator::spmv_csr;
 use spectral_init::solve_eigenproblem_pub;
@@ -50,13 +50,13 @@ fn make_ring_lap(n: usize, half: usize) -> (Vec<usize>, Vec<usize>, Vec<f64>) {
 // ─── SELL-C-σ format ──────────────────────────────────────────────────────────
 
 struct SellCsigma {
-    c: usize,               // chunk height
-    num_rows: usize,        // original n
-    chunk_len: Vec<usize>,  // max NNZ per chunk
-    col_idx: Vec<usize>,    // padded column indices, interleaved row-major within chunk
-    values: Vec<f64>,       // padded values, same layout as col_idx
-    perm: Vec<usize>,       // perm[orig_row] = sorted_pos (σ-sort permutation)
-    inv_perm: Vec<usize>,   // inv_perm[sorted_pos] = orig_row (inverse)
+    c: usize,              // chunk height
+    num_rows: usize,       // original n
+    chunk_len: Vec<usize>, // max NNZ per chunk
+    col_idx: Vec<usize>,   // padded column indices, interleaved row-major within chunk
+    values: Vec<f64>,      // padded values, same layout as col_idx
+    perm: Vec<usize>,      // perm[orig_row] = sorted_pos (σ-sort permutation)
+    inv_perm: Vec<usize>,  // inv_perm[sorted_pos] = orig_row (inverse)
 }
 
 impl SellCsigma {
@@ -113,14 +113,22 @@ impl SellCsigma {
                         col_idx_buf.push(indices[row_start + k]);
                         values_buf.push(data[row_start + k]);
                     } else {
-                        col_idx_buf.push(0);   // always a valid index
-                        values_buf.push(0.0);   // contributes zero
+                        col_idx_buf.push(0); // always a valid index
+                        values_buf.push(0.0); // contributes zero
                     }
                 }
             }
         }
 
-        SellCsigma { c, num_rows: n, chunk_len, col_idx: col_idx_buf, values: values_buf, perm, inv_perm }
+        SellCsigma {
+            c,
+            num_rows: n,
+            chunk_len,
+            col_idx: col_idx_buf,
+            values: values_buf,
+            perm,
+            inv_perm,
+        }
     }
 
     fn spmv_scalar(&self, x: &[f64], y: &mut [f64]) {
@@ -170,7 +178,7 @@ unsafe fn spmv_avx2_gather(
     let n = y.len();
     for i in 0..n {
         let start = indptr[i];
-        let end   = indptr[i + 1];
+        let end = indptr[i + 1];
 
         // SAFETY: avx2+fma guaranteed by #[target_feature(enable = "avx2,fma")].
         let (mut result, mut base) = unsafe {
@@ -182,7 +190,7 @@ unsafe fn spmv_avx2_gather(
                     indices[base + 3] as i32,
                     indices[base + 2] as i32,
                     indices[base + 1] as i32,
-                    indices[base]     as i32,
+                    indices[base] as i32,
                 );
                 let xv = _mm256_i32gather_pd(x.as_ptr(), vi, 8);
                 let dv = _mm256_loadu_pd(data.as_ptr().add(base));
@@ -191,8 +199,8 @@ unsafe fn spmv_avx2_gather(
             }
 
             // Horizontal reduction: acc[0]+acc[1]+acc[2]+acc[3]
-            let lo     = _mm256_castpd256_pd128(acc);
-            let hi     = _mm256_extractf128_pd(acc, 1);
+            let lo = _mm256_castpd256_pd128(acc);
+            let hi = _mm256_extractf128_pd(acc, 1);
             let sum128 = _mm_add_pd(lo, hi);
             let halved = _mm_hadd_pd(sum128, sum128);
             let result = _mm_cvtsd_f64(halved);
@@ -211,13 +219,7 @@ unsafe fn spmv_avx2_gather(
 }
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-fn spmv_avx2_dispatch(
-    indptr: &[usize],
-    indices: &[usize],
-    data: &[f64],
-    x: &[f64],
-    y: &mut [f64],
-) {
+fn spmv_avx2_dispatch(indptr: &[usize], indices: &[usize], data: &[f64], x: &[f64], y: &mut [f64]) {
     if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
         // SAFETY: feature detection above guarantees avx2+fma are available.
         unsafe { spmv_avx2_gather(indptr, indices, data, x, y) }
@@ -242,7 +244,7 @@ unsafe fn spmv_avx512_gather(
     let n = y.len();
     for i in 0..n {
         let start = indptr[i];
-        let end   = indptr[i + 1];
+        let end = indptr[i + 1];
 
         // SAFETY: avx512f guaranteed by #[target_feature(enable = "avx512f")].
         let (mut result, mut base) = unsafe {
@@ -260,7 +262,7 @@ unsafe fn spmv_avx512_gather(
                     indices[base + 3] as i32,
                     indices[base + 2] as i32,
                     indices[base + 1] as i32,
-                    indices[base    ] as i32,
+                    indices[base] as i32,
                 );
                 // Gather 8 f64 values; scale=8 because sizeof(f64)==8.
                 let xv = _mm512_i32gather_pd::<8>(vi, x.as_ptr());
@@ -271,12 +273,12 @@ unsafe fn spmv_avx512_gather(
 
             // Horizontal reduction: sum 8 f64 lanes of __m512d.
             // Split into two __m256d halves, add, then reduce __m256d -> scalar.
-            let lo4    = _mm512_castpd512_pd256(acc);
-            let hi4    = _mm512_extractf64x4_pd::<1>(acc);
-            let sum4   = _mm256_add_pd(lo4, hi4);
-            let lo2    = _mm256_castpd256_pd128(sum4);
-            let hi2    = _mm256_extractf128_pd(sum4, 1);
-            let sum2   = _mm_add_pd(lo2, hi2);
+            let lo4 = _mm512_castpd512_pd256(acc);
+            let hi4 = _mm512_extractf64x4_pd::<1>(acc);
+            let sum4 = _mm256_add_pd(lo4, hi4);
+            let lo2 = _mm256_castpd256_pd128(sum4);
+            let hi2 = _mm256_extractf128_pd(sum4, 1);
+            let sum2 = _mm_add_pd(lo2, hi2);
             let halved = _mm_hadd_pd(sum2, sum2);
             let result = _mm_cvtsd_f64(halved);
 
@@ -433,13 +435,9 @@ fn bench_spmv_sell_c(c: &mut Criterion) {
         for &chunk_c in &[4_usize, 8] {
             let sell = SellCsigma::from_csr(&indptr, &indices, &data, n, chunk_c);
             let mut y = vec![0.0_f64; n];
-            group.bench_with_input(
-                BenchmarkId::new(format!("C{chunk_c}"), n),
-                &n,
-                |b, _| {
-                    b.iter(|| sell.spmv_scalar(black_box(&x), black_box(&mut y)))
-                },
-            );
+            group.bench_with_input(BenchmarkId::new(format!("C{chunk_c}"), n), &n, |b, _| {
+                b.iter(|| sell.spmv_scalar(black_box(&x), black_box(&mut y)))
+            });
         }
     }
     group.finish();
@@ -568,13 +566,7 @@ fn bench_pipeline_blobs5000(c: &mut Criterion) {
     let mut group = c.benchmark_group("pipeline_blobs5000");
     group.sample_size(10); // Criterion minimum; eigenproblem is slow so we keep it at the floor
     group.bench_function("blobs5000_solver", |b| {
-        b.iter(|| {
-            solve_eigenproblem_pub(
-                black_box(&laplacian),
-                black_box(2),
-                black_box(seed),
-            )
-        });
+        b.iter(|| solve_eigenproblem_pub(black_box(&laplacian), black_box(2), black_box(seed)));
     });
     group.finish();
 }

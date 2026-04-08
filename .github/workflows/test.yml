@@ -52,3 +52,26 @@ jobs:
           report_paths: target/nextest/ci/junit.xml
           fail_on_failure: false
           annotate_only: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+
+  lint:
+    name: fmt + clippy
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-features -- -D warnings -A missing_docs
+        env:
+          RUSTFLAGS: "-C target-cpu=x86-64-v3"

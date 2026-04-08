@@ -7,7 +7,7 @@
 mod common;
 
 use proptest::prelude::*;
-use spectral_init::{spectral_init, SpectralInitConfig};
+use spectral_init::{SpectralInitConfig, spectral_init};
 
 // ─── Eigenpair invariant tests ──────────────────────────────────────────────
 

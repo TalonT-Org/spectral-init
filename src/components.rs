@@ -191,8 +191,7 @@ mod tests {
 
     #[test]
     fn test_three_isolated_nodes() {
-        let g =
-            CsMatI::<f32, u32, usize>::new((3, 3), vec![0usize, 0, 0, 0], vec![], vec![]);
+        let g = CsMatI::<f32, u32, usize>::new((3, 3), vec![0usize, 0, 0, 0], vec![], vec![]);
         let (labels, n) = find_components(&g);
         assert_eq!(n, 3);
         assert_ne!(labels[0], labels[1]);
@@ -284,18 +283,15 @@ mod tests {
             let (labels, n_components) = find_components(&graph);
 
             let path = fixture_path(dataset, "comp_c_components.npz");
-            let mut npz = NpzReader::new(
-                std::fs::File::open(&path).unwrap_or_else(|e| {
+            let mut npz =
+                NpzReader::new(std::fs::File::open(&path).unwrap_or_else(|e| {
                     panic!("dataset {}: cannot open {:?}: {}", dataset, path, e)
-                }),
-            )
-            .unwrap_or_else(|e| panic!("dataset {}: cannot parse {:?}: {}", dataset, path, e));
+                }))
+                .unwrap_or_else(|e| panic!("dataset {}: cannot parse {:?}: {}", dataset, path, e));
 
             let py_n: i32 = npz
                 .by_name::<ndarray::OwnedRepr<i32>, ndarray::Ix0>("n_components")
-                .unwrap_or_else(|e| {
-                    panic!("dataset {}: n_components not found: {}", dataset, e)
-                })
+                .unwrap_or_else(|e| panic!("dataset {}: n_components not found: {}", dataset, e))
                 .into_scalar();
             let py_labels_arr: ndarray::Array1<i32> = npz
                 .by_name("labels")
@@ -303,12 +299,9 @@ mod tests {
             let py_labels: Vec<usize> = py_labels_arr.iter().map(|&x| x as usize).collect();
 
             assert_eq!(
-                n_components,
-                py_n as usize,
+                n_components, py_n as usize,
                 "dataset {}: n_components mismatch (rust={}, python={})",
-                dataset,
-                n_components,
-                py_n
+                dataset, n_components, py_n
             );
             assert_eq!(
                 partition_of(&labels),

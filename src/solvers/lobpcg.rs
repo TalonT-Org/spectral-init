@@ -4,16 +4,16 @@
 extern crate ndarray16;
 use ndarray16 as nd16;
 
-use faer::{Mat as FaerMat, Side};
-use faer::linalg::solvers::SelfAdjointEigen;
-use linfa_linalg::lobpcg::{lobpcg, Order};
-use ndarray::{Array1, Array2};
-use rand::rngs::StdRng;
-use rand::SeedableRng;
-use rand_distr::{Distribution, StandardNormal};
 use super::EigenResult;
-use crate::operator::LinearOperator;
 use crate::metrics::LOBPCG_ACCEPT_TOL;
+use crate::operator::LinearOperator;
+use faer::linalg::solvers::SelfAdjointEigen;
+use faer::{Mat as FaerMat, Side};
+use linfa_linalg::lobpcg::{Order, lobpcg};
+use ndarray::{Array1, Array2};
+use rand::SeedableRng;
+use rand::rngs::StdRng;
+use rand_distr::{Distribution, StandardNormal};
 
 // ─── ndarray 0.16 ↔ 0.17 conversion helpers ──────────────────────────────────
 
@@ -54,7 +54,6 @@ fn from_nd16_array2(a: nd16::Array2<f64>) -> Array2<f64> {
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
 
 /// Epsilon shift applied to the operator in Level 2 (regularized) LOBPCG.
 pub const REGULARIZATION_EPS: f64 = 1e-5;
@@ -248,7 +247,9 @@ pub fn lobpcg_solve<O: LinearOperator>(
     // Inject trivial eigenvector hint (sqrt_deg/||sqrt_deg||) into column 0, mirroring Python UMAP.
     let sqrt_deg_norm = sqrt_deg.dot(sqrt_deg).sqrt();
     if sqrt_deg_norm > 0.0 {
-        x_init_17.column_mut(0).assign(&sqrt_deg.mapv(|x| x / sqrt_deg_norm));
+        x_init_17
+            .column_mut(0)
+            .assign(&sqrt_deg.mapv(|x| x / sqrt_deg_norm));
     }
 
     // l_op_nd17 wraps op.apply() in ndarray 0.17 types for use by chebyshev_precond.
@@ -320,8 +321,13 @@ pub fn lobpcg_solve<O: LinearOperator>(
         };
 
         // Extract x_init for this iteration (moved into lobpcg; repopulated on warm restart).
-        debug_assert!(x_init_opt.is_some(), "x_init_opt must be set at every loop entry");
-        let x_init_nd16 = x_init_opt.take().expect("x_init_opt is always set at loop entry");
+        debug_assert!(
+            x_init_opt.is_some(),
+            "x_init_opt must be set at every loop entry"
+        );
+        let x_init_nd16 = x_init_opt
+            .take()
+            .expect("x_init_opt is always set at loop entry");
 
         // ── Run linfa-linalg LOBPCG ──────────────────────────────────────────
         let lobpcg_result = if regularize {
@@ -394,7 +400,11 @@ pub fn lobpcg_solve<O: LinearOperator>(
             log::debug!(
                 "[lobpcg] no usable result at restart {restart}/{MAX_WARM_RESTARTS}; \
                  last_result is {}; breaking",
-                if last_result.is_some() { "Some (partial fallback)" } else { "None (escalating)" }
+                if last_result.is_some() {
+                    "Some (partial fallback)"
+                } else {
+                    "None (escalating)"
+                }
             );
             break;
         }
@@ -420,7 +430,11 @@ pub fn lobpcg_solve<O: LinearOperator>(
                 log::debug!(
                     "[lobpcg] Rayleigh-Ritz failed at restart {restart}/{MAX_WARM_RESTARTS} \
                      (final); last_result is {}; breaking",
-                    if last_result.is_some() { "Some (partial fallback)" } else { "None (escalating)" }
+                    if last_result.is_some() {
+                        "Some (partial fallback)"
+                    } else {
+                        "None (escalating)"
+                    }
                 );
                 break;
             }
@@ -435,10 +449,7 @@ pub fn lobpcg_solve<O: LinearOperator>(
                     }
                     return Some((result, restart_count));
                 }
-                let max_res = residuals
-                    .iter()
-                    .cloned()
-                    .fold(0.0_f64, f64::max);
+                let max_res = residuals.iter().cloned().fold(0.0_f64, f64::max);
                 restart_count += 1;
                 // ── Warm restart: use refined eigvecs as next x_init (REQ-UCD-004) ──
                 if restart < MAX_WARM_RESTARTS {
@@ -513,7 +524,10 @@ mod tests {
         let sqrt_deg = Array1::from_iter(diag.iter().map(|&d| d.sqrt()));
 
         let result = lobpcg_solve(&op, 2, 42, false, &sqrt_deg);
-        assert!(result.is_some(), "lobpcg_solve returned None with trivial eigenvector injection");
+        assert!(
+            result.is_some(),
+            "lobpcg_solve returned None with trivial eigenvector injection"
+        );
         let ((eigvals, eigvecs), _) = result.unwrap();
 
         // First eigenvalue must be near zero (the near-trivial eigenvalue is 1e-10).
@@ -537,7 +551,10 @@ mod tests {
         let op = CsrOperator(&mat);
 
         let result = lobpcg_solve(&op, 2, 42, false, &Array1::from_vec(vec![1.0_f64; 6]));
-        assert!(result.is_some(), "Level 1 lobpcg_solve returned None on diagonal matrix");
+        assert!(
+            result.is_some(),
+            "Level 1 lobpcg_solve returned None on diagonal matrix"
+        );
         let ((eigvals, eigvecs), _) = result.unwrap();
 
         assert!(
@@ -564,7 +581,10 @@ mod tests {
         let op = CsrOperator(&mat);
 
         let result = lobpcg_solve(&op, 2, 42, true, &Array1::from_vec(vec![1.0_f64; 6]));
-        assert!(result.is_some(), "Level 2 lobpcg_solve returned None on diagonal matrix");
+        assert!(
+            result.is_some(),
+            "Level 2 lobpcg_solve returned None on diagonal matrix"
+        );
         let ((eigvals, eigvecs), _) = result.unwrap();
 
         // Acceptance criterion: eigenvalues within 1e-6 of true Laplacian eigenvalues.
@@ -603,13 +623,31 @@ mod tests {
 
         let n_components = 3;
         let result = lobpcg_solve(&op, n_components, 42, false, &Array1::ones(30));
-        assert!(result.is_some(), "lobpcg_solve returned None for n=30 diagonal");
+        assert!(
+            result.is_some(),
+            "lobpcg_solve returned None for n=30 diagonal"
+        );
         let ((eigvals, eigvecs), _) = result.unwrap();
 
         let k = n_components + 1;
-        assert_eq!(eigvecs.nrows(), n, "eigvecs rows expected {n}, got {}", eigvecs.nrows());
-        assert_eq!(eigvecs.ncols(), k, "eigvecs cols expected {k}, got {}", eigvecs.ncols());
-        assert_eq!(eigvals.len(), k, "eigvals length expected {k}, got {}", eigvals.len());
+        assert_eq!(
+            eigvecs.nrows(),
+            n,
+            "eigvecs rows expected {n}, got {}",
+            eigvecs.nrows()
+        );
+        assert_eq!(
+            eigvecs.ncols(),
+            k,
+            "eigvecs cols expected {k}, got {}",
+            eigvecs.ncols()
+        );
+        assert_eq!(
+            eigvals.len(),
+            k,
+            "eigvals length expected {k}, got {}",
+            eigvals.len()
+        );
     }
 
     #[test]
@@ -678,8 +716,8 @@ mod tests {
 
         // Identity matrix: exact eigenvectors of a diagonal matrix are standard basis vectors.
         let eigvecs = ndarray::Array2::eye(4);
-        let (eigenvalues, eigvecs_out) = rayleigh_ritz_refine(&op, eigvecs)
-            .expect("T-RR-1: rayleigh_ritz_refine returned None");
+        let (eigenvalues, eigvecs_out) =
+            rayleigh_ritz_refine(&op, eigvecs).expect("T-RR-1: rayleigh_ritz_refine returned None");
 
         for (i, &expected) in diag.iter().enumerate() {
             assert!(
@@ -690,7 +728,10 @@ mod tests {
         }
         for i in 0..4 {
             let r = residual(&op, eigvecs_out.column(i), eigenvalues[i]);
-            assert!(r < 1e-12, "T-RR-1: residual for eigenpair {i}: {r} >= 1e-12");
+            assert!(
+                r < 1e-12,
+                "T-RR-1: residual for eigenpair {i}: {r} >= 1e-12"
+            );
         }
     }
 
@@ -725,7 +766,10 @@ mod tests {
         );
         for i in 0..2 {
             let r = residual(&op, eigvecs_out.column(i), eigenvalues[i]);
-            assert!(r < 1e-12, "T-RR-1b: residual for eigenpair {i}: {r} >= 1e-12");
+            assert!(
+                r < 1e-12,
+                "T-RR-1b: residual for eigenpair {i}: {r} >= 1e-12"
+            );
         }
     }
 
@@ -739,8 +783,8 @@ mod tests {
         // 45-degree rotated orthonormal basis
         let s = 1.0_f64 / 2.0_f64.sqrt();
         let eigvecs = ndarray::array![[s, s], [s, -s]];
-        let (eigenvalues, eigvecs_out) = rayleigh_ritz_refine(&op, eigvecs)
-            .expect("T-RR-2: rayleigh_ritz_refine returned None");
+        let (eigenvalues, eigvecs_out) =
+            rayleigh_ritz_refine(&op, eigvecs).expect("T-RR-2: rayleigh_ritz_refine returned None");
 
         assert!(
             (eigenvalues[0] - 1.0).abs() < 1e-12,
@@ -754,7 +798,10 @@ mod tests {
         );
         for i in 0..2 {
             let r = residual(&op, eigvecs_out.column(i), eigenvalues[i]);
-            assert!(r < 1e-12, "T-RR-2: residual for eigenpair {i}: {r} >= 1e-12");
+            assert!(
+                r < 1e-12,
+                "T-RR-2: residual for eigenpair {i}: {r} >= 1e-12"
+            );
         }
     }
 
@@ -824,7 +871,10 @@ mod tests {
         let eigenvectors = Array2::eye(4);
         let residuals = per_vector_residuals(&op, &eigenvalues, &eigenvectors);
         for &r in &residuals {
-            assert!(r < 1e-12, "exact eigenvector residual={r:.2e} should be < 1e-12");
+            assert!(
+                r < 1e-12,
+                "exact eigenvector residual={r:.2e} should be < 1e-12"
+            );
         }
     }
 
@@ -841,8 +891,11 @@ mod tests {
         // Exact residual: ||(diag([0,0.1,0.2,0.3])·v - 0·v)|| / ||v||
         // = ||[0, 0.05, 0.1, 0.15]|| / ||[0.5,0.5,0.5,0.5]|| ≈ 0.187.
         // Threshold 0.15 is tight enough to catch regressions while remaining below the exact value.
-        assert!(residuals[0] > 0.15,
-            "non-eigenvector residual={:.2e} should be large", residuals[0]);
+        assert!(
+            residuals[0] > 0.15,
+            "non-eigenvector residual={:.2e} should be large",
+            residuals[0]
+        );
     }
 
     #[test]
@@ -859,12 +912,17 @@ mod tests {
         let op = CsrOperator(&mat);
         let sqrt_deg = Array1::ones(n);
         let result = lobpcg_solve(&op, 2, 42, false, &sqrt_deg);
-        assert!(result.is_some(), "lobpcg_solve returned None on near-degenerate input");
+        assert!(
+            result.is_some(),
+            "lobpcg_solve returned None on near-degenerate input"
+        );
         let ((eigs, vecs), _) = result.unwrap();
         let residuals = per_vector_residuals(&op, &eigs, &vecs);
         for (i, &r) in residuals.iter().enumerate() {
-            assert!(r < LOBPCG_ACCEPT_TOL,
-                "eigenpair {i} residual={r:.2e} exceeds LOBPCG_ACCEPT_TOL={LOBPCG_ACCEPT_TOL:.2e}");
+            assert!(
+                r < LOBPCG_ACCEPT_TOL,
+                "eigenpair {i} residual={r:.2e} exceeds LOBPCG_ACCEPT_TOL={LOBPCG_ACCEPT_TOL:.2e}"
+            );
         }
     }
 
@@ -879,6 +937,9 @@ mod tests {
         let sqrt_deg = Array1::from_vec(vec![1.0_f64; 8]);
         let result = lobpcg_solve(&op, 2, 42, false, &sqrt_deg);
         let (_, restart_count) = result.expect("should converge on uniform diagonal");
-        assert_eq!(restart_count, 0, "restart_count must be 0 for easy convergence");
+        assert_eq!(
+            restart_count, 0,
+            "restart_count must be 0 for easy convergence"
+        );
     }
 }

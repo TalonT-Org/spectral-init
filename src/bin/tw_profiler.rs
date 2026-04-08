@@ -25,7 +25,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         return Err("--iters must be > 0".into());
     }
     let warmup: usize = pargs.opt_value_from_str("--warmup")?.unwrap_or(2);
-    let stderr_capture: Option<std::path::PathBuf> = pargs.opt_value_from_str("--stderr-capture")?;
+    let stderr_capture: Option<std::path::PathBuf> =
+        pargs.opt_value_from_str("--stderr-capture")?;
 
     // Set up stderr capture if requested.
     if let Some(ref capture_path) = stderr_capture {
@@ -55,7 +56,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let n = x.nrows();
     let mean_s = times.iter().sum::<f64>() / times.len() as f64;
     let std_s = if times.len() > 1 {
-        let var = times.iter().map(|&t| (t - mean_s).powi(2)).sum::<f64>() / (times.len() - 1) as f64;
+        let var =
+            times.iter().map(|&t| (t - mean_s).powi(2)).sum::<f64>() / (times.len() - 1) as f64;
         var.sqrt()
     } else {
         0.0
@@ -91,8 +93,12 @@ fn round_to(val: f64, decimals: u32) -> f64 {
 #[cfg(unix)]
 fn redirect_stderr(path: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
     use std::os::unix::io::IntoRawFd;
-    let file = std::fs::File::create(path)
-        .map_err(|e| format!("failed to create stderr capture file {}: {e}", path.display()))?;
+    let file = std::fs::File::create(path).map_err(|e| {
+        format!(
+            "failed to create stderr capture file {}: {e}",
+            path.display()
+        )
+    })?;
     let fd = file.into_raw_fd();
     // SAFETY: dup2 is a POSIX syscall; fd is valid (just opened) and 2 is stderr.
     let ret = unsafe { libc::dup2(fd, 2) };
@@ -104,7 +110,10 @@ fn redirect_stderr(path: &std::path::Path) -> Result<(), Box<dyn std::error::Err
     // Close the original fd since stderr now owns the file descriptor.
     let close_ret = unsafe { libc::close(fd) };
     if close_ret == -1 {
-        eprintln!("warning: close(fd) after dup2 failed: {}", std::io::Error::last_os_error());
+        eprintln!(
+            "warning: close(fd) after dup2 failed: {}",
+            std::io::Error::last_os_error()
+        );
     }
     Ok(())
 }

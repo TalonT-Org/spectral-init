@@ -1,10 +1,14 @@
-// spectral-init: Spectral initialization for UMAP embeddings
+//! Spectral initialization for UMAP embeddings.
+//!
+//! Computes Laplacian eigenvectors of a fuzzy k-NN graph to provide
+//! globally-aware starting coordinates for SGD optimization.
+#![warn(missing_docs)]
 
-#[doc(hidden)]
-pub mod metrics;
 mod components;
 mod config;
 mod laplacian;
+#[doc(hidden)]
+pub mod metrics;
 mod multi_component;
 #[doc(hidden)]
 pub mod operator;
@@ -17,18 +21,16 @@ pub use config::{ComputeMode, SpectralInitConfig};
 
 // Re-exported for component-level integration tests. These are internal pipeline
 // functions, not part of the stable public API.
-pub use crate::selection::select_eigenvectors;
-pub use crate::laplacian::compute_degrees;
 pub use crate::laplacian::build_normalized_laplacian;
+pub use crate::laplacian::compute_degrees;
+pub use crate::selection::select_eigenvectors;
 /// Dense EVD solver. Exposed for component-level integration tests; not part of the
 /// stable public API and may change without notice.
 pub use crate::solvers::dense_evd;
 
 #[cfg(feature = "testing")]
 #[doc(hidden)]
-pub fn find_components(
-    graph: &sprs::CsMatI<f32, u32, usize>,
-) -> (Vec<usize>, usize) {
+pub fn find_components(graph: &sprs::CsMatI<f32, u32, usize>) -> (Vec<usize>, usize) {
     components::find_components(graph)
 }
 
@@ -123,27 +125,12 @@ pub fn normalize_signs_pub(coords: &mut ndarray::Array2<f64>) {
 #[cfg(feature = "testing")]
 #[doc(hidden)]
 pub use crate::metrics::{
-    eigenpair_residual,
-    max_eigenpair_residual,
-    orthogonality_error,
-    check_eigenvalue_bounds,
-    separation_ratio,
-    eigenvalue_abs_errors,
-    subspace_gram_det_kd,
-    sign_agnostic_max_error,
-    tolerance_margin,
-    spectral_gap,
-    eigenvalue_condition_number,
-    trustworthiness,
-    DENSE_EVD_QUALITY_THRESHOLD,
-    LOBPCG_QUALITY_THRESHOLD,
-    SINV_LOBPCG_QUALITY_THRESHOLD,
-    RSVD_QUALITY_THRESHOLD,
-    DEGENERATE_GAP_THRESHOLD,
-    SUBSPACE_GRAM_DET_THRESHOLD,
-    AssessmentReport,
-    ExperimentMetrics,
-    MetricResult,
+    AssessmentReport, DEGENERATE_GAP_THRESHOLD, DENSE_EVD_QUALITY_THRESHOLD, ExperimentMetrics,
+    LOBPCG_QUALITY_THRESHOLD, MetricResult, RSVD_QUALITY_THRESHOLD, SINV_LOBPCG_QUALITY_THRESHOLD,
+    SUBSPACE_GRAM_DET_THRESHOLD, check_eigenvalue_bounds, eigenpair_residual,
+    eigenvalue_abs_errors, eigenvalue_condition_number, max_eigenpair_residual,
+    orthogonality_error, separation_ratio, sign_agnostic_max_error, spectral_gap,
+    subspace_gram_det_kd, tolerance_margin, trustworthiness,
 };
 
 // Re-export trustworthiness for the CLI binary when built with the `cli` feature.
@@ -169,7 +156,12 @@ pub enum SpectralError {
 
     /// The graph has fewer nodes than the requested embedding dimensionality.
     #[error("graph has too few nodes ({n}) for {dims}-dimensional embedding")]
-    TooFewNodes { n: usize, dims: usize },
+    TooFewNodes {
+        /// Number of nodes in the graph.
+        n: usize,
+        /// Requested number of embedding dimensions.
+        dims: usize,
+    },
 }
 
 /// Compute spectral initialization coordinates for a UMAP fuzzy k-NN graph.
@@ -201,7 +193,10 @@ pub fn spectral_init(
         )));
     }
     if n <= n_components {
-        return Err(SpectralError::TooFewNodes { n, dims: n_components });
+        return Err(SpectralError::TooFewNodes {
+            n,
+            dims: n_components,
+        });
     }
 
     // ── Component A: connectivity check ───────────────────────────────────
@@ -230,11 +225,14 @@ pub fn spectral_init(
     let lap = laplacian::build_normalized_laplacian(graph, &inv_sqrt_deg);
 
     // ── Component D: eigensolver escalation chain ─────────────────────────
-    let ((eigenvalues, eigenvectors), _) = solvers::solve_eigenproblem(&lap, n_components, seed, &sqrt_deg, config.compute_mode);
+    let ((eigenvalues, eigenvectors), _) =
+        solvers::solve_eigenproblem(&lap, n_components, seed, &sqrt_deg, config.compute_mode);
 
     // ── Component E: eigenvector selection ────────────────────────────────
     let mut selected = selection::select_eigenvectors(
-        eigenvalues.as_slice_memory_order().expect("eigenvalues must be contiguous"),
+        eigenvalues
+            .as_slice_memory_order()
+            .expect("eigenvalues must be contiguous"),
         &eigenvectors,
         n_components,
     );
@@ -255,10 +253,8 @@ mod tests {
     #[cfg(all(feature = "testing", test))]
     #[test]
     fn scale_and_add_noise_pub_is_accessible() {
-        let coords = ndarray::Array2::<f64>::from_shape_vec(
-            (2, 2),
-            vec![1.0, 2.0, 3.0, 4.0],
-        ).unwrap();
+        let coords =
+            ndarray::Array2::<f64>::from_shape_vec((2, 2), vec![1.0, 2.0, 3.0, 4.0]).unwrap();
         let result = scale_and_add_noise_pub(coords, 42);
         assert!(result.is_ok());
         assert_eq!(result.unwrap().shape(), &[2, 2]);
@@ -293,9 +289,17 @@ mod tests {
     #[test]
     fn spectral_init_too_few_nodes_returns_error() {
         // 2-node connected graph, asking for 3 dimensions
-        let g = CsMatI::<f32, u32, usize>::new((2, 2), vec![0, 1, 2], vec![1u32, 0u32], vec![1.0f32; 2]);
+        let g = CsMatI::<f32, u32, usize>::new(
+            (2, 2),
+            vec![0, 1, 2],
+            vec![1u32, 0u32],
+            vec![1.0f32; 2],
+        );
         let result = spectral_init(&g, 3, 42, None, SpectralInitConfig::default());
-        assert!(matches!(result, Err(SpectralError::TooFewNodes { n: 2, dims: 3 })));
+        assert!(matches!(
+            result,
+            Err(SpectralError::TooFewNodes { n: 2, dims: 3 })
+        ));
     }
 
     #[test]
@@ -332,7 +336,9 @@ mod tests {
         // If scale_and_add_noise were to negate coordinates, the argmax element would become negative.
         for col in 0..result.ncols() {
             let col_view = result.column(col);
-            let argmax_val = col_view.iter().copied()
+            let argmax_val = col_view
+                .iter()
+                .copied()
                 .reduce(|a, b| if b.abs() > a.abs() { b } else { a });
             let v = argmax_val.unwrap_or_else(|| {
                 panic!("column {col}: argmax returned None — coordinate column is degenerate")
@@ -401,7 +407,9 @@ mod config_tests {
             2,
             42,
             None,
-            SpectralInitConfig { compute_mode: ComputeMode::RustNative },
+            SpectralInitConfig {
+                compute_mode: ComputeMode::RustNative,
+            },
         )
         .expect("RustNative should succeed");
         assert_eq!(r1.shape(), r2.shape());

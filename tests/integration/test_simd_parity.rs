@@ -6,7 +6,9 @@ use rand::SeedableRng;
 use rand::rngs::StdRng;
 use rand_distr::{Distribution, StandardNormal};
 use serde_json::json;
-use spectral_init::{normalize_signs_pub, scale_and_add_noise_pub, solve_eigenproblem_pub, ComputeMode};
+use spectral_init::{
+    ComputeMode, normalize_signs_pub, scale_and_add_noise_pub, solve_eigenproblem_pub,
+};
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 use spectral_init::operator::spmv_avx2_gather_pub;
@@ -132,8 +134,7 @@ fn test_solver_divergence() {
 
     let results_dir = results_dir();
     std::fs::create_dir_all(&results_dir).expect("cannot create RESULTS_DIR");
-    std::fs::create_dir_all(results_dir.join("eigenvectors"))
-        .expect("cannot create eigenvectors/");
+    std::fs::create_dir_all(results_dir.join("eigenvectors")).expect("cannot create eigenvectors/");
 
     let mut records: Vec<serde_json::Value> = Vec::new();
 
@@ -155,10 +156,10 @@ fn test_solver_divergence() {
             normalize_signs_pub(&mut eigvec_scalar); // match production E.5
             normalize_signs_pub(&mut eigvec_avx2); // match production E.5
 
-            let scaled_scalar = scale_and_add_noise_pub(eigvec_scalar, 42)
-                .expect("scale_and_add_noise_pub failed");
-            let scaled_avx2 = scale_and_add_noise_pub(eigvec_avx2, 42)
-                .expect("scale_and_add_noise_pub failed");
+            let scaled_scalar =
+                scale_and_add_noise_pub(eigvec_scalar, 42).expect("scale_and_add_noise_pub failed");
+            let scaled_avx2 =
+                scale_and_add_noise_pub(eigvec_avx2, 42).expect("scale_and_add_noise_pub failed");
 
             let f32_total = scaled_scalar.len();
             let f32_bitwise_identical = scaled_scalar
@@ -189,8 +190,7 @@ fn test_solver_divergence() {
                     .join(format!("{}_avx2.npy", fixture));
                 ndarray_npy::write_npy(&scalar_path, &scaled_scalar)
                     .expect("write_npy scalar failed");
-                ndarray_npy::write_npy(&avx2_path, &scaled_avx2)
-                    .expect("write_npy avx2 failed");
+                ndarray_npy::write_npy(&avx2_path, &scaled_avx2).expect("write_npy avx2 failed");
                 true
             } else {
                 false

@@ -3,15 +3,14 @@ mod common;
 
 use common::load_sparse_csr_f32_u32;
 use ndarray_npy::write_npy;
-use spectral_init::{spectral_init, SpectralInitConfig};
+use spectral_init::{SpectralInitConfig, spectral_init};
 use std::path::Path;
 use std::time::Instant;
 
 #[test]
 #[ignore = "requires Phase 1 visual eval data"]
 fn export_all_rust_inits() {
-    let output_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/visual_eval/output");
+    let output_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/visual_eval/output");
 
     if !output_dir.exists() {
         panic!(
@@ -24,7 +23,7 @@ fn export_all_rust_inits() {
         .expect("failed to read output dir")
         .filter_map(|e| {
             e.map_err(|err| eprintln!("Warning: failed to read directory entry: {err}"))
-             .ok()
+                .ok()
         })
         .filter(|e| {
             let name = e.file_name();
@@ -64,12 +63,7 @@ fn export_all_rust_inits() {
                     failures.push(msg);
                     continue;
                 }
-                println!(
-                    "{:<25} {:>6}  {:>7.2}s",
-                    name,
-                    n,
-                    elapsed.as_secs_f64()
-                );
+                println!("{:<25} {:>6}  {:>7.2}s", name, n, elapsed.as_secs_f64());
             }
             Err(e) => {
                 let msg = format!("spectral_init for {name}: {e}");

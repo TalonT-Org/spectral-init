@@ -22,7 +22,12 @@ fn t_profiler_01_produces_valid_json() {
 
     let status = Command::new(env!("CARGO"))
         .args([
-            "run", "--features", "cli", "--bin", "tw_profiler", "--",
+            "run",
+            "--features",
+            "cli",
+            "--bin",
+            "tw_profiler",
+            "--",
             "--x",
         ])
         .arg(tmp.join("x.npy"))
@@ -77,7 +82,12 @@ fn t_profiler_02_stderr_capture_writes_file() {
 
     let status = Command::new(env!("CARGO"))
         .args([
-            "run", "--features", "cli", "--bin", "tw_profiler", "--",
+            "run",
+            "--features",
+            "cli",
+            "--bin",
+            "tw_profiler",
+            "--",
             "--x",
         ])
         .arg(tmp.join("x.npy"))
@@ -100,7 +110,11 @@ fn t_profiler_02_stderr_capture_writes_file() {
     assert!(stderr_path.exists(), "stderr capture file not created");
     let meta = std::fs::metadata(&stderr_path)
         .expect("stderr capture file exists but metadata unreadable");
-    assert!(meta.is_file(), "stderr capture path is not a regular file: {:?}", stderr_path);
+    assert!(
+        meta.is_file(),
+        "stderr capture path is not a regular file: {:?}",
+        stderr_path
+    );
 
     let _ = std::fs::remove_dir_all(&tmp);
 }

@@ -25,7 +25,7 @@
 //! If absent, those groups emit `[lobpcg_bench] SKIP ...` to stderr and return
 //! immediately; the run still exits 0.
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use ndarray_npy::{NpzReader, ReadNpyError, ReadNpzError};
 use spectral_init::solve_eigenproblem_pub;
 use std::hint::black_box;
@@ -48,8 +48,8 @@ fn load_laplacian(path: &Path) -> Option<sprs::CsMatI<f64, usize>> {
 
     let file = std::fs::File::open(path)
         .unwrap_or_else(|e| panic!("cannot open laplacian {:?}: {}", path, e));
-    let mut npz = NpzReader::new(file)
-        .unwrap_or_else(|e| panic!("NpzReader failed on {:?}: {}", path, e));
+    let mut npz =
+        NpzReader::new(file).unwrap_or_else(|e| panic!("NpzReader failed on {:?}: {}", path, e));
 
     let data: Vec<f64> = npz
         .by_name::<ndarray::OwnedRepr<f64>, ndarray::Ix1>("data")
@@ -57,41 +57,39 @@ fn load_laplacian(path: &Path) -> Option<sprs::CsMatI<f64, usize>> {
         .into_iter()
         .collect();
 
-    let indices: Vec<usize> =
-        match npz.by_name::<ndarray::OwnedRepr<i32>, ndarray::Ix1>("indices") {
-            Ok(arr) => arr.iter().map(|&x| x as usize).collect(),
-            Err(ReadNpzError::Npy(ReadNpyError::WrongDescriptor(_))) => {
-                let arr: ndarray::Array1<i64> = npz
-                    .by_name("indices")
-                    .unwrap_or_else(|e| panic!("'indices' missing in {:?}: {}", path, e));
-                arr.iter().map(|&x| x as usize).collect()
-            }
-            Err(e) => panic!("error reading 'indices' from {:?}: {}", path, e),
-        };
+    let indices: Vec<usize> = match npz.by_name::<ndarray::OwnedRepr<i32>, ndarray::Ix1>("indices")
+    {
+        Ok(arr) => arr.iter().map(|&x| x as usize).collect(),
+        Err(ReadNpzError::Npy(ReadNpyError::WrongDescriptor(_))) => {
+            let arr: ndarray::Array1<i64> = npz
+                .by_name("indices")
+                .unwrap_or_else(|e| panic!("'indices' missing in {:?}: {}", path, e));
+            arr.iter().map(|&x| x as usize).collect()
+        }
+        Err(e) => panic!("error reading 'indices' from {:?}: {}", path, e),
+    };
 
-    let indptr: Vec<usize> =
-        match npz.by_name::<ndarray::OwnedRepr<i32>, ndarray::Ix1>("indptr") {
-            Ok(arr) => arr.iter().map(|&x| x as usize).collect(),
-            Err(ReadNpzError::Npy(ReadNpyError::WrongDescriptor(_))) => {
-                let arr: ndarray::Array1<i64> = npz
-                    .by_name("indptr")
-                    .unwrap_or_else(|e| panic!("'indptr' missing in {:?}: {}", path, e));
-                arr.iter().map(|&x| x as usize).collect()
-            }
-            Err(e) => panic!("error reading 'indptr' from {:?}: {}", path, e),
-        };
+    let indptr: Vec<usize> = match npz.by_name::<ndarray::OwnedRepr<i32>, ndarray::Ix1>("indptr") {
+        Ok(arr) => arr.iter().map(|&x| x as usize).collect(),
+        Err(ReadNpzError::Npy(ReadNpyError::WrongDescriptor(_))) => {
+            let arr: ndarray::Array1<i64> = npz
+                .by_name("indptr")
+                .unwrap_or_else(|e| panic!("'indptr' missing in {:?}: {}", path, e));
+            arr.iter().map(|&x| x as usize).collect()
+        }
+        Err(e) => panic!("error reading 'indptr' from {:?}: {}", path, e),
+    };
 
-    let shape: Vec<usize> =
-        match npz.by_name::<ndarray::OwnedRepr<i32>, ndarray::Ix1>("shape") {
-            Ok(arr) => arr.iter().map(|&x| x as usize).collect(),
-            Err(ReadNpzError::Npy(ReadNpyError::WrongDescriptor(_))) => {
-                let arr: ndarray::Array1<i64> = npz
-                    .by_name("shape")
-                    .unwrap_or_else(|e| panic!("'shape' missing in {:?}: {}", path, e));
-                arr.iter().map(|&x| x as usize).collect()
-            }
-            Err(e) => panic!("error reading 'shape' from {:?}: {}", path, e),
-        };
+    let shape: Vec<usize> = match npz.by_name::<ndarray::OwnedRepr<i32>, ndarray::Ix1>("shape") {
+        Ok(arr) => arr.iter().map(|&x| x as usize).collect(),
+        Err(ReadNpzError::Npy(ReadNpyError::WrongDescriptor(_))) => {
+            let arr: ndarray::Array1<i64> = npz
+                .by_name("shape")
+                .unwrap_or_else(|e| panic!("'shape' missing in {:?}: {}", path, e));
+            arr.iter().map(|&x| x as usize).collect()
+        }
+        Err(e) => panic!("error reading 'shape' from {:?}: {}", path, e),
+    };
 
     assert!(
         shape.len() >= 2,
@@ -124,7 +122,7 @@ fn bench_lobpcg_blobs5000(c: &mut Criterion) {
     eprintln!("[lobpcg_bench] blobs_5000 ready: n={n}");
 
     let mut group = c.benchmark_group("lobpcg_blobs5000");
-    group.sample_size(10);            // Criterion minimum; solver takes ~300 ms
+    group.sample_size(10); // Criterion minimum; solver takes ~300 ms
     group.warm_up_time(Duration::from_secs(5));
     group.measurement_time(Duration::from_secs(60));
 
@@ -143,8 +141,8 @@ fn bench_lobpcg_blobs5000(c: &mut Criterion) {
 // ─── merfish_10k — 10,000 nodes, optional ────────────────────────────────────
 
 fn bench_lobpcg_merfish_10k(c: &mut Criterion) {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("temp/lobpcg_bench/merfish_10k_laplacian.npz");
+    let path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("temp/lobpcg_bench/merfish_10k_laplacian.npz");
 
     let Some(laplacian) = load_laplacian(&path) else {
         eprintln!(
@@ -182,8 +180,8 @@ fn bench_lobpcg_merfish_10k(c: &mut Criterion) {
 // ─── merfish_100k — 100,000 nodes, optional ──────────────────────────────────
 
 fn bench_lobpcg_merfish_100k(c: &mut Criterion) {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("temp/lobpcg_bench/merfish_100k_laplacian.npz");
+    let path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("temp/lobpcg_bench/merfish_100k_laplacian.npz");
 
     let Some(laplacian) = load_laplacian(&path) else {
         eprintln!(

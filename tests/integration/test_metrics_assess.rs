@@ -1,47 +1,30 @@
 #[path = "../common/mod.rs"]
 mod common;
 
-use ndarray::{Array1, Array2};
 use ndarray::s;
+use ndarray::{Array1, Array2};
 use serde_json::json;
 use spectral_init::{
-    check_eigenvalue_bounds,
-    eigenvalue_abs_errors,
-    eigenvalue_condition_number,
-    embed_disconnected,
-    find_components,
-    max_eigenpair_residual,
-    orthogonality_error,
-    select_eigenvectors,
-    separation_ratio,
-    sign_agnostic_max_error,
-    solve_eigenproblem_pub,
-    spectral_gap,
-    subspace_gram_det_kd,
+    AssessmentReport, ComputeMode, DEGENERATE_GAP_THRESHOLD, DENSE_EVD_QUALITY_THRESHOLD,
+    ExperimentMetrics, LOBPCG_QUALITY_THRESHOLD, MetricResult, RSVD_QUALITY_THRESHOLD,
+    SINV_LOBPCG_QUALITY_THRESHOLD, SUBSPACE_GRAM_DET_THRESHOLD, check_eigenvalue_bounds,
+    eigenvalue_abs_errors, eigenvalue_condition_number, embed_disconnected, find_components,
+    max_eigenpair_residual, orthogonality_error, select_eigenvectors, separation_ratio,
+    sign_agnostic_max_error, solve_eigenproblem_pub, spectral_gap, subspace_gram_det_kd,
     tolerance_margin,
-    AssessmentReport,
-    ComputeMode,
-    ExperimentMetrics,
-    MetricResult,
-    DEGENERATE_GAP_THRESHOLD,
-    DENSE_EVD_QUALITY_THRESHOLD,
-    LOBPCG_QUALITY_THRESHOLD,
-    RSVD_QUALITY_THRESHOLD,
-    SINV_LOBPCG_QUALITY_THRESHOLD,
-    SUBSPACE_GRAM_DET_THRESHOLD,
 };
 
 /// (name, n, is_connected, expected_n_components)
 const DATASETS: &[(&str, usize, bool, usize)] = &[
-    ("blobs_50",             50,   false, 3),
-    ("blobs_500",            500,  false, 4),
-    ("blobs_5000",           5000, false, 2),
-    ("blobs_connected_200",  200,  true,  1),
-    ("blobs_connected_2000", 2000, true,  1),
-    ("circles_300",          300,  true,  1),
-    ("disconnected_200",     200,  false, 4),
-    ("moons_200",            200,  true,  1),
-    ("near_dupes_100",       100,  true,  1),
+    ("blobs_50", 50, false, 3),
+    ("blobs_500", 500, false, 4),
+    ("blobs_5000", 5000, false, 2),
+    ("blobs_connected_200", 200, true, 1),
+    ("blobs_connected_2000", 2000, true, 1),
+    ("circles_300", 300, true, 1),
+    ("disconnected_200", 200, false, 4),
+    ("moons_200", 200, true, 1),
+    ("near_dupes_100", 100, true, 1),
 ];
 
 /// Orthogonality threshold: V^T V - I must be smaller than this.
@@ -49,7 +32,7 @@ const ORTHO_THRESHOLD: f64 = 1e-8;
 
 /// Eigenvalue bounds tolerance (λ ∈ [-tol, 2+tol]).
 /// Machine-precision only: enforce_psd_contract guarantees λ ∈ [0, 2] exactly.
-const BOUNDS_TOL: f64 = f64::EPSILON * 4.0;  // ~8.88e-16
+const BOUNDS_TOL: f64 = f64::EPSILON * 4.0; // ~8.88e-16
 
 /// Sign-agnostic max error threshold for parity assessment.
 const SIGN_ERROR_THRESHOLD: f64 = 5e-3;
@@ -91,8 +74,8 @@ fn residual_threshold(level: u8) -> f64 {
     match level {
         0 | 5 => DENSE_EVD_QUALITY_THRESHOLD,
         1 | 3 => LOBPCG_QUALITY_THRESHOLD,
-        2     => SINV_LOBPCG_QUALITY_THRESHOLD,
-        _     => RSVD_QUALITY_THRESHOLD,
+        2 => SINV_LOBPCG_QUALITY_THRESHOLD,
+        _ => RSVD_QUALITY_THRESHOLD,
     }
 }
 
@@ -180,9 +163,21 @@ fn accuracy_to_markdown(experiment: &ExperimentMetrics, solver_levels: &[Option<
 
     for (report, &solver_level) in experiment.datasets.iter().zip(solver_levels.iter()) {
         let get = |name: &str| report.metrics.iter().find(|m| m.name == name);
-        let fmt_val = |name: &str| get(name).map(|m| format!("{:.3e}", m.value)).unwrap_or_else(|| "—".to_string());
-        let fmt_bool = |name: &str| get(name).map(|m| if m.value != 0.0 { "✓" } else { "✗" }).unwrap_or("—");
-        let all_pass = report.metrics.iter().filter(|m| m.threshold > 0.0).all(|m| m.passed);
+        let fmt_val = |name: &str| {
+            get(name)
+                .map(|m| format!("{:.3e}", m.value))
+                .unwrap_or_else(|| "—".to_string())
+        };
+        let fmt_bool = |name: &str| {
+            get(name)
+                .map(|m| if m.value != 0.0 { "✓" } else { "✗" })
+                .unwrap_or("—")
+        };
+        let all_pass = report
+            .metrics
+            .iter()
+            .filter(|m| m.threshold > 0.0)
+            .all(|m| m.passed);
 
         out.push_str(&format!(
             "| {} | {} | {} | {} | {} | {} | {} | {} | {} |\n",
@@ -211,8 +206,16 @@ fn parity_to_markdown(experiment: &ExperimentMetrics, solver_levels: &[Option<u8
 
     for (report, &solver_level) in experiment.datasets.iter().zip(solver_levels.iter()) {
         let get = |name: &str| report.metrics.iter().find(|m| m.name == name);
-        let fmt_val = |name: &str| get(name).map(|m| format!("{:.3e}", m.value)).unwrap_or_else(|| "N/A".to_string());
-        let all_pass = report.metrics.iter().filter(|m| m.threshold > 0.0).all(|m| m.passed);
+        let fmt_val = |name: &str| {
+            get(name)
+                .map(|m| format!("{:.3e}", m.value))
+                .unwrap_or_else(|| "N/A".to_string())
+        };
+        let all_pass = report
+            .metrics
+            .iter()
+            .filter(|m| m.threshold > 0.0)
+            .all(|m| m.passed);
 
         out.push_str(&format!(
             "| {} | {} | {} | {} | {} | {} | {} |\n",
@@ -448,7 +451,9 @@ fn assess_parity() {
         let max_abs_err = abs_errors.iter().cloned().fold(0.0f64, f64::max);
 
         let selected = select_eigenvectors(
-            eigenvalues.as_slice_memory_order().expect("eigenvalues contiguous"),
+            eigenvalues
+                .as_slice_memory_order()
+                .expect("eigenvalues contiguous"),
             &eigenvectors,
             n_components_dim,
         );
@@ -459,7 +464,9 @@ fn assess_parity() {
             .as_slice_memory_order()
             .expect("ref eigenvalues contiguous");
         let has_degenerate = n_components_dim >= 2
-            && evals_slice[1..].windows(2).any(|w| w[1] - w[0] < DEGENERATE_GAP_THRESHOLD);
+            && evals_slice[1..]
+                .windows(2)
+                .any(|w| w[1] - w[0] < DEGENERATE_GAP_THRESHOLD);
         let gram = if has_degenerate {
             subspace_gram_det_kd(
                 eigenvectors.slice(s![.., 1..]),

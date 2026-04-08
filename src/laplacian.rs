@@ -248,22 +248,14 @@ mod tests {
         // inv_sqrt_deg[1] = 1/sqrt(2)
         // inv_sqrt_deg[2] = 1/sqrt(2)
         // inv_sqrt_deg[3] = 1/sqrt(1) = 1.0
-        let inv_sqrt_deg = vec![
-            1.0f64,
-            1.0 / 2.0f64.sqrt(),
-            1.0 / 2.0f64.sqrt(),
-            1.0f64,
-        ];
+        let inv_sqrt_deg = vec![1.0f64, 1.0 / 2.0f64.sqrt(), 1.0 / 2.0f64.sqrt(), 1.0f64];
 
         let l = build_normalized_laplacian(&graph, &inv_sqrt_deg);
 
         // All diagonal entries must be exactly 1.0
         for i in 0..4 {
             let d = l.get(i, i).copied().unwrap_or(0.0);
-            assert!(
-                (d - 1.0).abs() < 1e-15,
-                "L[{i},{i}] = {d}, expected 1.0"
-            );
+            assert!((d - 1.0).abs() < 1e-15, "L[{i},{i}] = {d}, expected 1.0");
         }
 
         // Symmetry: |L[i,j] - L[j,i]| < 1e-15 for all i, j

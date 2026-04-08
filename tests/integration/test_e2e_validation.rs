@@ -1,7 +1,7 @@
 #[path = "../common/mod.rs"]
 mod common;
 
-use spectral_init::{spectral_init, SpectralInitConfig};
+use spectral_init::{SpectralInitConfig, spectral_init};
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -41,8 +41,7 @@ fn run_e2e_residual_check(dataset: &str, n: usize) {
     );
 
     // Load Laplacian and reference eigenvalues
-    let laplacian =
-        common::load_sparse_csr(&common::fixture_path(dataset, "comp_b_laplacian.npz"));
+    let laplacian = common::load_sparse_csr(&common::fixture_path(dataset, "comp_b_laplacian.npz"));
     let ref_eigenvalues: ndarray::Array1<f64> = common::load_dense(
         &common::fixture_path(dataset, "comp_d_eigensolver.npz"),
         "eigenvalues",
@@ -268,7 +267,12 @@ fn test_e2e_disconnected_200_component_separation() {
     // centroids should be closer than 1.0 (much less than the ~8 unit centroid ring
     // radius that spectral placement produces for 4 components).
     let unique_labels: Vec<i32> = {
-        let mut s: Vec<i32> = labels.iter().copied().collect::<std::collections::HashSet<_>>().into_iter().collect();
+        let mut s: Vec<i32> = labels
+            .iter()
+            .copied()
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
         s.sort();
         s
     };
@@ -278,7 +282,10 @@ fn test_e2e_disconnected_200_component_separation() {
             .filter(|&i| labels[i] == comp)
             .map(|i| (result[[i, 0]] as f64, result[[i, 1]] as f64))
             .collect();
-        assert!(!pts.is_empty(), "component {comp} has no points — fixture labels may be corrupt");
+        assert!(
+            !pts.is_empty(),
+            "component {comp} has no points — fixture labels may be corrupt"
+        );
         let cx = pts.iter().map(|&(x, _)| x).sum::<f64>() / pts.len() as f64;
         let cy = pts.iter().map(|&(_, y)| y).sum::<f64>() / pts.len() as f64;
         centroids.push((cx, cy));
@@ -307,7 +314,8 @@ fn test_e2e_performance_blobs_5000() {
     let path = common::fixture_path("blobs_5000", "step5a_pruned.npz");
     let graph = common::load_sparse_csr_f32_u32(&path);
     let start = std::time::Instant::now();
-    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default()).expect("blobs_5000 spectral_init failed");
+    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
+        .expect("blobs_5000 spectral_init failed");
     let elapsed = start.elapsed();
     assert_eq!(result.shape()[1], 2);
     let budget_secs: u64 = std::env::var("CI_PERF_BUDGET_SECS")
