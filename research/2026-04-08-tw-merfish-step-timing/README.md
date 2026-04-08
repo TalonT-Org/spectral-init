@@ -4,7 +4,7 @@
 
 ## Executive Summary
 
-This experiment profiled the per-step timing breakdown of trustworthiness computation on real MERFISH embeddings (d=50) and compared it against a synthetic Gaussian baseline (d=20). The goal was to determine whether X-space distance computation dominates runtime on high-dimensional real-world data, and to quantify the split for prioritizing optimization work.
+This experiment profiled the per-step timing breakdown of trustworthiness computation on real MERFISH embeddings (d=50) and compared it against a synthetic Gaussian baseline (d=10). The goal was to determine whether X-space distance computation dominates runtime on high-dimensional real-world data, and to quantify the split for prioritizing optimization work.
 
 The results are conclusive: **X-space distance computation (`x_dist`) consumes 58.9% of total trustworthiness time on MERFISH 10K**, compared to just 33.5% on the Gaussian baseline. Combined X-space operations (`x_dist` + `x_sort`) account for 68.3% of MERFISH runtime (95% CI: [67.4%, 69.1%]). This profile is stable across scales (MERFISH 50K shows 67.2%) and consistent with O(n^2) scaling. These findings establish a clear optimization target: any performance work on trustworthiness should prioritize X-space distance kernels for high-dimensional inputs.
 
@@ -18,7 +18,7 @@ The computation has four major steps:
 3. **y_dist** — Pairwise distance computation in the 2D embedding space
 4. **penalty** — Computing the trustworthiness penalty from rank differences
 
-Prior profiling on synthetic Gaussian data (d=20) showed X-space operations at ~56% of runtime. However, real MERFISH data uses d=50 features, and the cost of `x_dist` scales linearly with dimensionality. This experiment answers: **What fraction of trustworthiness runtime does X-space distance computation consume on real MERFISH data, and how does the step profile shift compared to synthetic baselines?**
+Prior profiling on synthetic Gaussian data (d=10) showed X-space operations at ~56% of runtime. However, real MERFISH data uses d=50 features, and the cost of `x_dist` scales linearly with dimensionality. This experiment answers: **What fraction of trustworthiness runtime does X-space distance computation consume on real MERFISH data, and how does the step profile shift compared to synthetic baselines?**
 
 ## Methodology
 
@@ -26,9 +26,9 @@ Prior profiling on synthetic Gaussian data (d=20) showed X-space operations at ~
 
 **Hypothesis:** X-space distance computation (`x_dist`) is the dominant bottleneck for trustworthiness on high-dimensional MERFISH data, consuming a significantly larger fraction of runtime than observed on low-dimensional Gaussian data.
 
-**Independent variable:** Dataset (Gaussian d=20 vs MERFISH d=50) and scale (n=10K vs n=50K).
+**Independent variable:** Dataset (Gaussian d=10 vs MERFISH d=50) and scale (n=10K vs n=50K).
 
-**Dependent variables:** Per-step wall-clock time (ms), step fraction (%), and `x_space_pct` (combined x_dist + x_sort fraction with 95% CI).
+**Dependent variables:** Per-step thread-aggregate compute time (ms), step fraction (%), and `x_space_pct` (combined x_dist + x_sort fraction with 95% CI).
 
 **Controls:** Fixed k=15, iters=5, warmup=2 across all runs. Single-machine execution, sequential profiling to avoid interference.
 
@@ -139,7 +139,7 @@ All accuracy metrics passed. Parity assessment was not run because this experime
 
 ## Observations
 
-1. **x_dist dominance on MERFISH**: `x_dist` consumes 58.9% of total time on MERFISH 10K vs 33.5% on Gaussian 10K. This 1.76x increase in fractional cost is driven by the dimensionality difference (d=50 vs d=20 for X, but note Gaussian actually uses d=10 for X).
+1. **x_dist dominance on MERFISH**: `x_dist` consumes 58.9% of total time on MERFISH 10K vs 33.5% on Gaussian 10K. This 1.76x increase in fractional cost is driven by the dimensionality difference (d=50 vs d=10 for X).
 
 2. **x_space_pct is dramatically higher for MERFISH**: 68.3% [67.4, 69.1] for MERFISH 10K vs 58.1% [57.7, 58.6] for Gaussian 10K. The confidence intervals do not overlap, confirming this is a statistically significant difference.
 
