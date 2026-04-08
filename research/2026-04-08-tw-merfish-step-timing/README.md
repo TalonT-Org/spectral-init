@@ -62,8 +62,8 @@ Prior profiling on synthetic Gaussian data (d=10) showed X-space operations at ~
 2. Verified pre-existing MERFISH fixtures from the `2026-04-05-tw-perf-rerun-clean` experiment: `merfish_n10k` (10000, 50) and `merfish_n50k` (50000, 50).
 3. Built `tw_profiler` with `--features cli,profiling` to enable `[timing:*]` stderr instrumentation.
 4. Executed a dry run (iters=2, warmup=1, Gaussian only) to validate JSON output format and measurement stability (CV=2.5%).
-5. Ran the full profiling sweep sequentially: Gaussian 10K, MERFISH 10K, MERFISH 50K, each with k=15, iters=5, warmup=2.
-6. Analyzed results with `analyze_results.py`: computed per-step means, standard deviations, fractions, and per-iteration `x_space_pct` with 95% CI via `scipy.stats.t.interval`.
+5. Ran the full profiling sweep sequentially: Gaussian 10K, MERFISH 10K, MERFISH 50K, each with k=15, iters=5, warmup=2. Each dataset was profiled in a single process invocation; the 5 post-warmup iterations share process state (thread pool, TLB, thermal regime) and are not independent replicate invocations.
+6. Analyzed results with `analyze_results.py`: computed per-step means, standard deviations, fractions, and per-iteration `x_space_pct` with 95% CI via `scipy.stats.t.interval`. Note: CIs reflect within-run iteration variance only, not between-run variance across independent process invocations.
 7. Compared against historical reference (`profiler_flat_simd_n10000.json` from the y-heap-bottleneck-optimization experiment), mapping the old `y_heap` key to `y_dist`.
 
 ## Results
@@ -157,7 +157,7 @@ All accuracy metrics passed. Parity assessment was not run because this experime
 
 The data confirms the hypothesis with high confidence. The key finding is quantitative: **on MERFISH data (d=50), X-space distance computation alone consumes 58.9% of trustworthiness runtime**, and combined X-space operations hit 68.3%.
 
-The dimensionality effect is the primary driver. Distance computation in d dimensions requires d multiplications and d-1 additions per point pair. Going from d=10 (Gaussian X) to d=50 (MERFISH X) should increase `x_dist` cost by roughly 5x. The actual ratio is 2127.6/432.3 = 4.9x, consistent with this expectation given that SIMD vectorization amortizes some per-dimension overhead.
+The dimensionality difference is consistent with being the primary driver, though data geometry and Y-space differences are confounded in this comparison (the two datasets differ simultaneously in d_x, data distribution, and Y-space geometry). Distance computation in d dimensions requires d multiplications and d-1 additions per point pair. Going from d=10 (Gaussian X) to d=50 (MERFISH X) should increase `x_dist` cost by roughly 5x. The actual ratio is 2127.6/432.3 = 4.9x, consistent with this expectation given that SIMD vectorization amortizes some per-dimension overhead. A matched-d_x=50 Gaussian control would be needed to isolate dimensionality from geometry effects.
 
 The `x_sort` step provides an instructive contrast: its cost (336.3 ms for MERFISH 10K vs 318.8 ms for Gaussian 10K) is nearly identical because sorting operates on scalar distances, not high-dimensional vectors. This dimensionality invariance confirms that `x_sort` overhead is purely n-dependent.
 
