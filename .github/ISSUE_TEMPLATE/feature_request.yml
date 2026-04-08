@@ -1,0 +1,32 @@
+name: Feature Request
+description: Propose a new capability or API change
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What feature do you want and why?
+    validations:
+      required: true
+
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Use Case
+      description: Describe the concrete scenario where this is needed
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed_api
+    attributes:
+      label: Proposed API (if applicable)
+      description: Sketch of the public interface — function signatures, config fields, etc.
+      render: rust
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Other approaches you evaluated and why you prefer this one
