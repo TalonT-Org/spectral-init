@@ -75,7 +75,7 @@
 //! # User Guide
 //!
 //! For step-by-step integration instructions with `umap-rs` and standalone usage,
-//! see the [user guide](../docs/user-guide.md).
+//! see the [user guide](https://github.com/TalonT-Org/spectral-init/blob/main/docs/user-guide.md).
 #![warn(missing_docs)]
 
 mod components;
