@@ -151,7 +151,7 @@ All accuracy metrics passed. Parity assessment was not run because this experime
 
 5. **Historical consistency**: The historical `flat_simd` reference (Gaussian n=10K, d=50) shows `x_space_pct` = 56.2%, consistent with the current Gaussian result (58.1%). The ~2pp increase is within normal variation given different runs on potentially different system states.
 
-6. **O(n^2) scaling confirmed**: MERFISH 50K total (91.4s) is 25.3x MERFISH 10K (3.6s), close to the expected (50000/10000)^2 = 25x factor for pairwise distance computation.
+6. **O(n^2) scaling confirmed**: MERFISH 50K thread-aggregate total (91.4s thread-agg) is 25.3x MERFISH 10K (3.6s thread-agg), close to the expected (50000/10000)^2 = 25x factor for pairwise distance computation.
 
 7. **y_dist is stable at ~26%**: Across all datasets, `y_dist` holds steady at 25-27% of total time. This step operates on 2D data regardless of input dimensionality, so its absolute time grows only with n^2 and its fraction remains roughly constant.
 
@@ -185,13 +185,13 @@ This represents a 10pp increase over the Gaussian baseline (58.1%), consistent w
 
 1. **Prioritize `x_dist` optimization**: SIMD-optimized high-dimensional distance kernels (AVX-512 for d=50), cache-aware tiling, or blocked distance computation could yield significant speedups. A 2x improvement in `x_dist` alone would reduce total MERFISH trustworthiness time by ~30%.
 
-2. **Consider approximate methods for large n**: At n=50K, trustworthiness takes 91.4s. For interactive use cases, approximate k-NN approaches (e.g., VP-trees, ball trees, or random projection) could trade accuracy for speed, though this would need careful validation against exact trustworthiness.
+2. **Consider approximate methods for large n**: At n=50K, trustworthiness takes 91.4s thread-aggregate compute time. For interactive use cases, approximate k-NN approaches (e.g., VP-trees, ball trees, or random projection) could trade accuracy for speed, though this would need careful validation against exact trustworthiness.
 
 3. **`y_dist` is a secondary target**: At ~26% of runtime, `y_dist` is already optimized for 2D via AVX2 specialization. Further gains would require algorithmic changes (e.g., spatial indexing for 2D k-NN).
 
 4. **Do not optimize `x_sort` or `penalty`**: Combined they account for ~15% on MERFISH. The effort-to-impact ratio is unfavorable compared to `x_dist`.
 
-5. **Use MERFISH 10K as the standard profiling benchmark**: Its step profile matches MERFISH 50K, it runs in 3.6s (fast iteration), and its CV of 5.0% is adequate. MERFISH 50K (91.4s per iteration) should be reserved for final validation of optimizations.
+5. **Use MERFISH 10K as the standard profiling benchmark**: Its step profile matches MERFISH 50K, it runs in 3.6s thread-aggregate (fast iteration), and its CV of 5.0% is adequate. MERFISH 50K (91.4s thread-aggregate per iteration) should be reserved for final validation of optimizations.
 
 ## Appendix: Experiment Scripts
 
