@@ -344,8 +344,14 @@ let init_coords = spectral_init(
 )?;
 ```
 
-When `data` is `None` and the graph is disconnected, small components that cannot
-support spectral init are initialized with random coordinates.
+When `data` is `None` and the graph is disconnected:
+- Components with fewer than `2 × n_components` nodes are too small for spectral
+  initialization and are placed at a **deterministic** orthogonal meta-embedding
+  position. Placement depends only on component index and `n_components` — output
+  is fully reproducible across runs regardless of the `seed` parameter.
+- If the number of disconnected components exceeds `2 × n_components`, `spectral_init`
+  returns `InvalidGraph` (it needs centroid data to place components relative to each
+  other). In this case pass `Some(data.view())`.
 
 ---
 
