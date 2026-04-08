@@ -171,7 +171,7 @@ The `penalty` step at ~6% on MERFISH is not worth optimizing in isolation. Even 
 
 - **X-space distance is the clear bottleneck for high-dimensional data**: 58.9% of runtime on MERFISH (d=50), with a narrow 95% CI. This is the single highest-leverage optimization target.
 - **Step profiles are dimension-driven, not scale-driven**: MERFISH 10K and 50K produce nearly identical step fractions, meaning profiling at 10K is a reliable proxy for larger datasets.
-- **The measurement apparatus is reliable**: CV ranges from 0.7% to 5.0% across datasets with only 5 iterations and 2 warmup runs. The `tw_profiler --features profiling` instrumentation introduces negligible overhead.
+- **The measurement apparatus is reliable**: CV ranges from 0.7% to 5.0% across datasets with only 5 iterations and 2 warmup runs. The `tw_profiler --features profiling` instrumentation is expected to have low overhead (the timing hooks are lightweight `Instant::now()` calls around coarse-grained steps), though no no-instrumentation baseline was run to quantify this directly.
 - **Historical comparison is valid**: Current Gaussian results match the prior `flat_simd` reference within 2pp, confirming no regression in the measurement pipeline.
 - **Dry-run validation was effective**: The iters=2/warmup=1 dry run caught measurement stability issues early (CV=2.5% was well below the 15% threshold), confirming that iters=5 was sufficient for the full run.
 
