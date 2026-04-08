@@ -92,8 +92,12 @@ use spectral_init::{spectral_init, SpectralInitConfig};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Step 1: Load or prepare your feature data.
     // Shape: [n_samples, n_features], dtype f32.
-    // (Replace this with your actual data loading.)
-    let data: ndarray::Array2<f32> = ndarray::Array2::zeros((100, 10));
+    // (Replace this with your actual data loading. The synthetic data below
+    // creates 100 points with distinct coordinates — zero-filled arrays would
+    // produce a degenerate graph and cause spectral_init to error.)
+    let data: ndarray::Array2<f32> = ndarray::Array2::from_shape_fn((100, 10), |(i, j)| {
+        ((i as f32 * 0.1 + j as f32) * std::f32::consts::PI / 5.0).sin()
+    });
 
     // Step 2: Build the fuzzy k-NN graph with umap-rs.
     // umap-rs handles nearest-neighbour search and fuzzy membership internally.
