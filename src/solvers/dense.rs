@@ -1,3 +1,15 @@
+//! Dense eigendecomposition via faer (Level 0 of the solver escalation chain).
+//!
+//! Used when `n < 2000`. Converts the sparse Laplacian to a dense `faer::Mat<f64>`,
+//! calls `self_adjoint_eigen`, and returns the `k` smallest eigenpairs sorted ascending.
+//!
+//! **Chain position:** Level 0 — exact, O(n³). Skipped for `n ≥ 2000`.
+//!
+//! **Failure mode:** Returns [`SpectralError::ConvergenceFailure`] if faer's
+//! self-adjoint EVD fails (practically impossible for a valid PSD matrix).
+//! The residual quality gate (`< 1e-6`) then determines whether to accept the result
+//! or escalate to Level 1.
+
 use super::EigenResult;
 use crate::SpectralError;
 use faer::{Mat, Side};

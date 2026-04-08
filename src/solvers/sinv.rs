@@ -1,3 +1,19 @@
+//! Shift-and-invert LOBPCG eigensolver (Level 2 of the solver escalation chain).
+//!
+//! Applies a diagonal shift M = L + εI ([`SINV_SHIFT`] = 1e-4) to make the matrix
+//! strictly positive definite, factorizes M via faer sparse Cholesky, and uses the
+//! resulting inverse as a preconditioner for LOBPCG. The shift-and-invert strategy
+//! amplifies the eigengap near λ = 0, yielding fast convergence on graphs where
+//! plain LOBPCG (Level 1) struggles.
+//!
+//! **Chain position:** Level 2 — engaged when Level 1 (plain LOBPCG) produces
+//! residuals above 2e-5. Quality threshold: 1e-6.
+//!
+//! **Failure mode:** Returns `None` if the sparse Cholesky factorization fails
+//! (e.g., numerically degenerate edges prevent M from being SPD despite the shift).
+//! In that case, execution falls through silently to Level 3 (LOBPCG + ε·I
+//! regularization).
+
 // linfa-linalg 0.2 uses ndarray 0.16, while this crate uses ndarray 0.17.
 // We alias ndarray 0.16 as `nd16` for use at the linfa-linalg boundary only.
 extern crate ndarray16;

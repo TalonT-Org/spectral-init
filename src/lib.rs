@@ -1,7 +1,76 @@
 //! Spectral initialization for UMAP embeddings.
 //!
-//! Computes Laplacian eigenvectors of a fuzzy k-NN graph to provide
-//! globally-aware starting coordinates for SGD optimization.
+//! Computes the Laplacian eigenvectors of a fuzzy k-NN graph to provide
+//! globally-aware starting coordinates for the SGD optimization phase of UMAP.
+//! This is the primary reason Python UMAP produces superior embeddings compared to
+//! random or PCA initialization: eigenvectors of the graph Laplacian encode the
+//! global manifold structure before a single gradient step is taken.
+//!
+//! # Quick Start
+//!
+//! ```
+//! use sprs::CsMatI;
+//! use spectral_init::{spectral_init, SpectralInitConfig};
+//!
+//! // 4-node path graph: 0 – 1 – 2 – 3 (symmetric, f32 weights)
+//! let graph = CsMatI::<f32, u32, usize>::new(
+//!     (4, 4),
+//!     vec![0usize, 1, 3, 5, 6],
+//!     vec![1u32, 0u32, 2u32, 1u32, 3u32, 2u32],
+//!     vec![1.0f32; 6],
+//! );
+//! let coords = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
+//!     .expect("spectral_init failed");
+//! assert_eq!(coords.shape(), &[4, 2]);
+//! for &v in coords.iter() {
+//!     assert!(v.is_finite());
+//! }
+//! ```
+//!
+//! # Algorithm
+//!
+//! Builds the symmetric normalized Laplacian
+//!
+//! $$L = I - D^{-1/2} W D^{-1/2}$$
+//!
+//! where $W$ is the fuzzy k-NN adjacency matrix and $D$ is the degree matrix.
+//! The $k$ smallest non-trivial eigenvectors of $L$ (skipping the all-ones trivial
+//! eigenvector at $\lambda = 0$) form the initial coordinate matrix. Coordinates are
+//! then scaled to $[-10, 10]$ and perturbed with $\mathcal{N}(0, 10^{-4})$ noise to
+//! break symmetry.
+//!
+//! The eigensolver uses a 6-level escalation chain (dense EVD → LOBPCG →
+//! shift-invert LOBPCG → LOBPCG+regularization → randomized SVD → forced dense EVD)
+//! to guarantee convergence on any valid graph. See [`solvers`] for details.
+//!
+//! # Compute Mode
+//!
+//! [`ComputeMode::PythonCompat`] (default) matches Python UMAP's degree accumulation
+//! order and solver paths exactly, enabling bit-for-bit validation against reference
+//! outputs. [`ComputeMode::RustNative`] routes large-graph LOBPCG levels through an
+//! AVX2+FMA SIMD matrix-vector kernel (~1 ULP divergence from Python), offering
+//! improved throughput on x86_64 hardware with AVX2 support.
+//!
+//! # Feature Flags
+//!
+//! | Flag | Purpose |
+//! |------|---------|
+//! | `testing` | Exposes internal solver functions for integration tests. Not part of the stable public API. |
+//! | `cli` | Builds the `trustworthiness` and `tw_profiler` binaries for embedding quality evaluation. |
+//! | `profiling` | Enables timing instrumentation in the solver escalation chain. |
+//!
+//! # Integration with umap-rs
+//!
+//! Pass the graph returned by `umap_rs::Umap::graph()` directly — its type
+//! `CsMatI<f32, u32, usize>` matches this crate's input type exactly.
+//!
+//! # Error Handling
+//!
+//! All errors are returned as [`SpectralError`] variants. The most common are
+//! [`SpectralError::InvalidGraph`] (malformed input) and
+//! [`SpectralError::TooFewNodes`] (embedding dimensionality exceeds graph size).
+//! [`SpectralError::ConvergenceFailure`] should not occur in practice; if it does,
+//! it indicates a degenerate graph or a bug — please file an issue.
 #![warn(missing_docs)]
 
 mod components;
@@ -147,14 +216,20 @@ use sprs::CsMatI;
 pub enum SpectralError {
     /// The eigensolver escalation chain exhausted all levels without converging.
     /// This should never occur in practice; if seen, it indicates a degenerate graph.
+    /// This indicates a degenerate graph or a bug in the solver chain. If encountered
+    /// in production, please file an issue at the repository.
     #[error("eigensolver failed to converge after full escalation chain")]
     ConvergenceFailure,
 
     /// The graph adjacency matrix is malformed (non-square, negative weights, NaN/Inf).
+    /// Verify that the adjacency matrix is square, has non-negative finite weights,
+    /// and that `n > 0` and `n_components > 0`.
     #[error("invalid graph: {0}")]
     InvalidGraph(String),
 
     /// The graph has fewer nodes than the requested embedding dimensionality.
+    /// Reduce `n_components` or provide a graph with more nodes than the requested
+    /// embedding dimensionality.
     #[error("graph has too few nodes ({n}) for {dims}-dimensional embedding")]
     TooFewNodes {
         /// Number of nodes in the graph.
@@ -166,18 +241,38 @@ pub enum SpectralError {
 
 /// Compute spectral initialization coordinates for a UMAP fuzzy k-NN graph.
 ///
-/// # Arguments
-/// - `graph`: Symmetric sparse adjacency matrix (CSR format, f32 weights, u32 column indices).
-/// - `n_components`: Number of embedding dimensions.
-/// - `seed`: Random seed for reproducible noise and solver initialization.
-/// - `data`: Optional raw input data `(n_samples, n_features)` in f32. Required only when the
-///   graph is disconnected and the number of connected components exceeds `2 * n_components`
-///   (needed for the spectral meta-embedding of component centroids).
-/// - `config`: Pipeline configuration. Use `SpectralInitConfig::default()` for Python-compatible
-///   behavior.
+/// Builds the symmetric normalized Laplacian of `graph`, computes its `n_components`
+/// smallest non-trivial eigenvectors via an automatic solver escalation chain, scales
+/// coordinates to `[-10, 10]`, and adds small Gaussian noise.
 ///
-/// # Returns
-/// An `(n_samples, n_components)` array of f32 initial coordinates.
+/// # Errors
+///
+/// - [`SpectralError::InvalidGraph`] — `n == 0`, `n_components == 0`, or the graph
+///   adjacency matrix is malformed (non-square, negative weights, NaN/Inf values).
+///   **Fix:** validate your adjacency matrix before calling this function.
+/// - [`SpectralError::TooFewNodes`] — the graph has fewer nodes than `n_components`.
+///   **Fix:** reduce `n_components` or use a larger dataset.
+/// - [`SpectralError::ConvergenceFailure`] — the full 6-level solver escalation chain
+///   exhausted without converging. This should not occur on any valid graph.
+///   **Fix:** file a bug at <https://github.com/TalonT-Org/spectral-init/issues>.
+///
+/// # Examples
+///
+/// ```
+/// use sprs::CsMatI;
+/// use spectral_init::{spectral_init, SpectralInitConfig};
+///
+/// // 4-node path graph: 0 – 1 – 2 – 3
+/// let graph = CsMatI::<f32, u32, usize>::new(
+///     (4, 4),
+///     vec![0usize, 1, 3, 5, 6],
+///     vec![1u32, 0u32, 2u32, 1u32, 3u32, 2u32],
+///     vec![1.0f32; 6],
+/// );
+/// let coords = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())?;
+/// assert_eq!(coords.shape(), &[4, 2]);
+/// # Ok::<(), spectral_init::SpectralError>(())
+/// ```
 pub fn spectral_init(
     graph: &CsMatI<f32, u32, usize>,
     n_components: usize,

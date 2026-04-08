@@ -1,3 +1,19 @@
+//! LOBPCG iterative eigensolver (Levels 1 and 3 of the solver escalation chain).
+//!
+//! Wraps `linfa_linalg::lobpcg` with an ndarray 0.16 ↔ 0.17 bridging layer.
+//! Level 1 runs without regularization; Level 3 applies an ε·I diagonal shift
+//! ([`REGULARIZATION_EPS`]) to widen the eigengap and improve convergence on
+//! near-degenerate graphs.
+//!
+//! **Chain positions:**
+//! - Level 1 — first iterative attempt for `n ≥ 2000`. Quality threshold: 2e-5.
+//! - Level 3 — retry with `ε·I` regularization after Level 2 (shift-invert) fails.
+//!   Quality threshold: 2e-5.
+//!
+//! **Failure mode:** Returns `None` if linfa-linalg's LOBPCG does not converge
+//! within its iteration budget. The residual quality gate then determines whether
+//! to accept a converged result or escalate.
+
 // linfa-linalg 0.2 uses ndarray 0.16, while this crate uses ndarray 0.17.
 // We alias ndarray 0.16 as `nd16` for use at the linfa-linalg boundary only.
 // All internal types and return values use ndarray 0.17 (the `ndarray` crate).

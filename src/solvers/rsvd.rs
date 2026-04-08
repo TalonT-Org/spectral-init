@@ -1,3 +1,17 @@
+//! Randomized SVD eigensolver via the 2I−L trick (Level 4 of the solver escalation chain).
+//!
+//! The symmetric normalized Laplacian has eigenvalues in [0, 2]. The matrix
+//! M = 2I − L reverses their order while keeping eigenvalues in [0, 2]. Since M is
+//! symmetric PSD, its singular values equal its eigenvalues, so a truncated randomized
+//! SVD of M directly yields the `k` smallest eigenpairs of L.
+//!
+//! **Chain position:** Level 4 — approximate but highly robust fallback for large `n`
+//! after Levels 1–3 fail. Quality threshold: 1e-2 (looser than other levels).
+//!
+//! **Failure mode:** `rsvd_solve` is infallible (returns directly). The looser
+//! residual threshold (1e-2) means Level 4 rarely fails its quality gate. If it does,
+//! Level 5 (forced dense EVD) is the final fallback.
+
 use super::EigenResult;
 use faer::linalg::solvers::{Qr, SelfAdjointEigen};
 use faer::{Mat as FaerMat, Side};
