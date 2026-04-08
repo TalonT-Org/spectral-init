@@ -76,7 +76,7 @@ temp/                     # Temporary/working files (gitignored)
   * `sprs` — Sparse matrices (CSR/CSC/COO), matches `umap-rs` internal format
   * `ndarray` — Dense array operations
   * `faer` — Dense linear algebra (eigendecomposition, QR)
-  * `ndarray-linalg` — LOBPCG eigensolver
+  * `linfa-linalg` — pure-Rust LOBPCG eigensolver (no LAPACK dependency)
   * `rand` — RNG for reproducible initialization
 
 ## **7. Reference**
