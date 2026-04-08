@@ -177,7 +177,7 @@ The `penalty` step at ~6% on MERFISH is not worth optimizing in isolation. Even 
 
 The research question is answered definitively: **X-space distance computation (`x_dist`) is the dominant bottleneck for trustworthiness on MERFISH data**, consuming 58.9% of runtime at n=10K and 58.4% at n=50K. Combined X-space operations account for 68.3% [67.4%, 69.1%] of total time.
 
-This represents a 10pp increase over the Gaussian baseline (58.1%), driven entirely by the higher dimensionality of MERFISH features (d=50 vs d=10). The profile is stable across scales and reproducible with low variance.
+This represents a 10pp increase over the Gaussian baseline (58.1%), consistent with the higher dimensionality of MERFISH features (d=50 vs d=10), though dimensionality and data geometry are confounded in this comparison. The profile is stable across scales and reproducible with low within-run variance.
 
 ## Recommendations
 
