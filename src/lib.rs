@@ -1,4 +1,7 @@
-// spectral-init: Spectral initialization for UMAP embeddings
+//! Spectral initialization for UMAP embeddings.
+//!
+//! Computes Laplacian eigenvectors of a fuzzy k-NN graph to provide
+//! globally-aware starting coordinates for SGD optimization.
 #![warn(missing_docs)]
 
 mod components;
@@ -153,7 +156,12 @@ pub enum SpectralError {
 
     /// The graph has fewer nodes than the requested embedding dimensionality.
     #[error("graph has too few nodes ({n}) for {dims}-dimensional embedding")]
-    TooFewNodes { n: usize, dims: usize },
+    TooFewNodes {
+        /// Number of nodes in the graph.
+        n: usize,
+        /// Requested number of embedding dimensions.
+        dims: usize,
+    },
 }
 
 /// Compute spectral initialization coordinates for a UMAP fuzzy k-NN graph.
