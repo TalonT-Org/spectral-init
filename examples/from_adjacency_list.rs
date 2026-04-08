@@ -5,7 +5,7 @@
 //!
 //! Run with: cargo run --example from_adjacency_list
 
-use spectral_init::{spectral_init, SpectralInitConfig};
+use spectral_init::{SpectralInitConfig, spectral_init};
 use sprs::{CsMatI, TriMatI};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -36,7 +36,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = SpectralInitConfig::default();
     let embedding = spectral_init(&graph, 2, 42, None, config)?;
 
-    println!("Nodes: {}, Embedding dims: {}", embedding.nrows(), embedding.ncols());
+    println!(
+        "Nodes: {}, Embedding dims: {}",
+        embedding.nrows(),
+        embedding.ncols()
+    );
     println!("Coordinates:");
     for (i, row) in embedding.outer_iter().enumerate() {
         println!("  node {i}: [{:.4}, {:.4}]", row[0], row[1]);

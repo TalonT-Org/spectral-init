@@ -5,7 +5,7 @@
 //!
 //! Run with: cargo run --example basic
 
-use spectral_init::{spectral_init, SpectralInitConfig};
+use spectral_init::{SpectralInitConfig, spectral_init};
 use sprs::{CsMatI, TriMatI};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -28,7 +28,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Embedding shape: {:?}", embedding.shape());
     println!("First few coordinates:");
     for i in 0..embedding.nrows().min(5) {
-        println!("  node {i}: [{:.4}, {:.4}]", embedding[[i, 0]], embedding[[i, 1]]);
+        println!(
+            "  node {i}: [{:.4}, {:.4}]",
+            embedding[[i, 0]],
+            embedding[[i, 1]]
+        );
     }
 
     assert_eq!(embedding.shape(), &[n, 2]);

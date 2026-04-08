@@ -5,7 +5,7 @@
 //!
 //! Run with: cargo run --example compute_modes
 
-use spectral_init::{spectral_init, ComputeMode, SpectralInitConfig};
+use spectral_init::{ComputeMode, SpectralInitConfig, spectral_init};
 use sprs::{CsMatI, TriMatI};
 
 fn make_ring(n: usize) -> CsMatI<f32, u32, usize> {
