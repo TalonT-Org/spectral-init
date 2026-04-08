@@ -208,3 +208,15 @@ required-features = ["testing"]
 name = "trustworthiness_bench"
 harness = false
 required-features = ["testing"]
+
+[[example]]
+name = "basic"
+path = "examples/basic.rs"
+
+[[example]]
+name = "compute_modes"
+path = "examples/compute_modes.rs"
+
+[[example]]
+name = "from_adjacency_list"
+path = "examples/from_adjacency_list.rs"
