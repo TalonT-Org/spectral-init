@@ -112,6 +112,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // - seed: RNG seed for reproducibility
     // - data: None (only needed if graph has disconnected components)
     // - config: SpectralInitConfig::default() uses PythonCompat mode
+    // `graph` is already `&CsMatI<f32, u32, usize>` (the return type of `umap.graph()`),
+    // so no additional `&` is needed here. In Path B below, an owned `CsMatI` is built
+    // from scratch, which is why that example passes `&graph`.
     let init_coords = spectral_init(graph, 2, 42, None, SpectralInitConfig::default())?;
 
     // init_coords: Array2<f32> with shape [n_samples, 2]
@@ -211,7 +214,7 @@ let graph: CsMatI<f32, u32, usize> = tri.to_csr();
 > **Weight requirements:**
 > - Non-negative (`w >= 0.0`). Negative weights cause `InvalidGraph`.
 > - Finite (no `f32::NAN`, `f32::INFINITY`). NaN/Inf cause `InvalidGraph`.
-> - Symmetric: `W[i,j] == W[j,i]`. The API does not enforce this; asymmetric graphs produce incorrect eigenvectors silently.
+> - **Symmetric: `W[i,j] == W[j,i]`.** The crate does **not** validate symmetry. Passing an asymmetric matrix will silently produce mathematically incorrect eigenvectors — no error or warning is raised. Verifying symmetry before calling `spectral_init` is entirely the caller's responsibility.
 > - A weight of 0.0 is equivalent to no edge. Diagonal self-loops are ignored.
 
 ### Full Worked Example (Standalone Brute-Force kNN)
