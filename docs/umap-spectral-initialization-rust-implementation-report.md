@@ -1743,7 +1743,7 @@ Full specification: `temp/umap-visual-evaluation-prompt.md`
 - [sprs](https://crates.io/crates/sprs) — Sparse matrix library
 - [linfa-linalg](https://github.com/rust-ml/linfa) — pure-Rust LOBPCG implementation (no LAPACK dependency)
 - [faer](https://docs.rs/faer/latest/faer/) — Dense linear algebra
-- [annembed](https://lib.rs/crates/annembed) — UMAP-like with randomized SVD
+- [annembed](https://lib.rs/crates/annembed) — UMAP-like with randomized SVD (prior design consideration; not a runtime dependency of this crate — see §14.8)
 - [linfa](https://github.com/rust-ml/linfa) — ML framework with spectral methods
 
 ### Related Implementations
