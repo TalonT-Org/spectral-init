@@ -8,7 +8,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-blue)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0.html)
 
-[Docs](https://docs.rs/spectral-init) · [Crate](https://crates.io/crates/spectral-init)
+[Docs](https://docs.rs/spectral-init) · [Crate](https://crates.io/crates/spectral-init) · [User Guide](docs/user-guide.md)
 
 ## What is this?
 
