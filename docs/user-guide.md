@@ -249,17 +249,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .filter(|&j| j != i)
             .map(|j| (j, euclidean_sq(&points[i], &points[j])))
             .collect();
-        dists.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        dists.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
-        // Add edges to the k nearest neighbours.
+        // Add only directed k-NN edges; reverse edges are added by symmetrization
+        // below. Adding both directions here would create duplicate triplets for
+        // mutual kNN pairs, doubling their weight when sprs sums duplicates.
         // Weight = 1.0 / (1.0 + distance) converts distance to similarity.
         for &(j, dist) in dists.iter().take(k) {
             let w = 1.0 / (1.0 + dist.sqrt());
             tri.add_triplet(i, j, w);
-            tri.add_triplet(j, i, w);
         }
     }
-    let graph: CsMatI<f32, u32, usize> = tri.to_csr();
+    // Symmetrize: W_sym = W + W^T. Edges present in only one direction are
+    // mirrored; mutual kNN edges accumulate to 2w, reflecting stronger affinity.
+    let directed: CsMatI<f32, u32, usize> = tri.to_csr();
+    let graph: CsMatI<f32, u32, usize> = &directed + &directed.transpose_view();
 
     // Compute spectral initialization.
     let init_coords = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())?;
@@ -271,6 +275,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     assert_eq!(init_coords.shape(), &[n, 2]);
     assert!(init_coords.iter().all(|&v| v.is_finite()));
+
+    // Verify that the two clusters (points 0–9 vs 10–19) are separated in the
+    // first embedding dimension. The clusters are 5 units apart in input space,
+    // so their mean coordinates should differ by at least 1.0.
+    let mean_a: f32 = (0..10).map(|i| init_coords[[i, 0]]).sum::<f32>() / 10.0;
+    let mean_b: f32 = (10..20).map(|i| init_coords[[i, 0]]).sum::<f32>() / 10.0;
+    assert!(
+        (mean_a - mean_b).abs() > 1.0,
+        "clusters should be separated: mean_a={mean_a:.4}, mean_b={mean_b:.4}",
+    );
     Ok(())
 }
 ```
