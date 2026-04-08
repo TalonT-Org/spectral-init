@@ -5,18 +5,26 @@
 ## Table of Contents
 
 1. [Prerequisites](#prerequisites)
-2. [Installation](#installation)
-3. [Path A: Integration with umap-rs](#path-a-integration-with-umap-rs)
-4. [Path B: Standalone Usage](#path-b-standalone-usage)
-5. [Configuration](#configuration)
-6. [Troubleshooting](#troubleshooting)
-7. [Performance Tips](#performance-tips)
+2. [Background](#background)
+3. [Installation](#installation)
+4. [Path A: Integration with umap-rs](#path-a-integration-with-umap-rs)
+5. [Path B: Standalone Usage](#path-b-standalone-usage)
+6. [Configuration](#configuration)
+7. [Troubleshooting](#troubleshooting)
+8. [Performance Tips](#performance-tips)
 
 ---
 
 ## Prerequisites
 
 **Rust 1.85 or later (MSRV).** Install Rust via [rustup](https://www.rust-lang.org/tools/install).
+
+**No LAPACK/BLAS required** — this crate is pure Rust. All linear algebra is
+handled by `linfa-linalg` (LOBPCG) and `faer` (dense EVD).
+
+---
+
+## Background
 
 **What is spectral initialization?**
 Spectral initialization uses the eigenvectors of the graph Laplacian to produce a
@@ -30,9 +38,6 @@ and Projection for Dimension Reduction" (2018)](https://arxiv.org/abs/1802.03426
 A sparse symmetric matrix `W` where entry `W[i,j]` represents the strength of
 connectivity between data points `i` and `j`. Higher values mean more similar.
 For UMAP, values are fuzzy membership weights in `[0, 1]`.
-
-**No LAPACK/BLAS required** — this crate is pure Rust. All linear algebra is
-handled by `linfa-linalg` (LOBPCG) and `faer` (dense EVD).
 
 ---
 
