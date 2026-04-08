@@ -76,7 +76,7 @@ Prior profiling on synthetic Gaussian data (d=10) showed X-space operations at ~
 | x_sort | 318.8 +/- 10.3 (24.7%) | 336.3 +/- 28.7 (9.3%) | 8029.0 +/- 275.1 (8.8%) | 457.8 +/- 37.4 (24.2%) |
 | y_dist | 349.6 +/- 6.7 (27.1%) | 918.1 +/- 73.8 (25.4%) | 24251.9 +/- 766.6 (26.5%) | 524.3 +/- 62.2 (27.7%) |
 | penalty | 191.5 +/- 3.5 (14.8%) | 228.3 +/- 16.2 (6.3%) | 5740.5 +/- 142.2 (6.3%) | 307.5 +/- 36.1 (16.2%) |
-| **Total** | 1292.2 +/- 21.7 ms | 3610.4 +/- 234.4 ms | 91367.6 +/- 2684.5 ms | 1895.3 +/- 166.3 ms |
+| **Total (thread-agg)** | 1292.2 +/- 21.7 ms | 3610.4 +/- 234.4 ms | 91367.6 +/- 2684.5 ms | 1895.3 +/- 166.3 ms |
 | **x_space_pct** | 58.1% [57.7, 58.6] | 68.3% [67.4, 69.1] | 67.2% [67.1, 67.2] | 56.2% [55.6, 56.8] |
 
 ### Raw Per-Iteration Data (post-warmup, ms)
@@ -141,7 +141,7 @@ All accuracy metrics passed. Parity assessment was not run because this experime
 
 1. **x_dist dominance on MERFISH**: `x_dist` consumes 58.9% of total time on MERFISH 10K vs 33.5% on Gaussian 10K. This 1.76x increase in fractional cost is driven by the dimensionality difference (d=50 vs d=10 for X).
 
-2. **x_space_pct is dramatically higher for MERFISH**: 68.3% [67.4, 69.1] for MERFISH 10K vs 58.1% [57.7, 58.6] for Gaussian 10K. The confidence intervals do not overlap, confirming this is a statistically significant difference.
+2. **x_space_pct is dramatically higher for MERFISH**: 68.3% [67.4, 69.1] for MERFISH 10K vs 58.1% [57.7, 58.6] for Gaussian 10K. The within-run CIs do not overlap, indicating a clear descriptive difference. (Note: these CIs are derived from 5 within-run iterations sharing process state and do not constitute a formal significance test across independent replicate invocations.)
 
 3. **x_sort is proportionally cheap on MERFISH**: Only 9.3% of MERFISH 10K time vs 24.7% for Gaussian. Sorting cost is O(n*k*log(k)) and independent of dimensionality, so it shrinks as a fraction when `x_dist` grows.
 
