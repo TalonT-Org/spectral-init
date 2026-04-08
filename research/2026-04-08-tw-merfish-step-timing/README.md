@@ -149,7 +149,7 @@ All accuracy metrics passed. Parity assessment was not run because this experime
 
 4. **Consistent profiles across scales**: MERFISH 10K and 50K show nearly identical step fractions (58.9% vs 58.4% for `x_dist`, 9.3% vs 8.8% for `x_sort`), confirming the profile is dimension-driven, not scale-dependent.
 
-5. **Historical consistency**: The historical `flat_simd` reference (Gaussian n=10K, d=50) shows `x_space_pct` = 56.2%, consistent with the current Gaussian result (58.1%). The ~2pp increase is within normal variation given different runs on potentially different system states.
+5. **Historical consistency**: The historical `flat_simd` reference (Gaussian n=10K) shows `x_space_pct` = 56.2%, consistent with the current Gaussian result (58.1%). The ~2pp increase is within normal variation given different runs on potentially different system states.
 
 6. **O(n^2) scaling confirmed**: MERFISH 50K thread-aggregate total (91.4s thread-agg) is 25.3x MERFISH 10K (3.6s thread-agg), close to the expected (50000/10000)^2 = 25x factor for pairwise distance computation.
 
