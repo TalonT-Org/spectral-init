@@ -1,3 +1,29 @@
+//! Eigensolver escalation chain for the symmetric normalized Laplacian.
+//!
+//! The chain tries progressively more robust (and expensive) solvers in order,
+//! accepting a result as soon as the max eigenpair residual
+//! `‖Lv − λv‖ / ‖v‖` falls below the level's quality threshold.
+//! Level 5 (forced dense EVD) is the nuclear option — it cannot fail mathematically
+//! and is always accepted regardless of residual.
+//!
+//! ## Escalation Chain
+//!
+//! | Level | Condition | Solver | Quality Threshold |
+//! |-------|-----------|--------|-------------------|
+//! | 0 | n < 2000 | Dense EVD ([`dense`]) via faer | 1e-6 |
+//! | 1 | n ≥ 2000 | LOBPCG ([`lobpcg`]) without regularization | 2e-5 |
+//! | 2 | Level 1 quality failed | Shift-invert LOBPCG ([`sinv`]) via faer Cholesky | 1e-6 |
+//! | 3 | Level 2 quality failed | LOBPCG ([`lobpcg`]) with ε·I regularization | 2e-5 |
+//! | 4 | Level 3 quality failed | Randomized SVD ([`rsvd`]) via 2I−L trick | 1e-2 |
+//! | 5 | Level 4 quality failed | Forced dense EVD — always accepted | — |
+//!
+//! A level "fails" when its residual exceeds the threshold, not when it returns an
+//! error. Errors (e.g., Cholesky factorization failure in Level 2) also cause
+//! escalation, but are treated as silent fallbacks, not panics.
+//!
+//! The only panic in this module occurs if Level 5's forced dense EVD returns `Err`,
+//! which would indicate an OOM or a faer bug — both are unrecoverable.
+
 mod dense;
 #[doc(hidden)]
 pub mod lobpcg;
