@@ -4,6 +4,8 @@
 
 ## Executive Summary
 
+**Data scope:** MERFISH mouse hypothalamic preoptic region embeddings (PCA-50, n=10K and n=50K, k=15) from the `2026-04-05-tw-perf-rerun-clean` fixture set, profiled on a single hardware configuration (AMD Ryzen 7 9800X3D, 16 threads, WSL2). Gaussian baseline generated in-session (d_x=10, n=10K, seed=2026). Results reflect one tissue type, one assay platform, and one compute environment.
+
 This experiment profiled the per-step timing breakdown of trustworthiness computation on real MERFISH embeddings (d=50) and compared it against a synthetic Gaussian baseline (d=10). The goal was to determine whether X-space distance computation dominates runtime on high-dimensional real-world data, and to quantify the split for prioritizing optimization work.
 
 The results are conclusive: **X-space distance computation (`x_dist`) consumes 58.9% of total trustworthiness time on MERFISH 10K**, compared to just 33.5% on the Gaussian baseline. Combined X-space operations (`x_dist` + `x_sort`) account for 68.3% of MERFISH runtime (95% CI: [67.4%, 69.1%]). This profile is stable across scales (MERFISH 50K shows 67.2%) and consistent with O(n^2) scaling. These findings establish a clear optimization target: any performance work on trustworthiness should prioritize X-space distance kernels for high-dimensional inputs.
