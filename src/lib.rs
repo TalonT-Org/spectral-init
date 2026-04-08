@@ -1,4 +1,5 @@
 // spectral-init: Spectral initialization for UMAP embeddings
+#![warn(missing_docs)]
 
 #[doc(hidden)]
 pub mod metrics;
