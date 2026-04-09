@@ -209,6 +209,10 @@ name = "trustworthiness_bench"
 harness = false
 required-features = ["testing"]
 
+[[bench]]
+name = "dist_sq_bench"
+harness = false
+
 [[example]]
 name = "basic"
 path = "examples/basic.rs"
