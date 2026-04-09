@@ -1,16 +1,16 @@
-# Implementation Plan: subsampled-tw-tradeoff Foundation (groupA)
+# Implementation Plan: groupB — Core Utilities and Data Generation
 
 ## Summary
 
-Create the experiment directory skeleton at `research/2026-04-09-subsampled-tw-tradeoff/`, write the `environment.yml`, symlink the four MERFISH fixture files from the prior experiment, build the micromamba environment, and verify it. This produces the runnable Python environment and populated `data/` tree that all subsequent experiment groups depend on.
+Implement `scripts/utils.py` (shared constants, Approach A trustworthiness estimator, I/O helpers) and `scripts/gen_data.py` (Gaussian fixture generator) inside `research/2026-04-09-subsampled-tw-tradeoff/`, then run the generator to produce `data/gaussian/gaussian_n10000_x.npy`, `gaussian_n10000_y.npy`, `gaussian_n50000_x.npy`, and `gaussian_n50000_y.npy` with d=50. After this group, `utils.py` is importable by all downstream scripts, the Gaussian fixtures match MERFISH's d=50 dimensionality, and the groupD sanity check precondition (T_A(m=n) ≈ T_exact) is testable.
 
-All work is in the repo root `/home/talon/projects/spectral-init/`. No Rust code is touched.
+All work is in `research/2026-04-09-subsampled-tw-tradeoff/`. No Rust code is touched.
 
 ## Proposed Architecture
 
 ```mermaid
 %%{init: {'flowchart': {'nodeSpacing': 50, 'rankSpacing': 60, 'curve': 'basis'}}}%%
-flowchart TB
+flowchart LR
     classDef cli fill:#1a237e,stroke:#7986cb,stroke-width:2px,color:#fff;
     classDef stateNode fill:#004d40,stroke:#4db6ac,stroke-width:2px,color:#fff;
     classDef handler fill:#e65100,stroke:#ffb74d,stroke-width:2px,color:#fff;
@@ -20,191 +20,310 @@ flowchart TB
     classDef detector fill:#b71c1c,stroke:#ef5350,stroke-width:2px,color:#fff;
     classDef terminal fill:#1a237e,stroke:#7986cb,stroke-width:2px,color:#fff;
 
-    START([START])
-
-    subgraph ExistingData ["EXISTING DATA SOURCE"]
-        direction LR
-        SRC_MERFISH["tw-perf-rerun-clean/data/merfish/<br/>━━━━━━━━━━<br/>merfish_n10k_x.npy (3.8 MB)<br/>merfish_n10k_y.npy (156 KB)<br/>merfish_n50k_x.npy (19.1 MB)<br/>merfish_n50k_y.npy (781 KB)"]
+    subgraph Origins ["Data Origins"]
+        SEED["RandomState(42)<br/>━━━━━━━━━━<br/>seed=42 for<br/>reproducibility"]
+        SIZES["★ --sizes CLI arg<br/>━━━━━━━━━━<br/>default: 10000 50000"]
+        MERFISH["data/merfish/<br/>━━━━━━━━━━<br/>4 symlinked .npy files<br/>(from groupA)"]
     end
 
-    subgraph NewExperiment ["★ research/2026-04-09-subsampled-tw-tradeoff/"]
+    subgraph GenStage ["★ gen_data.py"]
+        GEN["★ gen_data.py<br/>━━━━━━━━━━<br/>rng.randn(n, 50) → X f64<br/>rng.randn(n, 2)  → Y f64"]
+    end
+
+    subgraph GaussianStore ["data/gaussian/ (Primary Storage)"]
+        GX["★ gaussian_n{n}_x.npy<br/>━━━━━━━━━━<br/>shape (n, 50) f64<br/>n ∈ {10000, 50000}"]
+        GY["★ gaussian_n{n}_y.npy<br/>━━━━━━━━━━<br/>shape (n, 2) f64<br/>n ∈ {10000, 50000}"]
+    end
+
+    subgraph Utils ["★ utils.py (Shared Module)"]
         direction TB
-        ENV["★ environment.yml<br/>━━━━━━━━━━<br/>name: subsampled-tw-tradeoff<br/>python=3.11, numpy=2.2.6<br/>scipy=1.15.2, sklearn=1.6.0<br/>matplotlib=3.10.1"]
-
-        subgraph NewDirs ["★ DIRECTORY SCAFFOLD"]
-            direction LR
-            D_SCRIPTS["★ scripts/<br/>━━━━━━━━━━<br/>.gitkeep"]
-            D_MERFISH["★ data/merfish/<br/>━━━━━━━━━━<br/>4 symlinks + .gitkeep"]
-            D_GAUSSIAN["★ data/gaussian/<br/>━━━━━━━━━━<br/>.gitkeep (empty)"]
-            D_RAW["★ results/raw/<br/>━━━━━━━━━━<br/>.gitkeep"]
-            D_ANALYSIS["★ results/analysis/<br/>━━━━━━━━━━<br/>.gitkeep"]
-        end
+        CONSTS["★ Constants<br/>━━━━━━━━━━<br/>K=15, SEEDS=range(10)<br/>M_VALUES_10K, M_VALUES_50K"]
+        LOAD["★ load_npy_pair()<br/>━━━━━━━━━━<br/>{dir}/{prefix}_n{n}_x.npy<br/>returns (X, Y)"]
+        TW["★ trustworthiness_row_subsampled()<br/>━━━━━━━━━━<br/>X[query_idx], pairwise_distances<br/>→ penalty / denom → T ∈ [0,1]"]
+        SAVE["★ save_result_json()<br/>━━━━━━━━━━<br/>mkdir -p + json.dump<br/>→ results/raw/*.json"]
     end
 
-    subgraph BuildPipeline ["MICROMAMBA BUILD PIPELINE"]
-        direction TB
-        CREATE["micromamba create<br/>━━━━━━━━━━<br/>-f environment.yml -y"]
-        VERIFY["micromamba run verify<br/>━━━━━━━━━━<br/>python -c 'from sklearn...; print(OK)'"]
+    subgraph DownstreamConsumers ["Downstream (groupC/D/E)"]
+        SCRIPTS["groupC–E scripts<br/>━━━━━━━━━━<br/>import utils<br/>use constants + helpers"]
     end
 
-    OK(["ENV READY"])
+    SEED --> GEN
+    SIZES --> GEN
+    GEN -->|"np.save"| GX
+    GEN -->|"np.save"| GY
+    GX -->|"load_npy_pair"| LOAD
+    GY -->|"load_npy_pair"| LOAD
+    MERFISH -->|"load_npy_pair"| LOAD
+    LOAD -->|"(X, Y)"| TW
+    TW -->|"T scalar"| SAVE
+    CONSTS -->|"import"| SCRIPTS
+    LOAD -->|"import"| SCRIPTS
+    TW -->|"import"| SCRIPTS
+    SAVE -->|"import"| SCRIPTS
 
-    START --> ENV
-    START --> NewDirs
-    SRC_MERFISH -->|"ln -s"| D_MERFISH
-    ENV --> CREATE
-    CREATE --> VERIFY
-    VERIFY --> OK
-
-    class SRC_MERFISH stateNode;
-    class ENV newComponent;
-    class D_SCRIPTS,D_MERFISH,D_GAUSSIAN,D_RAW,D_ANALYSIS newComponent;
-    class CREATE phase;
-    class VERIFY detector;
-    class OK output;
-    class START terminal;
+    class SEED,SIZES cli;
+    class MERFISH stateNode;
+    class GEN handler;
+    class GX,GY stateNode;
+    class CONSTS,LOAD,TW,SAVE newComponent;
+    class SCRIPTS phase;
 ```
 
 **Color Legend:**
 | Color | Category | Description |
 |-------|----------|-------------|
-| Dark Blue | Terminal | Start point |
-| Teal | Existing Data | Source MERFISH fixture files |
-| Green | New Component | New directories and config files |
-| Purple | Build | micromamba create step |
-| Red | Quality Gate | Environment verification |
-| Dark Teal | Output | Ready environment |
+| Dark Blue | Input | Data origins: seed, CLI args |
+| Teal | Storage | Primary .npy storage (Gaussian + MERFISH) |
+| Orange | Transform | gen_data.py data generator |
+| Green | New Component | New utils.py symbols and gen_data.py |
+| Purple | Consumer | Downstream scripts (groupC–E) |
 
-**Lens Used:** Development — this plan is entirely about creating project structure, writing an environment spec, and running the build/verification pipeline. No runtime logic, data transformations, or concurrency patterns are involved.
+**Lens Used:** Data Lineage — the plan is primarily about creating a data generation pipeline and shared utilities that channel RNG state and stored `.npy` fixtures into trustworthiness scalar outputs. Tracing the flow from `RandomState(42)` → `.npy` files → loaded arrays → T value is the correct framing.
 
 ## Tests
 
-The "tests" for this foundation group are shell-executable verification assertions. They should all fail before implementation and pass after.
+These checks should all fail before implementation and pass after. Run from `research/2026-04-09-subsampled-tw-tradeoff/` with the activated environment.
 
 ```bash
-# T1: Experiment root and all required subdirectories exist
 EXPROOT="/home/talon/projects/spectral-init/research/2026-04-09-subsampled-tw-tradeoff"
-test -d "$EXPROOT/scripts"           || echo "FAIL: scripts/ missing"
-test -d "$EXPROOT/data/merfish"      || echo "FAIL: data/merfish/ missing"
-test -d "$EXPROOT/data/gaussian"     || echo "FAIL: data/gaussian/ missing"
-test -d "$EXPROOT/results/raw"       || echo "FAIL: results/raw/ missing"
-test -d "$EXPROOT/results/analysis"  || echo "FAIL: results/analysis/ missing"
 
-# T2: .gitkeep files exist in every leaf directory
-for d in scripts data/merfish data/gaussian results/raw results/analysis; do
-    test -f "$EXPROOT/$d/.gitkeep" || echo "FAIL: $d/.gitkeep missing"
-done
+# T1: Both script files exist
+test -f "$EXPROOT/scripts/utils.py"    || echo "FAIL: utils.py missing"
+test -f "$EXPROOT/scripts/gen_data.py" || echo "FAIL: gen_data.py missing"
 
-# T3: environment.yml exists with correct content
-test -f "$EXPROOT/environment.yml" || echo "FAIL: environment.yml missing"
-grep -q "name: subsampled-tw-tradeoff" "$EXPROOT/environment.yml" || echo "FAIL: wrong env name"
-grep -q "python=3.11"              "$EXPROOT/environment.yml" || echo "FAIL: python version"
-grep -q "numpy=2.2.6"              "$EXPROOT/environment.yml" || echo "FAIL: numpy version"
-grep -q "scipy=1.15.2"             "$EXPROOT/environment.yml" || echo "FAIL: scipy version"
-grep -q "scikit-learn=1.6.0"       "$EXPROOT/environment.yml" || echo "FAIL: sklearn version"
-grep -q "matplotlib=3.10.1"        "$EXPROOT/environment.yml" || echo "FAIL: matplotlib version"
+# T2: utils.py imports cleanly and exposes all required names
+micromamba run -n subsampled-tw-tradeoff python -c "
+import sys; sys.path.insert(0, '$EXPROOT/scripts')
+from utils import (K, SEEDS, M_VALUES_10K, M_VALUES_50K,
+                   trustworthiness_row_subsampled, load_npy_pair, save_result_json)
+assert K == 15, f'K wrong: {K}'
+assert SEEDS == list(range(10)), f'SEEDS wrong: {SEEDS}'
+assert M_VALUES_10K == [250,500,1000,2000,5000,7500], f'M_VALUES_10K wrong'
+assert M_VALUES_50K == [250,500,1000,2000,5000,7500,10000,25000], f'M_VALUES_50K wrong'
+print('T2 OK')
+"
 
-# T4: MERFISH symlinks resolve to valid files
-SRC="/home/talon/projects/spectral-init/research/2026-04-05-tw-perf-rerun-clean/data/merfish"
-for f in merfish_n10k_x.npy merfish_n10k_y.npy merfish_n50k_x.npy merfish_n50k_y.npy; do
-    test -f "$EXPROOT/data/merfish/$f" || echo "FAIL: $f not accessible"
-done
+# T3: trustworthiness_row_subsampled at m=n matches sklearn trustworthiness exactly
+micromamba run -n subsampled-tw-tradeoff python -c "
+import sys, numpy as np
+sys.path.insert(0, '$EXPROOT/scripts')
+from utils import trustworthiness_row_subsampled
+from sklearn.manifold import trustworthiness as sklearn_tw
 
-# T5: Environment builds and sklearn imports correctly (REQ-P1-005)
-micromamba run -n subsampled-tw-tradeoff \
-    python -c "from sklearn.manifold import trustworthiness; print('OK')" \
-    | grep -q "OK" || echo "FAIL: sklearn import check failed"
+rng = np.random.RandomState(0)
+n, d = 200, 5
+X = rng.randn(n, d)
+Y = rng.randn(n, 2)
+k = 10
+query_idx = list(range(n))
+T_approx = trustworthiness_row_subsampled(X, Y, k, query_idx)
+T_exact   = sklearn_tw(X, Y, n_neighbors=k)
+diff = abs(T_approx - T_exact)
+assert diff < 1e-10, f'|T_A - T_exact| = {diff:.2e} >= 1e-10'
+print(f'T3 OK  T_approx={T_approx:.8f}  T_exact={T_exact:.8f}  diff={diff:.2e}')
+"
+
+# T4: Generated Gaussian fixtures have correct shapes
+micromamba run -n subsampled-tw-tradeoff python -c "
+import numpy as np
+root = '$EXPROOT'
+for n in [10000, 50000]:
+    x = np.load(f'{root}/data/gaussian/gaussian_n{n}_x.npy')
+    y = np.load(f'{root}/data/gaussian/gaussian_n{n}_y.npy')
+    assert x.shape == (n, 50), f'x shape {x.shape}'
+    assert y.shape == (n, 2),  f'y shape {y.shape}'
+    assert x.dtype == np.float64, f'x dtype {x.dtype}'
+    assert y.dtype == np.float64, f'y dtype {y.dtype}'
+    print(f'T4 OK  n={n}: x={x.shape} y={y.shape}')
+"
+
+# T5: load_npy_pair and save_result_json function correctly
+micromamba run -n subsampled-tw-tradeoff python -c "
+import sys, json, tempfile
+from pathlib import Path
+sys.path.insert(0, '$EXPROOT/scripts')
+from utils import load_npy_pair, save_result_json
+X, Y = load_npy_pair('$EXPROOT/data/gaussian', 'gaussian', 10000)
+assert X.shape == (10000, 50)
+assert Y.shape == (10000, 2)
+with tempfile.TemporaryDirectory() as td:
+    p = Path(td) / 'sub' / 'result.json'
+    save_result_json(p, {'t': 0.95, 'n': 10000})
+    data = json.loads(p.read_text())
+    assert data == {'t': 0.95, 'n': 10000}
+print('T5 OK')
+"
 ```
 
 ## Implementation Steps
 
-### Step 1 — Create directory scaffold
+### Step 1 — Create `scripts/utils.py`
 
-From `/home/talon/projects/spectral-init/`:
+Create `research/2026-04-09-subsampled-tw-tradeoff/scripts/utils.py` with:
 
-```bash
-EXPROOT="research/2026-04-09-subsampled-tw-tradeoff"
-mkdir -p \
-    "$EXPROOT/scripts" \
-    "$EXPROOT/data/merfish" \
-    "$EXPROOT/data/gaussian" \
-    "$EXPROOT/results/raw" \
-    "$EXPROOT/results/analysis"
+```python
+import json
+import os
+from pathlib import Path
+
+import numpy as np
+from sklearn.metrics import pairwise_distances
+from sklearn.neighbors import NearestNeighbors
+
+# ---------------------------------------------------------------------------
+# Experiment-wide constants
+# ---------------------------------------------------------------------------
+
+K = 15
+SEEDS = list(range(10))
+M_VALUES_10K = [250, 500, 1000, 2000, 5000, 7500]
+M_VALUES_50K = [250, 500, 1000, 2000, 5000, 7500, 10000, 25000]
+
+# ---------------------------------------------------------------------------
+# Approach A: row-subsampled trustworthiness estimator
+# ---------------------------------------------------------------------------
+
+def trustworthiness_row_subsampled(X, Y, k, query_idx):
+    """Approach A: m query rows, distances to ALL n points.
+
+    Unbiased estimator of full-n trustworthiness.
+    Denominator m * k * (2n - 3k - 1) matches the full-n formula when m == n.
+    """
+    n = X.shape[0]
+    m = len(query_idx)
+    dist_X = pairwise_distances(X[query_idx], X)
+    for i, gi in enumerate(query_idx):
+        dist_X[i, gi] = np.inf  # exclude self
+    ranks_X = np.argsort(np.argsort(dist_X, axis=1), axis=1) + 1
+    x_knn_mask = ranks_X <= k  # (m, n) boolean
+    nn = NearestNeighbors(n_neighbors=k, metric='euclidean').fit(Y)
+    y_knn_idx = nn.kneighbors(Y[query_idx], return_distance=False)  # (m, k)
+    penalty = 0.0
+    for i in range(m):
+        for j_col in y_knn_idx[i]:
+            if not x_knn_mask[i, j_col]:
+                penalty += ranks_X[i, j_col] - k
+    denom = m * k * (2 * n - 3 * k - 1)
+    return 1.0 - 2.0 * penalty / denom
+
+# ---------------------------------------------------------------------------
+# I/O helpers
+# ---------------------------------------------------------------------------
+
+def load_npy_pair(data_dir, prefix, n):
+    """Load {data_dir}/{prefix}_n{n}_x.npy and {prefix}_n{n}_y.npy.
+
+    Returns (X, Y) as numpy arrays.
+    """
+    data_dir = Path(data_dir)
+    X = np.load(data_dir / f"{prefix}_n{n}_x.npy")
+    Y = np.load(data_dir / f"{prefix}_n{n}_y.npy")
+    return X, Y
+
+
+def save_result_json(path, result_dict):
+    """Write result_dict to path as JSON, creating parent directories if needed."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, 'w') as f:
+        json.dump(result_dict, f)
 ```
 
-This satisfies REQ-P1-001.
+This satisfies REQ-P2-001, REQ-P2-002, and REQ-P2-003.
 
-### Step 2 — Add .gitkeep files to all leaf directories
+### Step 2 — Create `scripts/gen_data.py`
 
-```bash
-EXPROOT="research/2026-04-09-subsampled-tw-tradeoff"
-touch \
-    "$EXPROOT/scripts/.gitkeep" \
-    "$EXPROOT/data/merfish/.gitkeep" \
-    "$EXPROOT/data/gaussian/.gitkeep" \
-    "$EXPROOT/results/raw/.gitkeep" \
-    "$EXPROOT/results/analysis/.gitkeep"
+Create `research/2026-04-09-subsampled-tw-tradeoff/scripts/gen_data.py` with:
+
+```python
+"""Generate Gaussian d=50 datasets for the subsampled-tw-tradeoff experiment.
+
+Usage (from experiment directory):
+    micromamba run -n subsampled-tw-tradeoff python scripts/gen_data.py
+    micromamba run -n subsampled-tw-tradeoff python scripts/gen_data.py --sizes 10000 50000
+"""
+import argparse
+from pathlib import Path
+
+import numpy as np
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Generate Gaussian benchmark data (d=50)")
+    parser.add_argument("--sizes", type=int, nargs="+", default=[10000, 50000])
+    args = parser.parse_args()
+
+    script_dir = Path(__file__).parent
+    output_dir = script_dir.parent / "data" / "gaussian"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    rng = np.random.RandomState(42)
+
+    for n in args.sizes:
+        x = rng.randn(n, 50).astype(np.float64)
+        y = rng.randn(n, 2).astype(np.float64)
+        np.save(output_dir / f"gaussian_n{n}_x.npy", x)
+        np.save(output_dir / f"gaussian_n{n}_y.npy", y)
+        print(f"  [gaussian] n={n}: x{x.shape} y{y.shape}")
+
+    print("Done.")
+
+
+if __name__ == "__main__":
+    main()
 ```
 
-Follows the project convention confirmed in every existing experiment directory.
+Key differences from the prior `gen_synthetic.py`:
+- Uses `np.random.RandomState(42)` (not `np.random.default_rng`) — required for consistency with other experiment generators in this project.
+- Fixes d=50 as a constant (no `--d` flag) — MERFISH is d=50; Gaussian must match.
+- Output dir resolved relative to `__file__` so the script is runnable from any working directory.
+- Default sizes are `[10000, 50000]` only (the two sizes required by the experiment plan).
 
-### Step 3 — Write environment.yml
+This satisfies REQ-P2-004.
 
-Create `research/2026-04-09-subsampled-tw-tradeoff/environment.yml` with the exact content required by REQ-P1-002:
+### Step 3 — Run `gen_data.py` to populate `data/gaussian/`
 
-```yaml
-name: subsampled-tw-tradeoff
-channels:
-  - conda-forge
-dependencies:
-  - python=3.11
-  - numpy=2.2.6
-  - scipy=1.15.2
-  - scikit-learn=1.6.0
-  - matplotlib=3.10.1
-```
-
-No `pip` subsection, no `statsmodels`, no Rust toolchain comment (this experiment is Python-only). This satisfies REQ-P1-002.
-
-### Step 4 — Symlink MERFISH fixture files
-
-```bash
-EXPROOT="/home/talon/projects/spectral-init/research/2026-04-09-subsampled-tw-tradeoff"
-SRC="/home/talon/projects/spectral-init/research/2026-04-05-tw-perf-rerun-clean/data/merfish"
-
-for f in merfish_n10k_x.npy merfish_n10k_y.npy merfish_n50k_x.npy merfish_n50k_y.npy; do
-    ln -s "$SRC/$f" "$EXPROOT/data/merfish/$f"
-done
-```
-
-Use absolute paths for symlinks so they resolve correctly regardless of working directory. If `ln -s` fails for any file (e.g., filesystem restriction), fall back to `cp "$SRC/$f" "$EXPROOT/data/merfish/$f"` for that file. This satisfies REQ-P1-003.
-
-### Step 5 — Build the micromamba environment
+From the repo root or any directory:
 
 ```bash
 cd /home/talon/projects/spectral-init/research/2026-04-09-subsampled-tw-tradeoff
-micromamba create -f environment.yml -y
+micromamba run -n subsampled-tw-tradeoff python scripts/gen_data.py
 ```
 
-This satisfies REQ-P1-004.
+Expected output:
+```
+  [gaussian] n=10000: x(10000, 50) y(10000, 2)
+  [gaussian] n=50000: x(50000, 50) y(50000, 2)
+Done.
+```
 
-### Step 6 — Verify the environment
+This satisfies REQ-P2-005.
+
+### Step 4 — Verify output shapes
 
 ```bash
-micromamba run -n subsampled-tw-tradeoff \
-    python -c "from sklearn.manifold import trustworthiness; print('OK')"
+micromamba run -n subsampled-tw-tradeoff python -c "
+import numpy as np
+root = 'research/2026-04-09-subsampled-tw-tradeoff'
+for n in [10000, 50000]:
+    x = np.load(f'{root}/data/gaussian/gaussian_n{n}_x.npy')
+    y = np.load(f'{root}/data/gaussian/gaussian_n{n}_y.npy')
+    assert x.shape == (n, 50), f'x shape wrong: {x.shape}'
+    assert y.shape == (n, 2),  f'y shape wrong: {y.shape}'
+    print(f'n={n}: x={x.shape} dtype={x.dtype}  y={y.shape} dtype={y.dtype}')
+"
 ```
-
-Expected output: `OK`. This satisfies REQ-P1-005.
 
 ## Verification
 
-Run all tests from the Tests section above. All assertions must pass with no FAIL lines printed.
+Run all tests from the Tests section. All must pass with no FAIL output.
 
 Final checklist:
-- [ ] `research/2026-04-09-subsampled-tw-tradeoff/` and all 5 subdirectories exist
-- [ ] `.gitkeep` in every leaf directory (5 files)
-- [ ] `environment.yml` present with exact package versions from REQ-P1-002
-- [ ] 4 MERFISH files accessible under `data/merfish/` (symlinks or copies)
-- [ ] `micromamba run -n subsampled-tw-tradeoff python -c "from sklearn.manifold import trustworthiness; print('OK')"` prints `OK`
-- [ ] `data/gaussian/` is present and empty (only `.gitkeep`) — it will be populated by groupB
+- [ ] `scripts/utils.py` exists with all imports, K, SEEDS, M_VALUES_10K, M_VALUES_50K
+- [ ] `trustworthiness_row_subsampled` uses the exact body from REQ-P2-002; denominator is `m * k * (2 * n - 3 * k - 1)`
+- [ ] `load_npy_pair` resolves paths using `{prefix}_n{n}_x.npy` convention
+- [ ] `save_result_json` creates parent directories before writing
+- [ ] `scripts/gen_data.py` uses `np.random.RandomState(42)`, produces d=50 X and d=2 Y
+- [ ] `data/gaussian/gaussian_n10000_x.npy` shape is (10000, 50) f64
+- [ ] `data/gaussian/gaussian_n50000_x.npy` shape is (50000, 50) f64
+- [ ] T3 test passes: `|trustworthiness_row_subsampled(X, Y, k, range(n)) - sklearn_tw(X, Y, k)| < 1e-10`
