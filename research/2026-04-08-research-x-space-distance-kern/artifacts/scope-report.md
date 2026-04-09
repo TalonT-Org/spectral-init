@@ -20,7 +20,7 @@ where x_dist currently consumes 58.9% of total trustworthiness runtime.
 | Thread-local buffer layout | Each Rayon thread holds a single `Vec<f64>` of length n for `dist_x`; it is overwritten per row — no n×n matrix is stored | — |
 | Symmetry exploitation feasibility | Would require O(n²) memory for a full distance matrix (800 MB at n=10K, 20 GB at n=50K) — infeasible | Whether a streaming write-back to both positions in a temporary row-pair buffer is practical |
 | Criterion benchmark baseline | `trustworthiness_bench.rs` measures n=1k/5k/50k at d_x=10 only — not d_x=50 | Baseline wall-clock time for MERFISH 10K (d_x=50) in Criterion |
-| Existing MERFISH fixtures | All four files present and correct sizes | — |
+| Existing MERFISH fixtures | **Correction:** This scope report originally stated "All four files present and correct sizes," but subsequent feasibility analysis found no MERFISH fixture files in the repository. All benchmarks were executed on synthetic `make_data(n, d_x=50, d_y=2, seed=42)` data. The original claim was incorrect. | — |
 
 ---
 
