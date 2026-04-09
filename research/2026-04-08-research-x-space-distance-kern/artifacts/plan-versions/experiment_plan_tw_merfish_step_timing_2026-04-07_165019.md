@@ -14,6 +14,8 @@ A secondary question is whether the MERFISH fixture's actual `d_x` differs mater
 
 **Alternative hypothesis (H1):** The X-space fraction on MERFISH n=10K differs from the synthetic baseline by more than ±5 pp — either higher (if d_x > 10 increases x_dist dominance) or structurally redistributed (if clustered Y-space geometry reduces y_dist's fraction). Regardless of direction, X-space (x_dist + x_sort) remains ≥50% of total runtime, validating X-space ANN as the productive optimization target on real data.
 
+> **Ambiguity note:** H1 contains two logical components — (a) >±5 pp divergence from baseline AND (b) x_space_pct ≥ 50%. These create an ambiguous region: a result where x_space_pct falls between ~45–51.1% satisfies criterion (a) but is ambiguous on criterion (b). The success criteria (see below) resolve this by treating ≥50% as the operative decision threshold; the ±5pp component is informational context for the magnitude of any observed shift.
+
 ---
 
 ## Independent Variables
