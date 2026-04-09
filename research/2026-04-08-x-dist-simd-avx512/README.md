@@ -540,3 +540,46 @@ if __name__ == "__main__":
   {"kernel": "scalar",        "d_x": 50, "ns_per_call": 11.045}
 ]
 ```
+
+## Archive Manifest
+
+Contents of `artifacts.tar.gz`:
+
+```
+artifacts/
+artifacts/phase-groups/
+artifacts/phase-plans/
+data/
+data/.gitkeep
+data/profiler_x_tmp.npy
+data/profiler_y_tmp.npy
+data/tw_parity_50d.npz
+experiment-plan-groupB.md
+experiment-plan-groupC.md
+experiment-plan-groupD.md
+experiment-plan-groupE.md
+experiment-plan.md
+results/
+results/.gitkeep
+results/avx2_looped_criterion.json
+results/avx2_looped_criterion.txt
+results/avx2_looped_profiler.json
+results/avx2_looped_stderr.txt
+results/avx512_looped_criterion.json
+results/avx512_looped_criterion.txt
+results/avx512_looped_profiler.json
+results/avx512_looped_stderr.txt
+results/baseline_criterion.json
+results/baseline_criterion.txt
+results/baseline_profiler.json
+results/baseline_stderr.txt
+results/baseline_timing_summary.json
+results/correctness.json
+results/dist_sq_microbench.json
+results/summary.md
+scripts/
+scripts/analyze.py
+scripts/gen_tw_parity_50d.py
+scripts/run_baseline.sh
+scripts/run_optimized.sh
+```
