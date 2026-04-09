@@ -85,13 +85,15 @@ fn sklearn_parity_50d() {
     );
 }
 
-/// Records avx2_looped correctness result to research/.../results/correctness.json.
-/// Run after sklearn_parity_50d passes with avx2_looped kernel. Appends one newline-delimited JSON entry.
+/// Records avx2_looped correctness result to research/.../results/avx2_looped_correctness_record.json.
+/// Run after sklearn_parity_50d passes with avx2_looped kernel.
+/// Writes a single JSON record, overwriting any previous record for this variant.
+/// Each variant writes to its own file to prevent concurrent-append interleaving.
 #[test]
-#[ignore = "run after sklearn_parity_50d passes with avx2_looped kernel; writes correctness.json"]
+#[ignore = "run after sklearn_parity_50d passes with avx2_looped kernel; writes avx2_looped_correctness_record.json"]
 fn record_avx2_looped_correctness() {
     use ndarray_npy::NpzReader;
-    use std::fs::{File, OpenOptions};
+    use std::fs::{self, File};
     use std::io::Write;
 
     let fixture_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -123,10 +125,11 @@ fn record_avx2_looped_correctness() {
     );
 
     let out_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("research/2026-04-08-x-dist-simd-avx512/results/correctness.json");
-    let mut out = OpenOptions::new()
+        .join("research/2026-04-08-x-dist-simd-avx512/results/avx2_looped_correctness_record.json");
+    let mut out = fs::OpenOptions::new()
         .create(true)
-        .append(true)
+        .write(true)
+        .truncate(true)
         .open(&out_path)
         .unwrap_or_else(|e| panic!("cannot open {}: {e}", out_path.display()));
     writeln!(out, "{record}").expect("failed to write correctness record");
@@ -135,13 +138,15 @@ fn record_avx2_looped_correctness() {
     assert!(passed, "avx2_looped failed correctness gate: delta={delta:.2e}");
 }
 
-/// Records avx512_looped correctness result to research/.../results/correctness.json.
-/// Run after sklearn_parity_50d passes with avx512_looped kernel. Appends one newline-delimited JSON entry.
+/// Records avx512_looped correctness result to research/.../results/avx512_looped_correctness_record.json.
+/// Run after sklearn_parity_50d passes with avx512_looped kernel.
+/// Writes a single JSON record, overwriting any previous record for this variant.
+/// Each variant writes to its own file to prevent concurrent-append interleaving.
 #[test]
-#[ignore = "run after sklearn_parity_50d passes with avx512_looped kernel; writes correctness.json"]
+#[ignore = "run after sklearn_parity_50d passes with avx512_looped kernel; writes avx512_looped_correctness_record.json"]
 fn record_avx512_looped_correctness() {
     use ndarray_npy::NpzReader;
-    use std::fs::{File, OpenOptions};
+    use std::fs::{self, File};
     use std::io::Write;
 
     let fixture_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -173,10 +178,11 @@ fn record_avx512_looped_correctness() {
     );
 
     let out_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("research/2026-04-08-x-dist-simd-avx512/results/correctness.json");
-    let mut out = OpenOptions::new()
+        .join("research/2026-04-08-x-dist-simd-avx512/results/avx512_looped_correctness_record.json");
+    let mut out = fs::OpenOptions::new()
         .create(true)
-        .append(true)
+        .write(true)
+        .truncate(true)
         .open(&out_path)
         .unwrap_or_else(|e| panic!("cannot open {}: {e}", out_path.display()));
     writeln!(out, "{record}").expect("failed to write correctness record");
@@ -185,13 +191,15 @@ fn record_avx512_looped_correctness() {
     assert!(passed, "avx512_looped failed correctness gate: delta={delta:.2e}");
 }
 
-/// Records baseline correctness result to research/.../results/correctness.json.
-/// Run after sklearn_parity_50d passes. Appends one newline-delimited JSON entry.
+/// Records baseline correctness result to research/.../results/baseline_correctness_record.json.
+/// Run after sklearn_parity_50d passes.
+/// Writes a single JSON record, overwriting any previous record for this variant.
+/// Each variant writes to its own file to prevent concurrent-append interleaving.
 #[test]
-#[ignore = "run after sklearn_parity_50d passes; writes to research/.../results/correctness.json"]
+#[ignore = "run after sklearn_parity_50d passes; writes baseline_correctness_record.json"]
 fn record_baseline_correctness() {
     use ndarray_npy::NpzReader;
-    use std::fs::{File, OpenOptions};
+    use std::fs::{self, File};
     use std::io::Write;
 
     let fixture_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -223,10 +231,11 @@ fn record_baseline_correctness() {
     );
 
     let out_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("research/2026-04-08-x-dist-simd-avx512/results/correctness.json");
-    let mut out = OpenOptions::new()
+        .join("research/2026-04-08-x-dist-simd-avx512/results/baseline_correctness_record.json");
+    let mut out = fs::OpenOptions::new()
         .create(true)
-        .append(true)
+        .write(true)
+        .truncate(true)
         .open(&out_path)
         .unwrap_or_else(|e| panic!("cannot open {}: {e}", out_path.display()));
     writeln!(out, "{record}").expect("failed to write correctness record");
