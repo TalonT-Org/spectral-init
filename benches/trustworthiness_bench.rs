@@ -31,5 +31,22 @@ fn bench_trustworthiness(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_trustworthiness_d50(c: &mut Criterion) {
+    let _ = rayon::current_num_threads();
+
+    let mut group = c.benchmark_group("trustworthiness_d50");
+    group.sampling_mode(SamplingMode::Flat);
+    group.sample_size(10);
+    group.warm_up_time(Duration::from_secs(10));
+    for &n in &[1_000, 5_000, 10_000, 50_000] {
+        let (x, y) = make_data(n, 50, 2, 42);
+        group.bench_with_input(BenchmarkId::new("n", n), &n, |b, _| {
+            b.iter(|| black_box(spectral_init::trustworthiness(x.view(), y.view(), 15)));
+        });
+    }
+    group.finish();
+}
+
 criterion_group!(benches, bench_trustworthiness);
-criterion_main!(benches);
+criterion_group!(benches_d50, bench_trustworthiness_d50);
+criterion_main!(benches, benches_d50);
