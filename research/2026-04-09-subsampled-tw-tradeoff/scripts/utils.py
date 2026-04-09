@@ -32,11 +32,15 @@ def trustworthiness_row_subsampled(X, Y, k, query_idx):
         dist_X[i, gi] = np.inf  # exclude self
     ranks_X = np.argsort(np.argsort(dist_X, axis=1), axis=1) + 1
     x_knn_mask = ranks_X <= k  # (m, n) boolean
-    nn = NearestNeighbors(n_neighbors=k, metric='euclidean').fit(Y)
-    y_knn_idx = nn.kneighbors(Y[query_idx], return_distance=False)  # (m, k)
+    # Request k+1 neighbors because kneighbors(Y[query_idx]) includes self (distance=0)
+    # at some position; filtering it gives k actual non-self neighbors matching sklearn.
+    nn = NearestNeighbors(n_neighbors=k + 1, metric='euclidean').fit(Y)
+    y_knn_all = nn.kneighbors(Y[query_idx], return_distance=False)  # (m, k+1)
     penalty = 0.0
     for i in range(m):
-        for j_col in y_knn_idx[i]:
+        gi = query_idx[i]
+        y_knn = [j for j in y_knn_all[i] if j != gi][:k]
+        for j_col in y_knn:
             if not x_knn_mask[i, j_col]:
                 penalty += ranks_X[i, j_col] - k
     denom = m * k * (2 * n - 3 * k - 1)
