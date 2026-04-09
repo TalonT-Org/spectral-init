@@ -91,6 +91,20 @@ mod selection;
 #[doc(hidden)]
 pub mod solvers;
 
+/// Internal kernel exports for microbenchmarks. Not part of the stable public API.
+#[doc(hidden)]
+pub mod metrics_internal {
+    #[cfg(all(
+        target_arch = "x86_64",
+        target_feature = "avx2",
+        target_feature = "fma"
+    ))]
+    pub use crate::metrics::dist_sq_avx2_looped;
+
+    #[cfg(all(target_arch = "x86_64", target_feature = "avx512f"))]
+    pub use crate::metrics::dist_sq_avx512_looped;
+}
+
 pub use config::{ComputeMode, SpectralInitConfig};
 
 // Re-exported for component-level integration tests. These are internal pipeline

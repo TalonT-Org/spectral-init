@@ -398,43 +398,85 @@ pub fn eigenvalue_condition_number(eigenvalues: &Array1<f64>) -> f64 {
     }
 }
 
-// ─── AVX2+FMA squared-distance kernel ────────────────────────────────────────
+// ─── AVX2+FMA squared-distance kernel (fully looped) ─────────────────────────
 
-/// Squared Euclidean distance using AVX2+FMA intrinsics.
+/// Squared Euclidean distance using AVX2+FMA intrinsics, looped over all elements.
+///
+/// 4-wide YMM loop with FMA accumulation, horizontal reduce, scalar tail 0-3.
 ///
 /// # Safety
-/// Both slices must have at least 10 elements (enforced by the `d_x >= 10` guard at the
-/// call site). Two 4-wide loads cover elements 0..8; a scalar tail handles 8..n.
+/// Both slices must have the same length (caller ensures `d_x >= 10` at the dispatch site).
 #[cfg(all(
     target_arch = "x86_64",
     target_feature = "avx2",
     target_feature = "fma"
 ))]
 #[target_feature(enable = "avx2,fma")]
-unsafe fn dist_sq_avx2(xi: &[f64], xj: &[f64]) -> f64 {
+pub unsafe fn dist_sq_avx2_looped(xi: &[f64], xj: &[f64]) -> f64 {
     use std::arch::x86_64::*;
     let n = xi.len().min(xj.len());
     unsafe {
-        let a0 = _mm256_loadu_pd(xi.as_ptr());
-        let b0 = _mm256_loadu_pd(xj.as_ptr());
-        let d0 = _mm256_sub_pd(a0, b0);
-        let mut acc = _mm256_mul_pd(d0, d0);
-        let a1 = _mm256_loadu_pd(xi.as_ptr().add(4));
-        let b1 = _mm256_loadu_pd(xj.as_ptr().add(4));
-        let d1 = _mm256_sub_pd(a1, b1);
-        acc = _mm256_fmadd_pd(d1, d1, acc);
+        let mut acc = _mm256_setzero_pd();
+        let mut k = 0usize;
+        while k + 4 <= n {
+            let a = _mm256_loadu_pd(xi.as_ptr().add(k));
+            let b = _mm256_loadu_pd(xj.as_ptr().add(k));
+            let d = _mm256_sub_pd(a, b);
+            acc = _mm256_fmadd_pd(d, d, acc);
+            k += 4;
+        }
+        // Horizontal reduce: sum 4 lanes
         let lo = _mm256_castpd256_pd128(acc);
         let hi = _mm256_extractf128_pd(acc, 1);
         let sum128 = _mm_add_pd(lo, hi);
         let halved = _mm_hadd_pd(sum128, sum128);
         let mut result = _mm_cvtsd_f64(halved);
-        for i in 8..n {
-            let d = xi[i] - xj[i];
+        // Scalar tail (0–3 remaining elements)
+        while k < n {
+            let d = xi[k] - xj[k];
             result += d * d;
+            k += 1;
         }
         result
     }
 }
+
+// ─── AVX-512 squared-distance kernel (fully looped) ──────────────────────────
+
+/// Squared Euclidean distance using AVX-512 intrinsics, looped over all elements.
+///
+/// 8-wide ZMM loop with FMA accumulation, `_mm512_reduce_add_pd`, scalar tail 0-7.
+///
+/// # Safety
+/// Both slices must have the same length.
+#[cfg(all(target_arch = "x86_64", target_feature = "avx512f"))]
+#[target_feature(enable = "avx512f")]
+pub unsafe fn dist_sq_avx512_looped(xi: &[f64], xj: &[f64]) -> f64 {
+    use std::arch::x86_64::*;
+    let n = xi.len().min(xj.len());
+    unsafe {
+        let mut acc = _mm512_setzero_pd();
+        let mut k = 0usize;
+        while k + 8 <= n {
+            let a = _mm512_loadu_pd(xi.as_ptr().add(k));
+            let b = _mm512_loadu_pd(xj.as_ptr().add(k));
+            let d = _mm512_sub_pd(a, b);
+            acc = _mm512_fmadd_pd(d, d, acc);
+            k += 8;
+        }
+        let mut result = _mm512_reduce_add_pd(acc);
+        // Scalar tail (0–7 remaining elements)
+        while k < n {
+            let d = xi[k] - xj[k];
+            result += d * d;
+            k += 1;
+        }
+        result
+    }
+}
+
+#[cfg(all(target_arch = "x86_64", target_feature = "avx512f"))]
+static AVX512_AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
 
 /// Batch squared Euclidean distances from a 2D query point to `n` target points
 /// stored in row-major layout (`y_flat`, stride 2). Processes two target points per
@@ -535,18 +577,22 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
     let d_x = x.ncols();
     let d_y = y.ncols();
 
+    #[cfg(all(target_arch = "x86_64", target_feature = "avx512f"))]
+    let use_avx512 = *AVX512_AVAILABLE.get_or_init(|| is_x86_feature_detected!("avx512f"));
+    #[cfg(not(all(target_arch = "x86_64", target_feature = "avx512f")))]
+    let use_avx512 = false;
+
     #[cfg(target_arch = "x86_64")]
     let use_avx2_y = { d_y == 2 && y.is_standard_layout() && is_x86_feature_detected!("avx2") };
     #[cfg(not(target_arch = "x86_64"))]
     let use_avx2_y = false;
 
     // Validate contiguity once before the parallel loop: SIMD dispatch requires C-contiguous rows.
-    #[cfg(all(
-        target_arch = "x86_64",
-        target_feature = "avx2",
-        target_feature = "fma"
+    #[cfg(any(
+        all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"),
+        all(target_arch = "x86_64", target_feature = "avx512f"),
     ))]
-    if use_avx2 && d_x >= 10 {
+    if (use_avx2 || use_avx512) && d_x >= 10 {
         assert!(
             x.is_standard_layout(),
             "trustworthiness: x must be in C-contiguous (standard) layout for SIMD dispatch"
@@ -589,39 +635,30 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
 
                     dist_x.clear();
                     dist_x.resize(n, 0.0f64);
-                    for j in 0..n {
-                        let xj = x.row(j);
-                        dist_x[j] = {
+                    let compute_x_dist =
+                        |xi: ndarray::ArrayView1<f64>, xj: ndarray::ArrayView1<f64>| -> f64 {
+                            #[cfg(all(target_arch = "x86_64", target_feature = "avx512f"))]
+                            if use_avx512 && d_x >= 10 {
+                                let si = xi.as_slice().expect("x row must be contiguous");
+                                let sj = xj.as_slice().expect("x row must be contiguous");
+                                // SAFETY: runtime check (use_avx512) + d_x>=10 guard + contiguity assert above.
+                                return unsafe { dist_sq_avx512_looped(si, sj) };
+                            }
                             #[cfg(all(
                                 target_arch = "x86_64",
                                 target_feature = "avx2",
                                 target_feature = "fma"
                             ))]
-                            {
-                                if use_avx2 && d_x >= 10 {
-                                    let si = xi.as_slice().expect("x row must be contiguous");
-                                    let sj = xj.as_slice().expect("x row must be contiguous");
-                                    // SAFETY: runtime + d_x check guarantees AVX2+FMA and >= 8 elements.
-                                    unsafe { dist_sq_avx2(si, sj) }
-                                } else {
-                                    xi.iter()
-                                        .zip(xj.iter())
-                                        .map(|(&a, &b)| (a - b) * (a - b))
-                                        .sum()
-                                }
+                            if use_avx2 && d_x >= 10 {
+                                let si = xi.as_slice().expect("x row must be contiguous");
+                                let sj = xj.as_slice().expect("x row must be contiguous");
+                                // SAFETY: runtime check (use_avx2) + d_x>=10 guard + contiguity assert above.
+                                return unsafe { dist_sq_avx2_looped(si, sj) };
                             }
-                            #[cfg(not(all(
-                                target_arch = "x86_64",
-                                target_feature = "avx2",
-                                target_feature = "fma"
-                            )))]
-                            {
-                                xi.iter()
-                                    .zip(xj.iter())
-                                    .map(|(&a, &b)| (a - b) * (a - b))
-                                    .sum()
-                            }
+                            xi.iter().zip(xj.iter()).map(|(&a, &b)| (a - b) * (a - b)).sum()
                         };
+                    for j in 0..n {
+                        dist_x[j] = compute_x_dist(xi, x.row(j));
                     }
 
                     #[cfg(feature = "profiling")]
@@ -1175,21 +1212,36 @@ mod tests {
         target_feature = "fma"
     ))]
     #[test]
-    fn t_tw_06_avx2_kernel_matches_scalar() {
+    fn t_tw_06_avx2_looped_matches_scalar() {
         use rand::{Rng, SeedableRng};
         let mut rng = rand::rngs::SmallRng::seed_from_u64(42);
-        for len in [10, 16, 33, 100] {
+        // Include lengths that hit the scalar tail: 10 (tail=2), 13 (tail=1), 50 (tail=2), 100 (tail=0)
+        for len in [10, 13, 16, 50, 100] {
             let a: Vec<f64> = (0..len).map(|_| rng.random::<f64>()).collect();
             let b: Vec<f64> = (0..len).map(|_| rng.random::<f64>()).collect();
-            let scalar: f64 = a
-                .iter()
-                .zip(b.iter())
-                .map(|(&x, &y)| (x - y) * (x - y))
-                .sum();
-            let avx2 = unsafe { super::dist_sq_avx2(&a, &b) };
+            let scalar: f64 = a.iter().zip(b.iter()).map(|(&x, &y)| (x - y) * (x - y)).sum();
+            let avx2 = unsafe { super::dist_sq_avx2_looped(&a, &b) };
             assert!(
                 (avx2 - scalar).abs() < 1e-10,
-                "dist_sq_avx2 mismatch at len={len}: avx2={avx2}, scalar={scalar}"
+                "dist_sq_avx2_looped mismatch at len={len}: avx2={avx2}, scalar={scalar}"
+            );
+        }
+    }
+
+    #[cfg(all(target_arch = "x86_64", target_feature = "avx512f"))]
+    #[test]
+    fn t_tw_11_avx512_looped_matches_scalar() {
+        use rand::{Rng, SeedableRng};
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(99);
+        // Lengths with varied tails: 10 (tail=2), 16 (tail=0), 50 (tail=2), 100 (tail=4)
+        for len in [10, 16, 50, 100] {
+            let a: Vec<f64> = (0..len).map(|_| rng.random::<f64>()).collect();
+            let b: Vec<f64> = (0..len).map(|_| rng.random::<f64>()).collect();
+            let scalar: f64 = a.iter().zip(b.iter()).map(|(&x, &y)| (x - y) * (x - y)).sum();
+            let avx512 = unsafe { super::dist_sq_avx512_looped(&a, &b) };
+            assert!(
+                (avx512 - scalar).abs() < 1e-10,
+                "dist_sq_avx512_looped mismatch at len={len}: avx512={avx512}, scalar={scalar}"
             );
         }
     }

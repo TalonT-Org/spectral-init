@@ -2,32 +2,18 @@
 //!
 //! Benchmarks the squared-Euclidean-distance kernels at d_x=50 and d_x=10.
 //!
-//! # groupD integration note
-//! When groupD makes the SIMD kernels `pub(crate)` in `src/metrics.rs`, replace
-//! the stub functions below with:
-//!
-//!     use spectral_init::metrics_internal::{dist_sq_avx2_looped, dist_sq_avx512_looped};
-//!
-//! and remove the stub definitions.
-//!
 //! Run with: cargo bench --bench dist_sq_bench
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use std::hint::black_box;
 
-// ─── Stubs (replaced by pub(crate) imports after groupD) ─────────────────────
+// ─── Kernel imports (groupD: real kernels, not stubs) ─────────────────────────
 
-/// Scalar fallback — mirrors the loop structure that avx2_looped will use.
-/// Benchmarks this until the real looped AVX2 kernel is exposed.
-fn dist_sq_avx2_looped_stub(xi: &[f64], xj: &[f64]) -> f64 {
-    xi.iter().zip(xj.iter()).map(|(a, b)| (a - b) * (a - b)).sum()
-}
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))]
+use spectral_init::metrics_internal::dist_sq_avx2_looped;
 
-/// Scalar fallback — mirrors the loop structure that avx512_looped will use.
-/// Benchmarks this until the real looped AVX-512 kernel is exposed.
-fn dist_sq_avx512_looped_stub(xi: &[f64], xj: &[f64]) -> f64 {
-    xi.iter().zip(xj.iter()).map(|(a, b)| (a - b) * (a - b)).sum()
-}
+#[cfg(all(target_arch = "x86_64", target_feature = "avx512f"))]
+use spectral_init::metrics_internal::dist_sq_avx512_looped;
 
 // ─── Data setup ───────────────────────────────────────────────────────────────
 
@@ -57,16 +43,32 @@ fn bench_dist_sq_kernels(c: &mut Criterion) {
     for &d in &[10_usize, 50] {
         let (xi, xj) = make_vectors(d, 42);
 
+        #[cfg(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))]
         group.bench_with_input(
             BenchmarkId::new("avx2_looped", d),
             &d,
-            |b, _| b.iter(|| dist_sq_avx2_looped_stub(black_box(&xi), black_box(&xj))),
+            |b, _| b.iter(|| unsafe {
+                dist_sq_avx2_looped(black_box(&xi), black_box(&xj))
+            }),
         );
 
+        #[cfg(all(target_arch = "x86_64", target_feature = "avx512f"))]
         group.bench_with_input(
             BenchmarkId::new("avx512_looped", d),
             &d,
-            |b, _| b.iter(|| dist_sq_avx512_looped_stub(black_box(&xi), black_box(&xj))),
+            |b, _| b.iter(|| unsafe {
+                dist_sq_avx512_looped(black_box(&xi), black_box(&xj))
+            }),
+        );
+
+        // Scalar baseline for comparison
+        group.bench_with_input(
+            BenchmarkId::new("scalar", d),
+            &d,
+            |b, _| b.iter(|| {
+                black_box(&xi).iter().zip(black_box(&xj).iter())
+                    .map(|(a, b)| (a - b) * (a - b)).sum::<f64>()
+            }),
         );
     }
 

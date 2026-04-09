@@ -1,1 +1,3 @@
 {"variant":"baseline","rust_score":0.515224105461394,"sklearn_score":0.515224105461394,"delta":0.00e0,"passed":true}
+{"variant":"avx2_looped","rust_score":0.515224105461394,"sklearn_score":0.515224105461394,"delta":0.00e0,"passed":true}
+{"variant":"avx512_looped","rust_score":0.515224105461394,"sklearn_score":0.515224105461394,"delta":0.00e0,"passed":true}
