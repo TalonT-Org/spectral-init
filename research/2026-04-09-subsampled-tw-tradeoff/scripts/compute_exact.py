@@ -5,7 +5,9 @@ Saves results/raw/exact_{dataset}_{n}.json with fields:
 
 Run from experiment root:
     micromamba run -n subsampled-tw-tradeoff python scripts/compute_exact.py
+    micromamba run -n subsampled-tw-tradeoff python scripts/compute_exact.py --dry-run
 """
+import argparse
 import sys
 import time
 from pathlib import Path
@@ -27,7 +29,18 @@ DATASETS = [
 
 
 def main() -> None:
-    for dataset, n, data_dir in DATASETS:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Only process MERFISH n=10K (skip all other datasets).")
+    args = parser.parse_args()
+
+    datasets = (
+        [("merfish", 10_000, EXPROOT / "data" / "merfish")]
+        if args.dry_run
+        else DATASETS
+    )
+
+    for dataset, n, data_dir in datasets:
         try:
             X, Y = load_npy_pair(data_dir, dataset, n)
         except FileNotFoundError as e:
