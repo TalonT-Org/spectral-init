@@ -407,7 +407,11 @@ For each kernel variant, compute:
 6. **Correctness** = `|rust_score - sklearn_score|` for each variant (must be < 1e-6)
 
 Statistical note: Criterion provides median and 95% CI. Use median for speedup ratios. Report
-whether 95% CIs overlap to assess whether differences are within noise.
+whether 95% CIs overlap to assess whether differences are within noise. Note: H1–H4 are evaluated
+against shared measurement data; no formal family-wise error rate (FWER) adjustment is
+pre-specified. Each hypothesis is assessed independently via CI overlap, without Bonferroni or
+other multiplicity correction. This is an exploratory engineering study, not a confirmatory
+statistical trial.
 
 ---
 
