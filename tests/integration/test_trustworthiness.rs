@@ -89,6 +89,10 @@ fn sklearn_parity_50d() {
 /// Run after sklearn_parity_50d passes with avx2_looped kernel.
 /// Writes a single JSON record, overwriting any previous record for this variant.
 /// Each variant writes to its own file to prevent concurrent-append interleaving.
+///
+/// WARNING: This test records the result of whichever kernel is compiled into the binary.
+/// Ensure `src/metrics.rs` has the avx2_looped dispatch path active and rebuild before running.
+/// Running this test with the wrong kernel compiled silently records incorrect-variant results.
 #[test]
 #[ignore = "run after sklearn_parity_50d passes with avx2_looped kernel; writes avx2_looped_correctness_record.json"]
 fn record_avx2_looped_correctness() {
@@ -142,6 +146,10 @@ fn record_avx2_looped_correctness() {
 /// Run after sklearn_parity_50d passes with avx512_looped kernel.
 /// Writes a single JSON record, overwriting any previous record for this variant.
 /// Each variant writes to its own file to prevent concurrent-append interleaving.
+///
+/// WARNING: This test records the result of whichever kernel is compiled into the binary.
+/// Ensure `src/metrics.rs` has the avx512_looped dispatch path active and rebuild before running.
+/// Running this test with the wrong kernel compiled silently records incorrect-variant results.
 #[test]
 #[ignore = "run after sklearn_parity_50d passes with avx512_looped kernel; writes avx512_looped_correctness_record.json"]
 fn record_avx512_looped_correctness() {
