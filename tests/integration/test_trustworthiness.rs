@@ -41,3 +41,45 @@ fn sklearn_parity_synthetic() {
         (rust_score - sklearn_score).abs()
     );
 }
+
+/// Sklearn parity at d_x=50: correctness gate for the avx2_looped kernel.
+/// Requires: python research/2026-04-08-x-dist-simd-avx512/scripts/gen_tw_parity_50d.py
+#[test]
+#[ignore = "requires fixture; run gen_tw_parity_50d.py then copy to tests/fixtures/tw_parity/"]
+fn sklearn_parity_50d() {
+    use ndarray_npy::NpzReader;
+    use std::fs::File;
+
+    let fixture_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/tw_parity/tw_parity_50d.npz");
+    let f = File::open(&fixture_path)
+        .unwrap_or_else(|e| panic!("could not open fixture {}: {e}", fixture_path.display()));
+    let mut npz = NpzReader::new(f).expect("failed to read .npz");
+
+    let x: ndarray::Array2<f64> = npz.by_name("X").expect("missing X in fixture");
+    let y: ndarray::Array2<f64> = npz.by_name("Y").expect("missing Y in fixture");
+    let k_arr: ndarray::Array0<i64> = npz.by_name("k").expect("missing k in fixture");
+    let sklearn_score_arr: ndarray::Array0<f64> = npz
+        .by_name("sklearn_score")
+        .expect("missing sklearn_score in fixture");
+
+    let k = *k_arr.as_slice_memory_order().unwrap().first().unwrap() as usize;
+    let sklearn_score = *sklearn_score_arr
+        .as_slice_memory_order()
+        .unwrap()
+        .first()
+        .unwrap();
+
+    assert!(
+        sklearn_score > 0.0 && sklearn_score <= 1.0,
+        "fixture sklearn_score out of plausible range: {sklearn_score} (possible corrupt fixture)"
+    );
+
+    let rust_score = trustworthiness(x.view(), y.view(), k);
+
+    assert!(
+        (rust_score - sklearn_score).abs() < 1e-6,
+        "sklearn parity failed: rust={rust_score:.10}, sklearn={sklearn_score:.10}, diff={:.2e}",
+        (rust_score - sklearn_score).abs()
+    );
+}
