@@ -25,7 +25,7 @@ memory-bandwidth saturation at n=10000 — both ISAs hit the same L2/L3 bandwidt
 
 The `spectral-init` crate computes UMAP spectral initialization embeddings. A key
 sub-routine is the trustworthiness metric, which measures embedding quality by comparing
-nearest-neighbor ranks in input vs. output spaces. Profiling of the trustworthiness
+nearest-neighbor ranks in input vs. output spaces (Venna & Kaski, 2006). Profiling of the trustworthiness
 function revealed that the `x_dist` step — computing all pairwise squared Euclidean
 distances in the input space — accounts for 68.9% of wall-clock time at n=10000, d_x=50.
 
@@ -217,14 +217,19 @@ All 5 connected datasets: **PASS**
    match Amdahl predictions (1.56×, 1.52×) within 1%. This confirms the x_dist fraction
    estimate from profiling (0.6891) is reliable and not stale.
 
-4. **Memory bandwidth saturation explains the AVX512 gap.** At n=10000 the working set
-   for a pairwise distance computation significantly exceeds L1/L2 cache. Both ISAs
-   saturate the same memory bus — the additional FP throughput of AVX512 cannot be
-   utilized when stalled on memory fetches.
+4. **Memory bandwidth saturation likely explains the AVX512 gap.** At n=10000 the working
+   set for a pairwise distance computation (n×d_x×8 bytes ≈ 4 MB at n=10000, d_x=50)
+   significantly exceeds L1/L2 cache (L2 = 1 MB per core). The most plausible explanation
+   is that both ISAs saturate the same memory bus — the additional FP throughput of AVX512
+   cannot be utilized when stalled on memory fetches. Direct bandwidth measurements (e.g.,
+   `perf stat` cache miss rates) were not collected; this is a likely hypothesis consistent
+   with the observed speedup discrepancy.
 
 5. **d_x=10 shows no SIMD benefit.** At dimension 10, all kernels run in ~2.3–2.6 ns
-   (essentially the same). The SIMD benefit is dimensionality-dependent and only
-   materializes at d_x ≥ ~32 where vector registers are efficiently filled.
+   (essentially the same). The SIMD benefit is dimensionality-dependent: at d_x=10 there
+   is no gain; at d_x=50 there is 2.36× (AVX2). The crossover point was not measured
+   directly — only d_x=10 and d_x=50 were benchmarked — so the exact threshold is
+   unknown, but is somewhere above d_x=10.
 
 6. **Zero correctness regression across all fixtures.** All 9 accuracy datasets and 5
    parity datasets pass, with eigenpair residuals well below their respective thresholds.
@@ -238,11 +243,13 @@ Amdahl model given an x_dist fraction of 0.6891.
 
 The AVX512 non-result is the more informative finding. The microbench shows a real 13.6%
 improvement in kernel throughput (4.12 vs 4.67 ns at d_x=50), yet this advantage
-disappears completely at the full benchmark level. This is a textbook memory-bandwidth
-bottleneck: once the working set exceeds cache, the compute rate of the core no longer
-matters — the bottleneck is how fast data arrives from DRAM. Both AVX2 and AVX512 issue
-memory loads at the same throughput, so the extra FLOP capacity of AVX512 provides no
-benefit.
+disappears completely at the full benchmark level. The most likely explanation is a
+memory-bandwidth bottleneck: the working set at n=10000 (≈4 MB for x_dist alone) exceeds
+the 1 MB per-core L2 cache, and once data must be fetched from L3/DRAM, the compute rate
+of the core no longer matters. Both AVX2 and AVX512 would then be stalled on the same
+memory bus, making the extra FLOP capacity of AVX512 irrelevant. Direct bandwidth
+measurements were not collected, so this remains the most plausible interpretation rather
+than a confirmed causal claim.
 
 The implication for future work is that further `x_dist` speedups would require
 algorithmic changes (cache tiling, blocking, or an approximate distance approach), not
@@ -259,6 +266,7 @@ y_dist 12.6%, penalty 7.5%) would then become the bottleneck.
   decisions can be made with confidence from profiler data alone.
 - **SIMD benefit is dimension-dependent.** At d_x=10 there is no gain; at d_x=50 there is
   2.36× (AVX2). Applications with lower dimensionality would not benefit from this change.
+  The crossover point was not measured; only d_x=10 and d_x=50 were benchmarked.
 - **Cache tiling was not needed to pass the gate.** The 1.5× threshold is achievable
   with the vectorized kernel alone at d_x=50.
 - **Correctness verification via sklearn parity is robust.** All three kernel variants
@@ -281,15 +289,26 @@ and avoids the deployment complexity of AVX512 feature detection.
 
 1. **Ship `avx2_looped`** as the production kernel for the `x_dist` step. It achieves
    the target 1.5× speedup, is numerically identical to baseline, and runs on all modern
-   x86-64 hardware without special capability flags.
+   x86-64 hardware. AVX2 is widely available on x86-64 CPUs produced since ~2013 and
+   requires only the `avx2` and `fma` feature flags, which are standard for this target.
+   AVX-512 availability is more limited and requires explicit feature detection at both
+   compile time (via `target-cpu=native` or `target-feature=+avx512f`) and runtime
+   (via `is_x86_feature_detected!`), adding deployment complexity.
 
 2. **Do not ship `avx512_looped`** in the current form. The 0.98× marginal gain over AVX2
-   provides no user benefit and adds ISA-dispatch overhead. Revisit only if future
-   workloads operate on datasets that fit in L2 cache (n ≲ 500 with d_x=50).
+   provides no user benefit and adds ISA-dispatch overhead. If future workloads operate
+   on small datasets where the working set fits in L2 cache (1 MB per core on this
+   hardware; for d_x=50 that corresponds to roughly n ≲ 500, i.e., a working set of
+   ~200 KB), the AVX512 kernel-level advantage may survive to the end-to-end level.
+   The n ≲ 500 figure is derived from cache capacity, not from a direct benchmark at
+   that scale.
 
-3. **Gate further x_dist optimization behind `ComputeMode::RustNative`** per project
-   policy. The `PythonCompat` path should remain as-is; the AVX2 kernel is a
-   `RustNative`-only optimization that may diverge from Python UMAP's numerical path.
+3. **Do not gate `x_dist` optimization behind `ComputeMode`**. The trustworthiness
+   function has no `ComputeMode` parameter — SIMD dispatch is purely compile-time
+   `#[cfg]` plus runtime `is_x86_feature_detected!`. The `ComputeMode::RustNative` /
+   `PythonCompat` distinction applies only to the eigensolver pipeline, not to
+   `trustworthiness`. Future x_dist optimizations should follow the same unconditional
+   CPU-feature-dispatch pattern as the current AVX2 kernel.
 
 4. **For additional speedup beyond 1.57×**, optimize other steps rather than continuing
    to push on `x_dist`. Priority order by fraction: `y_dist` (12.6%), `x_sort` (11.0%),
@@ -399,7 +418,7 @@ import pathlib
 import re
 import sys
 
-AMDAHL_XDIST_FRACTION = 0.589
+AMDAHL_XDIST_FRACTION = 0.6891  # measured value; 0.589 was the pre-experiment estimate
 
 
 def _resolve_results(argv):
@@ -446,15 +465,15 @@ def amdahl(xdist_fraction, xdist_speedup):
 
 
 def load_correctness(results):
-    path = results / "correctness.json"
-    if not path.exists():
-        return {}
+    # Each variant writes to its own {variant}_correctness_record.json file.
+    # This avoids concurrent-append interleaving in the shared correctness.json.
     out = {}
-    for line in path.read_text().splitlines():
-        line = line.strip()
-        if not line: continue
-        entry = json.loads(line)
-        out[entry["variant"]] = entry.get("delta")
+    for path in sorted(results.glob("*_correctness_record.json")):
+        try:
+            entry = json.loads(path.read_text().strip())
+            out[entry["variant"]] = entry.get("delta")
+        except (json.JSONDecodeError, KeyError):
+            pass
     return out
 
 
