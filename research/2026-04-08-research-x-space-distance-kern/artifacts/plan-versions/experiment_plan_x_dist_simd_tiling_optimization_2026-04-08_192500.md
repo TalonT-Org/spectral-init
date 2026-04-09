@@ -146,7 +146,11 @@ research/2026-04-08-x-dist-simd-avx512/
 The experiment runs entirely within the existing Rust toolchain. Specifics:
 - Criterion is already a dev-dependency (`criterion = "0.5"` in `Cargo.toml`).
 - `.cargo/config.toml` sets `rustflags = ["-C", "target-cpu=native"]`, which exposes `avx512f` at
-  compile time on the Ryzen 9800X3D — no `RUSTFLAGS` override needed.
+  compile time on the Ryzen 9800X3D — no `RUSTFLAGS` override needed. **Reproducibility requirement:**
+  This file is committed to the repository and must be present for AVX-512 to compile in. In a fresh
+  clone, verify that `.cargo/config.toml` exists and contains `target-cpu=native` before running. If
+  absent, AVX-512 intrinsics gated on `target_feature = "avx512f"` will silently fall back to scalar
+  dispatch without a build error.
 - AVX-512 intrinsics (`_mm512_loadu_pd`, `_mm512_fmadd_pd`, `_mm512_reduce_add_pd`) are in
   `core::arch::x86_64` (stable Rust, no new crate dependencies).
 - `profiling` feature and `tw_profiler` binary are already registered in `Cargo.toml`.
@@ -360,18 +364,19 @@ python research/2026-04-08-x-dist-simd-avx512/scripts/gen_tw_parity_50d.py
 bash research/2026-04-08-x-dist-simd-avx512/scripts/run_baseline.sh
 
 # 3. Correctness (baseline)
-cargo test --features testing -- --ignored sklearn_parity_50d 2>&1 \
-  >> research/2026-04-08-x-dist-simd-avx512/results/correctness.json
+# Note: use the dedicated record_baseline_correctness test, which writes to
+# results/baseline_correctness_record.json (not a shared file) to avoid interleaving.
+cargo test --features testing -- --ignored record_baseline_correctness
 
 # 4. Apply avx2_looped changes
 bash research/2026-04-08-x-dist-simd-avx512/scripts/run_optimized.sh avx2_looped
-cargo test --features testing -- --ignored sklearn_parity_50d 2>&1 \
-  >> research/2026-04-08-x-dist-simd-avx512/results/correctness.json
+# Rebuild required before recording: kernel must be avx2_looped in src/metrics.rs
+cargo test --features testing -- --ignored record_avx2_looped_correctness
 
 # 5. Apply avx512_looped changes
 bash research/2026-04-08-x-dist-simd-avx512/scripts/run_optimized.sh avx512_looped
-cargo test --features testing -- --ignored sklearn_parity_50d 2>&1 \
-  >> research/2026-04-08-x-dist-simd-avx512/results/correctness.json
+# Rebuild required before recording: kernel must be avx512_looped in src/metrics.rs
+cargo test --features testing -- --ignored record_avx512_looped_correctness
 
 # 6. (If needed) Apply tiling
 bash research/2026-04-08-x-dist-simd-avx512/scripts/run_optimized.sh avx512_tiled
