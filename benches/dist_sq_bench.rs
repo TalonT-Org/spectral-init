@@ -5,7 +5,11 @@
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use std::hint::black_box;
 
-#[cfg(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))]
+#[cfg(all(
+    target_arch = "x86_64",
+    target_feature = "avx2",
+    target_feature = "fma"
+))]
 use spectral_init::metrics::dist_sq_avx2_looped;
 
 // Note: on non-AVX2 hosts the avx2_looped benchmark arm is omitted by cfg; only the scalar
@@ -35,23 +39,24 @@ fn bench_dist_sq_kernels(c: &mut Criterion) {
     for &d in &[10_usize, 50] {
         let (xi, xj) = make_vectors(d, 42);
 
-        #[cfg(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))]
-        group.bench_with_input(
-            BenchmarkId::new("avx2_looped", d),
-            &d,
-            |b, _| b.iter(|| unsafe {
-                dist_sq_avx2_looped(black_box(&xi), black_box(&xj))
-            }),
-        );
+        #[cfg(all(
+            target_arch = "x86_64",
+            target_feature = "avx2",
+            target_feature = "fma"
+        ))]
+        group.bench_with_input(BenchmarkId::new("avx2_looped", d), &d, |b, _| {
+            b.iter(|| unsafe { dist_sq_avx2_looped(black_box(&xi), black_box(&xj)) })
+        });
 
-        group.bench_with_input(
-            BenchmarkId::new("scalar", d),
-            &d,
-            |b, _| b.iter(|| {
-                black_box(&xi).iter().zip(black_box(&xj).iter())
-                    .map(|(a, b)| (a - b) * (a - b)).sum::<f64>()
-            }),
-        );
+        group.bench_with_input(BenchmarkId::new("scalar", d), &d, |b, _| {
+            b.iter(|| {
+                black_box(&xi)
+                    .iter()
+                    .zip(black_box(&xj).iter())
+                    .map(|(a, b)| (a - b) * (a - b))
+                    .sum::<f64>()
+            })
+        });
     }
 
     group.finish();

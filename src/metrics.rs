@@ -415,7 +415,11 @@ pub fn eigenvalue_condition_number(eigenvalues: &Array1<f64>) -> f64 {
 ))]
 #[target_feature(enable = "avx2,fma")]
 pub unsafe fn dist_sq_avx2_looped(xi: &[f64], xj: &[f64]) -> f64 {
-    debug_assert_eq!(xi.len(), xj.len(), "dist_sq_avx2_looped: slices must have equal length");
+    debug_assert_eq!(
+        xi.len(),
+        xj.len(),
+        "dist_sq_avx2_looped: slices must have equal length"
+    );
     use std::arch::x86_64::*;
     let n = xi.len().min(xj.len());
     unsafe {
