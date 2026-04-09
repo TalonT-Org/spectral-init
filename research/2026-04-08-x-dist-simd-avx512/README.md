@@ -28,6 +28,8 @@ sub-routine is the trustworthiness metric, which measures embedding quality by c
 nearest-neighbor ranks in input vs. output spaces (Venna & Kaski, 2006). Profiling of the trustworthiness
 function revealed that the `x_dist` step — computing all pairwise squared Euclidean
 distances in the input space — accounts for 68.9% of wall-clock time at n=10000, d_x=50.
+(Note: the experiment plan used a prior estimate of 58.9%; the actual measured baseline fraction
+of 68.9% was obtained from `baseline_timing_summary.json` during Phase 0 — see Procedure section.)
 
 Prior work (groupB/C/D) implemented and correctness-verified two SIMD kernel variants:
 `avx2_looped` (256-bit AVX2 FMA) and `avx512_looped` (512-bit AVX512F). This experiment
@@ -293,7 +295,9 @@ and avoids the deployment complexity of AVX512 feature detection.
    requires only the `avx2` and `fma` feature flags, which are standard for this target.
    AVX-512 availability is more limited and requires explicit feature detection at both
    compile time (via `target-cpu=native` or `target-feature=+avx512f`) and runtime
-   (via `is_x86_feature_detected!`), adding deployment complexity.
+   (via `is_x86_feature_detected!`), adding deployment complexity. (See: Rust Reference,
+   `target_feature` attribute; Intel Architecture Instruction Set Extensions Programming
+   Reference for AVX-512 capability enumeration.)
 
 2. **Do not ship `avx512_looped`** in the current form. The 0.98× marginal gain over AVX2
    provides no user benefit and adds ISA-dispatch overhead. If future workloads operate
