@@ -1,0 +1,9 @@
+name: subsampled-tw-tradeoff
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy=2.2.6
+  - scipy=1.15.2
+  - scikit-learn=1.6.0
+  - matplotlib=3.10.1
