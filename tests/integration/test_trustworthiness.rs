@@ -21,12 +21,8 @@ fn sklearn_parity_synthetic() {
         .by_name("sklearn_score")
         .expect("missing sklearn_score in fixture");
 
-    let k = *k_arr.as_slice_memory_order().unwrap().first().unwrap() as usize;
-    let sklearn_score = *sklearn_score_arr
-        .as_slice_memory_order()
-        .unwrap()
-        .first()
-        .unwrap();
+    let k = k_arr.into_scalar() as usize;
+    let sklearn_score = sklearn_score_arr.into_scalar();
 
     assert!(
         sklearn_score > 0.0 && sklearn_score <= 1.0,
@@ -43,9 +39,7 @@ fn sklearn_parity_synthetic() {
 }
 
 /// Sklearn parity at d_x=50: correctness gate for the avx2_looped kernel.
-/// Requires: python research/2026-04-08-x-dist-simd-avx512/scripts/gen_tw_parity_50d.py
 #[test]
-#[ignore = "requires fixture; run gen_tw_parity_50d.py then copy to tests/fixtures/tw_parity/"]
 fn sklearn_parity_50d() {
     use ndarray_npy::NpzReader;
     use std::fs::File;
@@ -63,12 +57,8 @@ fn sklearn_parity_50d() {
         .by_name("sklearn_score")
         .expect("missing sklearn_score in fixture");
 
-    let k = *k_arr.as_slice_memory_order().unwrap().first().unwrap() as usize;
-    let sklearn_score = *sklearn_score_arr
-        .as_slice_memory_order()
-        .unwrap()
-        .first()
-        .unwrap();
+    let k = k_arr.into_scalar() as usize;
+    let sklearn_score = sklearn_score_arr.into_scalar();
 
     assert!(
         sklearn_score > 0.0 && sklearn_score <= 1.0,
