@@ -405,7 +405,9 @@ pub fn eigenvalue_condition_number(eigenvalues: &Array1<f64>) -> f64 {
 /// 4-wide YMM loop with FMA accumulation, horizontal reduce, scalar tail 0-3.
 ///
 /// # Safety
-/// Both slices must have the same length (caller ensures `d_x >= 10` at the dispatch site).
+/// Both slices must have the same length and at least 10 elements (caller ensures
+/// `xi.len() == xj.len()` and `d_x >= 10` at the dispatch site).
+#[doc(hidden)]
 #[cfg(all(
     target_arch = "x86_64",
     target_feature = "avx2",
@@ -413,6 +415,7 @@ pub fn eigenvalue_condition_number(eigenvalues: &Array1<f64>) -> f64 {
 ))]
 #[target_feature(enable = "avx2,fma")]
 pub unsafe fn dist_sq_avx2_looped(xi: &[f64], xj: &[f64]) -> f64 {
+    debug_assert_eq!(xi.len(), xj.len(), "dist_sq_avx2_looped: slices must have equal length");
     use std::arch::x86_64::*;
     let n = xi.len().min(xj.len());
     unsafe {
@@ -606,7 +609,7 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
                                 if use_avx2 && d_x >= 10 {
                                     let si = xi.as_slice().expect("x row must be contiguous");
                                     let sj = xj.as_slice().expect("x row must be contiguous");
-                                    // SAFETY: runtime + d_x check guarantees AVX2+FMA and >= 8 elements.
+                                    // SAFETY: runtime + d_x check guarantees AVX2+FMA and >= 10 elements.
                                     unsafe { dist_sq_avx2_looped(si, sj) }
                                 } else {
                                     xi.iter()
