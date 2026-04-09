@@ -1,0 +1,13 @@
+{
+  "x_dist_ns_total": 28737969689.0,
+  "x_sort_ns_total": 4592566270.0,
+  "y_dist_ns_total": 5265685047.0,
+  "penalty_ns_total": 3108218645.0,
+  "x_dist_fraction": 0.6890865799778445,
+  "step_fractions": {
+    "x_dist": 0.6890865799778445,
+    "x_sort": 0.11012175942015992,
+    "y_dist": 0.1262619781266798,
+    "penalty": 0.0745296824753158
+  }
+}
