@@ -1,0 +1,32 @@
+[
+  {
+    "kernel": "avx2_looped",
+    "d_x": 10,
+    "ns_per_call": 2.6270585052159596
+  },
+  {
+    "kernel": "avx2_looped",
+    "d_x": 50,
+    "ns_per_call": 4.673180721014557
+  },
+  {
+    "kernel": "avx512_looped",
+    "d_x": 10,
+    "ns_per_call": 2.2953101808510468
+  },
+  {
+    "kernel": "avx512_looped",
+    "d_x": 50,
+    "ns_per_call": 4.121564187917247
+  },
+  {
+    "kernel": "scalar",
+    "d_x": 10,
+    "ns_per_call": 2.5892237420279987
+  },
+  {
+    "kernel": "scalar",
+    "d_x": 50,
+    "ns_per_call": 11.044853722438596
+  }
+]
