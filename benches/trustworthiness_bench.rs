@@ -16,6 +16,7 @@ fn make_data(
 }
 
 fn bench_trustworthiness(c: &mut Criterion) {
+    // Force Rayon thread-pool initialization before timing starts.
     let _ = rayon::current_num_threads();
 
     let mut group = c.benchmark_group("trustworthiness");
@@ -32,6 +33,7 @@ fn bench_trustworthiness(c: &mut Criterion) {
 }
 
 fn bench_trustworthiness_d50(c: &mut Criterion) {
+    // Force Rayon thread-pool initialization before timing starts.
     let _ = rayon::current_num_threads();
 
     let mut group = c.benchmark_group("trustworthiness_d50");
@@ -47,6 +49,5 @@ fn bench_trustworthiness_d50(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_trustworthiness);
-criterion_group!(benches_d50, bench_trustworthiness_d50);
-criterion_main!(benches, benches_d50);
+criterion_group!(benches, bench_trustworthiness, bench_trustworthiness_d50);
+criterion_main!(benches);
