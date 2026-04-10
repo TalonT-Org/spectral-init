@@ -1,6 +1,6 @@
 """Run subsampling experiment: Approach A and B for all (dataset, n, m, seed).
 
-Full run: 2 approaches × 14 m-values × 10 seeds × 2 datasets = 560 trials.
+Full run: 2 approaches × (6+8) m-values × 10 seeds × 2 datasets = 560 trials.
 Dry run (--dry-run): seed=0, m=2000, both approaches, MERFISH n=10K only.
 
 Run from experiment root:
@@ -20,24 +20,24 @@ from sklearn.neighbors import NearestNeighbors
 
 sys.path.insert(0, str(Path(__file__).parent))
 from utils import (
-    K, SEEDS, M_VALUES_10K, M_VALUES_50K,
+    K, SEEDS, M_VALUES_10K, M_VALUES_20K,
     load_npy_pair, save_result_json, trustworthiness_row_subsampled,
 )
 
 EXPROOT = Path(__file__).parent.parent
 BATCH_SIZE = 5000
-_MEM_LIMIT = 8 * 1024 ** 3  # 8 GB
+_MEM_LIMIT = 4 * 1024 ** 3  # 4 GB
 
 DATASETS = [
     ("merfish",  10_000, EXPROOT / "data" / "merfish"),
-    ("merfish",  50_000, EXPROOT / "data" / "merfish"),
+    ("merfish",  20_000, EXPROOT / "data" / "merfish"),
     ("gaussian", 10_000, EXPROOT / "data" / "gaussian"),
-    ("gaussian", 50_000, EXPROOT / "data" / "gaussian"),
+    ("gaussian", 20_000, EXPROOT / "data" / "gaussian"),
 ]
 
 
 def _m_values(n: int) -> list:
-    return M_VALUES_10K if n == 10_000 else M_VALUES_50K
+    return M_VALUES_10K if n == 10_000 else M_VALUES_20K
 
 
 def _approach_a_batched(X, Y, k, query_idx):

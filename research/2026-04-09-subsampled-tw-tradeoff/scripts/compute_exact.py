@@ -22,9 +22,9 @@ EXPROOT = Path(__file__).parent.parent
 
 DATASETS = [
     ("merfish",  10_000, EXPROOT / "data" / "merfish"),
-    ("merfish",  50_000, EXPROOT / "data" / "merfish"),
+    ("merfish",  20_000, EXPROOT / "data" / "merfish"),
     ("gaussian", 10_000, EXPROOT / "data" / "gaussian"),
-    ("gaussian", 50_000, EXPROOT / "data" / "gaussian"),
+    ("gaussian", 20_000, EXPROOT / "data" / "gaussian"),
 ]
 
 

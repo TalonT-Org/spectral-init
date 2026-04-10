@@ -13,7 +13,7 @@ from sklearn.neighbors import NearestNeighbors
 K = 15
 SEEDS = list(range(10))
 M_VALUES_10K = [250, 500, 1000, 2000, 5000, 7500]
-M_VALUES_50K = [250, 500, 1000, 2000, 5000, 7500, 10000, 25000]
+M_VALUES_20K = [250, 500, 1000, 2000, 5000, 7500, 10000, 15000]
 
 # ---------------------------------------------------------------------------
 # Approach A: row-subsampled trustworthiness estimator

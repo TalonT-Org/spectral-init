@@ -112,7 +112,7 @@ for approach in ["A", "B"]:
 
 h3_rows = []
 for approach in ["A", "B"]:
-    for n in [10_000, 50_000]:
+    for n in [10_000, 20_000]:
         for m in [2000, 5000]:
             s_m = stats.get((approach, "merfish",  n, m), {}).get("std_T_sub", np.nan)
             s_g = stats.get((approach, "gaussian", n, m), {}).get("std_T_sub", np.nan)
@@ -139,11 +139,11 @@ for approach in ["A", "B"]:
 # ---------------------------------------------------------------------------
 
 _M_VALS = {10_000: [250, 500, 1000, 2000, 5000, 7500],
-           50_000: [250, 500, 1000, 2000, 5000, 7500, 10_000, 25_000]}
+           20_000: [250, 500, 1000, 2000, 5000, 7500, 10_000, 15_000]}
 
 h5_rows = []
 for approach in ["A", "B"]:
-    for n in [10_000, 50_000]:
+    for n in [10_000, 20_000]:
         crossover_m = None
         for m in _M_VALS[n]:
             key = (approach, "merfish", n, m)
@@ -168,7 +168,7 @@ for approach in ["A", "B"]:
 h6_result = {}
 _REF_APPROACH, _REF_M = "A", 2000
 _pts = []
-for n in [10_000, 50_000]:
+for n in [10_000, 20_000]:
     key = (_REF_APPROACH, "merfish", n, _REF_M)
     if key in stats:
         _pts.append((n, stats[key]["mean_abs_delta_T"]))
@@ -263,7 +263,7 @@ lines += [""]
 
 if h6_result:
     lines += [
-        "## H6: Extrapolation to n=100K ⚠️ OUT-OF-DISTRIBUTION PROJECTION",
+        "## H6: Extrapolation to n=100K ⚠️ OUT-OF-DISTRIBUTION PROJECTION (fit from n=10K and n=20K)",
         "",
         f"Fit: |ΔT| = {h6_result['a']:.6f} × n^{h6_result['b']:.4f}  "
         f"(Approach {h6_result['ref_approach']}, m={h6_result['ref_m']}, MERFISH, 2 data points)",
@@ -278,7 +278,7 @@ else:
     lines += [
         "## H6: Extrapolation to n=100K",
         "",
-        "Insufficient data for power-law fit (need both n=10K and n=50K MERFISH results).",
+        "Insufficient data for power-law fit (need both n=10K and n=20K MERFISH results).",
         "",
     ]
 
@@ -291,7 +291,7 @@ print("Wrote results/analysis/summary.md")
 
 _APPROACHES = ["A", "B"]
 _DATASETS   = ["merfish", "gaussian"]
-_NS         = [10_000, 50_000]
+_NS         = [10_000, 20_000]
 
 
 def _series(approach, dataset, n, metric):
