@@ -8,6 +8,8 @@ This experiment validates that computing trustworthiness on a random subsample o
 
 All six hypotheses passed. At the recommended default of m=2000, the mean approximation error is 0.00186 (nearly 5x below the 0.01 threshold) with a 4.6x speedup at n=10K and 24x speedup at n=50K. The Rust implementation closely matches Python's speedup ratios at overlapping points (all within |log2(ratio)| < 0.25). Critically, the Rust implementation's O(n) per-thread memory enables trustworthiness evaluation at n=50K where Python's O(n^2) memory requirement prevents computation entirely.
 
+**Data Scope:** Two MERFISH mouse brain cortex datasets (n=10,000 and n=50,000 cells; 50 PCA features, 2D spatial coordinates; k=15 nearest neighbors, Euclidean metric). Results are validated for this specific data family and parameter regime only.
+
 **Recommendation:** Ship `trustworthiness_subsampled()` with m=2000 as the recommended default for the MERFISH datasets tested here (k=15, PCA-50 features, AVX2 x86_64).
 
 ## Background and Research Question
