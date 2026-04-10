@@ -224,3 +224,8 @@ path = "examples/compute_modes.rs"
 [[example]]
 name = "from_adjacency_list"
 path = "examples/from_adjacency_list.rs"
+
+[[example]]
+name = "tw_subsample_experiment"
+path = "research/2026-04-10-subsampled-tw-rust/scripts/tw_subsample_experiment.rs"
+required-features = ["cli"]
