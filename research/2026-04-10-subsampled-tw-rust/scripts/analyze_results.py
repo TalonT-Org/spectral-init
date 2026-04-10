@@ -266,7 +266,7 @@ def test_h3(cell_stats):
     p_onesided = float(stats.t.cdf(t_stat, df))
 
     return {
-        "verdict": "PASS" if (slope <= -0.3 and p_onesided < 0.05) else "FAIL",
+        "verdict": "PASS" if (slope <= -0.3 and p_onesided < 0.025) else "FAIL",
         "slope": float(slope),
         "slope_se": float(std_err),
         "t_statistic": float(t_stat),
