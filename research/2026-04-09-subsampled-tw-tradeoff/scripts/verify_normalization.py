@@ -17,6 +17,7 @@ from utils import K, load_npy_pair, trustworthiness_row_subsampled
 
 EXPROOT = Path(__file__).parent.parent
 EXACT_PATH = EXPROOT / "results" / "raw" / "exact_merfish_10000.json"
+RESULT_PATH = EXPROOT / "results" / "raw" / "normalization_check.json"
 
 
 def main() -> None:
@@ -43,16 +44,22 @@ def main() -> None:
     print(f"|difference|           = {diff:.3e}")
     print(f"threshold              = {threshold:.3e}")
 
+    passed = False
+    threshold_used = threshold
+
     if diff < threshold:
         print("PASS: normalization is correct.")
+        passed = True
     else:
         # Check if within acceptable FP precision range (loop vs vectorised accumulation)
         fp_threshold = 1e-6
+        threshold_used = fp_threshold
         if diff < fp_threshold:
             print(
                 f"PASS: |T_A(m=n) - T_exact| = {diff:.3e} < {fp_threshold:.3e} "
                 "(within acceptable floating-point precision for loop vs vectorised accumulation)."
             )
+            passed = True
         else:
             print(
                 f"FAIL: |T_A(m=n) - T_exact| = {diff:.3e} >= {threshold:.3e}\n"
@@ -60,7 +67,23 @@ def main() -> None:
                 "n must be X.shape[0] (full population), not len(query_idx).",
                 file=sys.stderr,
             )
-            sys.exit(1)
+
+    # Write machine-readable result so downstream consumers can verify which threshold was applied
+    result = {
+        "T_exact": float(T_exact),
+        "T_full_m_eq_n": float(T_full),
+        "abs_diff": float(diff),
+        "strict_threshold": float(threshold),
+        "threshold_used": float(threshold_used),
+        "passed": passed,
+    }
+    RESULT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(RESULT_PATH, "w") as f:
+        json.dump(result, f, indent=2)
+    print(f"Result written to {RESULT_PATH}")
+
+    if not passed:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

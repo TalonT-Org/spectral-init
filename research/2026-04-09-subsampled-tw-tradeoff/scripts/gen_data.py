@@ -2,7 +2,10 @@
 
 Usage (from experiment directory):
     micromamba run -n subsampled-tw-tradeoff python scripts/gen_data.py
-    micromamba run -n subsampled-tw-tradeoff python scripts/gen_data.py --sizes 10000 50000
+    micromamba run -n subsampled-tw-tradeoff python scripts/gen_data.py --sizes 10000 20000
+
+Note: the default sizes match the executed experiment (n=20K, not n=50K, due to the 4 GB
+memory constraint that replaced n=50K with n=20K in commit 544989f).
 """
 import argparse
 from pathlib import Path
@@ -12,7 +15,7 @@ import numpy as np
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate Gaussian benchmark data (d=50)")
-    parser.add_argument("--sizes", type=int, nargs="+", default=[10000, 50000])
+    parser.add_argument("--sizes", type=int, nargs="+", default=[10000, 20000])
     args = parser.parse_args()
 
     script_dir = Path(__file__).parent
