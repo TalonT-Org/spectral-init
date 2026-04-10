@@ -1,0 +1,12 @@
+name: subsampled-tw-rust
+# Rust toolchain: nightly-2026-03-26 (see rust-toolchain.toml)
+# Install via: rustup toolchain install nightly-2026-03-26
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy=2.2
+  - scipy=1.15
+  - scikit-learn=1.6
+  - matplotlib=3.10
+  - pip
