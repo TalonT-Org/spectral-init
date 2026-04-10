@@ -35,7 +35,7 @@ Six hypotheses were evaluated independently (no composite null):
 | H5 | Exploratory | Accuracy at m=2000, n=50K | Same as H1 at n=50K |
 | H6 | Confirmatory | Normalization sanity | \|T_sub(m=n) - T_exact\| < 1e-10 for both n values |
 
-The confirmatory family (H1, H2, H3, H6) uses alpha=0.025 per test (one-sided). With 4 tests, the worst-case FWER under independence is approximately 0.096. H4 is conditional on Python reference data availability. H5 is exploratory and not included in the confirmatory family.
+The confirmatory family (H1, H2, H3, H6) uses alpha=0.025 per test (one-sided). With 4 tests, the worst-case FWER under independence is approximately 0.096. No FWER correction is applied; the four confirmatory tests assess distinct phenomena (accuracy, linearity, variance decay, normalization) using different statistical methods, reducing concern about Type I error inflation. Under Bonferroni correction (adjusted alpha=0.0125), H3 (p=0.025) would marginally fail; all other confirmatory tests pass with large margins. H4 is conditional on Python reference data availability. H5 is exploratory and not included in the confirmatory family.
 
 **Power analysis:** With 10 seeds, expected sigma ~0.002, threshold mu_0=0.01, and expected mean ~0.002, the effect size d=4.0 yields power > 0.999 at alpha=0.025 one-sided for H1.
 
@@ -183,7 +183,7 @@ All 9 datasets PASS. Parity assessment not applicable (experiment does not affec
 
 ## Analysis
 
-The experiment provides strong evidence that the Rust subsampled trustworthiness implementation is a faithful port of the Python approach with equivalent or better performance characteristics.
+The experiment provides strong evidence that the Rust subsampled trustworthiness implementation reproduces the accuracy and speedup characteristics of the Python approach, with equivalent or better performance. The two implementations use fundamentally different computational pipelines (see Background), so this is behavioral equivalence demonstrated through matched experimental outcomes, not algorithmic identity.
 
 **Accuracy:** The H1 and H5 results demonstrate that m=2000 achieves mean|dT| < 0.002 at both n=10K and n=50K, with 97.5% CI upper bounds of 0.00315 and 0.00290 respectively — both far below the 0.01 threshold. The near-identical accuracy at n=50K (H5: mean|dT|=0.00189) vs n=10K (H1: mean|dT|=0.00186) suggests the approximation quality is stable across population sizes, at least within this dataset family.
 
