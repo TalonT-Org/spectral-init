@@ -400,37 +400,49 @@ pub fn eigenvalue_condition_number(eigenvalues: &Array1<f64>) -> f64 {
 
 // ─── AVX2+FMA squared-distance kernel ────────────────────────────────────────
 
-/// Squared Euclidean distance using AVX2+FMA intrinsics.
+/// Squared Euclidean distance using AVX2+FMA intrinsics, looped over all elements.
+///
+/// 4-wide YMM loop with FMA accumulation, horizontal reduce, scalar tail 0-3.
 ///
 /// # Safety
-/// Both slices must have at least 10 elements (enforced by the `d_x >= 10` guard at the
-/// call site). Two 4-wide loads cover elements 0..8; a scalar tail handles 8..n.
+/// Both slices must have the same length and at least 10 elements (caller ensures
+/// `xi.len() == xj.len()` and `d_x >= 10` at the dispatch site).
+#[doc(hidden)]
 #[cfg(all(
     target_arch = "x86_64",
     target_feature = "avx2",
     target_feature = "fma"
 ))]
 #[target_feature(enable = "avx2,fma")]
-unsafe fn dist_sq_avx2(xi: &[f64], xj: &[f64]) -> f64 {
+pub unsafe fn dist_sq_avx2_looped(xi: &[f64], xj: &[f64]) -> f64 {
+    debug_assert_eq!(
+        xi.len(),
+        xj.len(),
+        "dist_sq_avx2_looped: slices must have equal length"
+    );
     use std::arch::x86_64::*;
     let n = xi.len().min(xj.len());
     unsafe {
-        let a0 = _mm256_loadu_pd(xi.as_ptr());
-        let b0 = _mm256_loadu_pd(xj.as_ptr());
-        let d0 = _mm256_sub_pd(a0, b0);
-        let mut acc = _mm256_mul_pd(d0, d0);
-        let a1 = _mm256_loadu_pd(xi.as_ptr().add(4));
-        let b1 = _mm256_loadu_pd(xj.as_ptr().add(4));
-        let d1 = _mm256_sub_pd(a1, b1);
-        acc = _mm256_fmadd_pd(d1, d1, acc);
+        let mut acc = _mm256_setzero_pd();
+        let mut k = 0usize;
+        while k + 4 <= n {
+            let a = _mm256_loadu_pd(xi.as_ptr().add(k));
+            let b = _mm256_loadu_pd(xj.as_ptr().add(k));
+            let d = _mm256_sub_pd(a, b);
+            acc = _mm256_fmadd_pd(d, d, acc);
+            k += 4;
+        }
+        // Horizontal reduce: sum 4 lanes
         let lo = _mm256_castpd256_pd128(acc);
         let hi = _mm256_extractf128_pd(acc, 1);
         let sum128 = _mm_add_pd(lo, hi);
         let halved = _mm_hadd_pd(sum128, sum128);
         let mut result = _mm_cvtsd_f64(halved);
-        for i in 8..n {
-            let d = xi[i] - xj[i];
+        // Scalar tail (0–3 remaining elements)
+        while k < n {
+            let d = xi[k] - xj[k];
             result += d * d;
+            k += 1;
         }
         result
     }
@@ -601,8 +613,8 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
                                 if use_avx2 && d_x >= 10 {
                                     let si = xi.as_slice().expect("x row must be contiguous");
                                     let sj = xj.as_slice().expect("x row must be contiguous");
-                                    // SAFETY: runtime + d_x check guarantees AVX2+FMA and >= 8 elements.
-                                    unsafe { dist_sq_avx2(si, sj) }
+                                    // SAFETY: runtime + d_x check guarantees AVX2+FMA and >= 10 elements.
+                                    unsafe { dist_sq_avx2_looped(si, sj) }
                                 } else {
                                     xi.iter()
                                         .zip(xj.iter())
@@ -1175,10 +1187,10 @@ mod tests {
         target_feature = "fma"
     ))]
     #[test]
-    fn t_tw_06_avx2_kernel_matches_scalar() {
+    fn t_tw_06_avx2_looped_kernel_matches_scalar() {
         use rand::{Rng, SeedableRng};
         let mut rng = rand::rngs::SmallRng::seed_from_u64(42);
-        for len in [10, 16, 33, 100] {
+        for len in [10, 13, 16, 50, 100] {
             let a: Vec<f64> = (0..len).map(|_| rng.random::<f64>()).collect();
             let b: Vec<f64> = (0..len).map(|_| rng.random::<f64>()).collect();
             let scalar: f64 = a
@@ -1186,10 +1198,10 @@ mod tests {
                 .zip(b.iter())
                 .map(|(&x, &y)| (x - y) * (x - y))
                 .sum();
-            let avx2 = unsafe { super::dist_sq_avx2(&a, &b) };
+            let avx2 = unsafe { super::dist_sq_avx2_looped(&a, &b) };
             assert!(
                 (avx2 - scalar).abs() < 1e-10,
-                "dist_sq_avx2 mismatch at len={len}: avx2={avx2}, scalar={scalar}"
+                "dist_sq_avx2_looped mismatch at len={len}: avx2={avx2}, scalar={scalar}"
             );
         }
     }
