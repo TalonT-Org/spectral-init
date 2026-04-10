@@ -4,15 +4,15 @@
 
 ## Executive Summary
 
-This experiment validates that computing trustworthiness on a random subsample of m rows in the Rust implementation of SpectralInit reproduces the accuracy and speedup findings from the Python sub-sampling study (PR #260). Using MERFISH spatial transcriptomics data (PCA-50 features, 2D spatial coordinates), we evaluated the trade-off between approximation error (|T_subsampled - T_exact|) and computational speedup across 14 (n, m) cells with 10 seeds each, totaling 140 subsample trials plus 4 baseline/sanity runs.
+This experiment validates that computing trustworthiness on a random subsample of m rows in the Rust implementation of SpectralInit reproduces the accuracy and speedup findings from the Python sub-sampling study ([PR #260](https://github.com/TalonT-Org/spectral-init/pull/260)). Using MERFISH spatial transcriptomics data (PCA-50 features, 2D spatial coordinates), we evaluated the trade-off between approximation error (|T_subsampled - T_exact|) and computational speedup across 14 (n, m) cells with 10 seeds each, totaling 140 subsample trials plus 4 baseline/sanity runs.
 
 All six hypotheses passed. At the recommended default of m=2000, the mean approximation error is 0.00186 (nearly 5x below the 0.01 threshold) with a 4.6x speedup at n=10K and 24x speedup at n=50K. The Rust implementation closely matches Python's speedup ratios at overlapping points (all within |log2(ratio)| < 0.25). Critically, the Rust implementation's O(n) per-thread memory enables trustworthiness evaluation at n=50K where Python's O(n^2) memory requirement prevents computation entirely.
 
-**Recommendation:** Ship `trustworthiness_subsampled()` with m=2000 as the recommended default for MERFISH-class data (k=15, PCA-50 features, AVX2 x86_64).
+**Recommendation:** Ship `trustworthiness_subsampled()` with m=2000 as the recommended default for the MERFISH datasets tested here (k=15, PCA-50 features, AVX2 x86_64).
 
 ## Background and Research Question
 
-The Python sub-sampling study (PR #260) established that computing trustworthiness on a random subset of m rows yields mean|dT| < 0.002 at m=2000 on MERFISH n=10K data, with approximately 4x speedup. However, the Rust implementation uses a fundamentally different computational pipeline: AVX2+FMA SIMD distance kernels, Rayon-based parallelism, introselect k-NN, and O(n) per-thread memory (vs Python's O(n^2) pairwise distance matrix).
+The Python sub-sampling study ([PR #260](https://github.com/TalonT-Org/spectral-init/pull/260)) established that computing trustworthiness on a random subset of m rows yields mean|dT| < 0.002 at m=2000 on MERFISH n=10K data, with approximately 4x speedup. However, the Rust implementation uses a fundamentally different computational pipeline: AVX2+FMA SIMD distance kernels, Rayon-based parallelism, introselect k-NN, and O(n) per-thread memory (vs Python's O(n^2) pairwise distance matrix).
 
 The research question: **Does the Rust subsampled trustworthiness computation reproduce the Python study's accuracy and speedup findings, and can it extend to larger populations (n=50K) that Python cannot reach?**
 
@@ -78,7 +78,7 @@ Total compute: 140 subsample trials + 2 sanity + 2 exact baselines = 144 trials.
 |------------|------|---------|------------|
 | H1 | Confirmatory | **PASS** | mean\|dT\|=0.00186, CI_upper=0.00315, p=8.96e-08 |
 | H2 | Confirmatory | **PASS** | n=10K: R2_CI_lo=0.996 (log-linear); n=50K: R2_CI_lo=1.000 (linear) |
-| H3 | Confirmatory | **PASS** | slope=-3.503, p=0.025 |
+| H3 | Confirmatory | **PASS** | slope=-3.503, p=0.02475 (marginal; 0.00025 below alpha=0.025) |
 | H4 | Conditional | **PASS** | 4/4 points within 2x |
 | H5 | Exploratory | **PASS** | mean\|dT\|=0.00189, CI_upper=0.00290, p=1.13e-08 |
 | H6 | Confirmatory | **PASS** | abs_delta_t=0.0 for both n=10K and n=50K |
@@ -120,12 +120,14 @@ Total compute: 140 subsample trials + 2 sanity + 2 exact baselines = 144 trials.
 
 - Log-log slope of std(T) vs m: -3.503 (threshold: <= -0.3)
 - p-value: 0.025 (one-sided)
-- R2: 0.346
+- R2: 0.346 (low due to pooling both n-strata; see note below)
 - Variance decays much faster than CLT baseline (slope well below -0.5).
+
+**Robustness note:** The H3 OLS pools both n=10K and n=50K strata, which introduces a confound (different baseline std at the same m). The pooled result is used for the pass/fail verdict as pre-specified in the experiment plan. Per-stratum log-log slopes would likely show higher R2 and corroborate the pooled finding, but were not computed as part of this experiment.
 
 ### H4 — Rust vs Python Speedup Parity
 
-All 4 overlapping points within 2x:
+All 4 overlapping points within 2x (compared against Python reference values from [PR #260](https://github.com/TalonT-Org/spectral-init/pull/260), measured on the same MERFISH n=10K dataset with k=15, euclidean metric):
 
 | m | Rust Speedup | Python Speedup | log2(ratio) |
 |---|-------------|----------------|-------------|
@@ -169,13 +171,13 @@ All 9 datasets PASS. Parity assessment not applicable (experiment does not affec
 
 2. **Speedup scales nearly linearly with n/m:** At n=50K, m=2000 achieves 24x speedup. At n=10K, m=2000 achieves 4.6x speedup. The n=10K stratum is slightly log-linear (sub-linear overhead from fixed costs) while n=50K is highly linear (fixed costs negligible at larger n).
 
-3. **Rust closely matches Python speedup ratios:** All 4 overlapping (n=10K) points agree within |log2(ratio)| < 0.25, well within the 2x tolerance. Rust is slightly faster than Python at the same (n, m) for larger m values, likely due to lower per-row overhead from SIMD kernels.
+3. **Rust closely matches Python speedup ratios:** All 4 overlapping (n=10K) points agree within |log2(ratio)| < 0.25, well within the 2x tolerance. Rust is slightly faster than Python at the same (n, m) for larger m values, possibly due to lower per-row overhead (no profiling data available to confirm the specific mechanism).
 
 4. **n=50K works where Python cannot:** Python's O(n^2) memory prevents trustworthiness computation at n=50K. The Rust implementation's O(n) per-thread memory enables this scale. The accuracy at n=50K is essentially identical to n=10K, providing new evidence beyond the original Python study.
 
 5. **Sanity checks are exact:** |T_sub(m=n) - T_exact| = 0.0 (bit-identical) for both population sizes, confirming the normalization denominator (`m * k * (2n - 3k - 1)`) and per-row computation are correct.
 
-6. **Variance decay steeper than expected:** The log-log slope of -3.503 is much steeper than the CLT baseline of -0.5 and well below the -0.3 threshold. This suggests favorable statistical properties of the trustworthiness estimator under subsampling — individual row contributions are correlated in a way that reduces sampling variance faster than independent draws. The R2 of 0.346 is relatively low because the data pools both n=10K and n=50K strata, introducing a confound; per-stratum fits would likely show higher R2.
+6. **Variance decay steeper than expected:** The log-log slope of -3.503 is much steeper than the CLT baseline of -0.5 and well below the -0.3 threshold. This suggests favorable statistical properties of the trustworthiness estimator under subsampling. One possible explanation is that individual row contributions are correlated in a way that reduces sampling variance faster than independent draws; another is that the summary statistic saturates for large m. The available data do not distinguish between these mechanisms. The R2 of 0.346 is relatively low because the data pools both n=10K and n=50K strata, introducing a confound; per-stratum fits would likely show higher R2.
 
 ## Analysis
 
@@ -185,13 +187,13 @@ The experiment provides strong evidence that the Rust subsampled trustworthiness
 
 **Speedup scaling:** The H2 results confirm that speedup scales approximately linearly with n/m. The n=10K stratum exhibits slight log-linearity (27% RMSE reduction with log-linear fit), attributable to fixed per-row overhead that becomes proportionally larger as m approaches n. The n=50K stratum is essentially perfectly linear (R2=0.9999), consistent with fixed costs becoming negligible at scale.
 
-**Cross-language parity:** H4 confirms that the Rust speedup ratios closely match Python's at all 4 overlapping points. The slight Rust advantage at larger m (log2 ratios of +0.16 and +0.24 at m=2000 and m=5000) is consistent with Rust's lower per-row overhead from SIMD distance kernels. Importantly, Rust does not show anomalously high or low speedup, validating that the subsampling approach benefits equally from Rust's computational advantages.
+**Cross-language parity:** H4 confirms that the Rust speedup ratios closely match Python's at all 4 overlapping points. The slight Rust advantage at larger m (log2 ratios of +0.16 and +0.24 at m=2000 and m=5000) may reflect lower per-row overhead in the Rust pipeline, though no profiling was performed to isolate the specific cause. Importantly, Rust does not show anomalously high or low speedup, validating that the subsampling approach benefits equally from Rust's computational advantages.
 
 **Normalization correctness:** H6's bit-identical results (delta=0.0 at m=n) provide definitive proof that the normalization denominator is correct. This eliminates a class of subtle bugs where the subsampled and exact computations might use different denominators.
 
 ## What We Learned
 
-- **m=2000 is a robust default for MERFISH-class data:** The accuracy is consistent across population sizes (n=10K and n=50K) and provides nearly 5x margin below the 0.01 threshold.
+- **m=2000 is a robust default for the MERFISH datasets tested:** The accuracy is consistent across population sizes (n=10K and n=50K) and provides nearly 5x margin below the 0.01 threshold.
 - **Subsampling quality is population-size invariant (within this dataset family):** n=50K shows the same mean|dT| as n=10K despite 5x more points, suggesting the approximation is governed by the subsample size m, not the population-to-sample ratio.
 - **Rust's O(n) memory model unlocks scales Python cannot reach:** At n=50K, Python requires ~20GB for the pairwise distance matrix while Rust uses ~400KB per thread (n * 8 bytes). This is a qualitative advantage, not just a constant-factor speedup.
 - **Variance decays faster than CLT would predict:** The log-log slope of -3.503 (vs CLT baseline of -0.5) means fewer samples are needed for a given precision than naive theory would suggest. This is favorable for practitioners choosing m values.
@@ -199,7 +201,7 @@ The experiment provides strong evidence that the Rust subsampled trustworthiness
 
 ## Conclusions
 
-The Rust subsampled trustworthiness implementation at m=2000 achieves mean|dT| < 0.002 with 4.6x speedup (n=10K) and 24x speedup (n=50K), confirming the Python PR #260 findings and extending them to larger populations. All 4 confirmatory hypotheses, the conditional hypothesis, and the exploratory hypothesis passed with strong statistical evidence.
+The Rust subsampled trustworthiness implementation at m=2000 achieves mean|dT| < 0.002 with 4.6x speedup (n=10K) and 24x speedup (n=50K), confirming the Python [PR #260](https://github.com/TalonT-Org/spectral-init/pull/260) findings and extending them to larger populations. All 4 confirmatory hypotheses, the conditional hypothesis, and the exploratory hypothesis passed with strong statistical evidence.
 
 **The research question is answered affirmatively:** The Rust implementation reproduces Python's accuracy and speedup characteristics, and extends trustworthiness computation to scales where Python cannot operate.
 
@@ -207,7 +209,7 @@ The Rust subsampled trustworthiness implementation at m=2000 achieves mean|dT| <
 
 ## Recommendations
 
-1. **Ship `trustworthiness_subsampled()` with m=2000 as the recommended default** for MERFISH-class data (k=15, PCA-50 features, AVX2 x86_64). The evidence strongly supports this as a safe default that preserves accuracy while providing meaningful speedup.
+1. **Ship `trustworthiness_subsampled()` with m=2000 as the recommended default** for the MERFISH datasets tested (k=15, PCA-50 features, AVX2 x86_64). The evidence strongly supports this as a safe default that preserves accuracy while providing meaningful speedup.
 
 2. **Document m=1000 as an alternative for speed-sensitive use cases.** At m=1000, mean|dT|=0.0023 with 9.2x speedup — still well within the 0.01 threshold but with 2x the speedup of m=2000.
 
