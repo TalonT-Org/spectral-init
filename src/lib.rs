@@ -213,6 +213,26 @@ pub use crate::metrics::{
 #[cfg(all(feature = "cli", not(feature = "testing")))]
 pub use crate::metrics::trustworthiness;
 
+#[cfg(all(feature = "cli", not(feature = "testing")))]
+#[cfg(target_arch = "x86_64")]
+#[doc(hidden)]
+pub use crate::metrics::dist_sq_2d_avx2_batch;
+
+#[cfg(all(feature = "cli", not(feature = "testing")))]
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))]
+#[doc(hidden)]
+pub use crate::metrics::dist_sq_avx2_looped;
+
+#[cfg(feature = "testing")]
+#[cfg(target_arch = "x86_64")]
+#[doc(hidden)]
+pub use crate::metrics::dist_sq_2d_avx2_batch;
+
+#[cfg(feature = "testing")]
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))]
+#[doc(hidden)]
+pub use crate::metrics::dist_sq_avx2_looped;
+
 use ndarray::{Array2, ArrayView2};
 use sprs::CsMatI;
 

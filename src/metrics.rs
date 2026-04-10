@@ -458,9 +458,10 @@ pub unsafe fn dist_sq_avx2_looped(xi: &[f64], xj: &[f64]) -> f64 {
 /// - `out` must have at least `n` elements.
 ///
 /// Called only when `d_y == 2`, `y.is_standard_layout()`, and `avx2` is detected at runtime.
+#[doc(hidden)]
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2")]
-unsafe fn dist_sq_2d_avx2_batch(yi: &[f64], y_flat: &[f64], n: usize, out: &mut [f64]) {
+pub unsafe fn dist_sq_2d_avx2_batch(yi: &[f64], y_flat: &[f64], n: usize, out: &mut [f64]) {
     use std::arch::x86_64::*;
     debug_assert!(yi.len() >= 2, "yi must have at least 2 elements");
     debug_assert!(
