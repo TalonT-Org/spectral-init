@@ -527,13 +527,10 @@ fn trustworthiness_subsample(
     let penalty_sum: f64 = query_idx
         .into_par_iter()
         .map(|&i| {
-            // ... [per-row penalty computation identical to library,
-            //      using AVX2+FMA X-distances, introselect kNN,
-            //      AVX2 2D Y-distances, rank-counting penalty] ...
-            // See full source in research/2026-04-10-subsampled-tw-rust/scripts/
-            // tw_subsample_experiment.rs
-            # // (abbreviated for report readability)
-            0.0 // placeholder — see full source
+            // Per-row penalty: compute X-distances (AVX2+FMA when available),
+            // introselect kNN, compute Y-distances (AVX2 for 2D), rank-count penalty.
+            // Full implementation: 130 lines — see tw_subsample_experiment.rs L362-492
+            // [abbreviated for report readability]
         })
         .sum();
 
@@ -547,10 +544,34 @@ fn write_json(path: &Path, value: &serde_json::Value) -> Result<(), Box<dyn std:
     Ok(())
 }
 
-fn cpu_model() -> String { /* reads /proc/cpuinfo */ "...".to_string() }
-fn core_count() -> usize { std::thread::available_parallelism().map(|p| p.get()).unwrap_or(1) }
-fn rust_version() -> String { /* runs rustc --version */ "...".to_string() }
-fn git_commit() -> String { /* runs git rev-parse HEAD */ "...".to_string() }
+fn cpu_model() -> String {
+    std::fs::read_to_string("/proc/cpuinfo")
+        .ok()
+        .and_then(|s| {
+            s.lines()
+                .find(|l| l.starts_with("model name"))
+                .map(|l| l.splitn(2, ':').nth(1).unwrap_or("").trim().to_string())
+        })
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+fn core_count() -> usize {
+    std::thread::available_parallelism().map(|p| p.get()).unwrap_or(1)
+}
+
+fn rust_version() -> String {
+    std::process::Command::new("rustc").arg("--version").output().ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+fn git_commit() -> String {
+    std::process::Command::new("git").args(["rev-parse", "HEAD"]).output().ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| "unknown".to_string())
+}
 ```
 
 > **Note:** The `trustworthiness_subsample()` inner loop is abbreviated above for readability. The full 544-line source is preserved at `research/2026-04-10-subsampled-tw-rust/scripts/tw_subsample_experiment.rs`.
