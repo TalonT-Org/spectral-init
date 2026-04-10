@@ -148,11 +148,11 @@ Content may be sparse (few data points), but files must exist and be non-empty.
 
 ## Implementation Steps
 
-All commands run from the project root: `/home/talon/projects/worktrees/research-20260409-210336`
+All commands run from the project root (the git repository root).
 
 Path constants used throughout:
 ```bash
-PROJECT_ROOT=/home/talon/projects/worktrees/research-20260409-210336
+PROJECT_ROOT=$(git rev-parse --show-toplevel)
 DATA=$PROJECT_ROOT/research/2026-04-10-subsampled-tw-rust/data/merfish
 RAW=$PROJECT_ROOT/research/2026-04-10-subsampled-tw-rust/results/raw
 BIN=$PROJECT_ROOT/target/release/examples/tw_subsample_experiment
