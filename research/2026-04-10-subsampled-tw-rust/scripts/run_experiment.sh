@@ -53,6 +53,7 @@ rm -f "$DETERM_1" "$DETERM_2"
 
 # -- Sanity checks ------------------------------------------------------------
 echo "=== [4/7] Sanity checks ==="
+rm -rf "$RESULTS_RAW"
 mkdir -p "$RESULTS_RAW"
 "$BIN" --mode sanity \
     --x "$DATA_DIR/merfish_n10k_x.npy" --y "$DATA_DIR/merfish_n10k_y.npy" \
