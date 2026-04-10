@@ -1,0 +1,112 @@
+{
+  "experiment": "subsampled-tw-rust-tradeoff",
+  "timestamp": "2026-04-10T15:05:18.158428Z",
+  "hypotheses": {
+    "H1": {
+      "verdict": "PASS",
+      "t_statistic": -14.221001641821601,
+      "p_value": 8.95548044489602e-08,
+      "ci_upper_97_5": 0.0031526979365194773,
+      "mean_abs_delta_T": 0.001857449600748373,
+      "max_abs_delta_T": 0.006527500584678103,
+      "n_seeds": 10,
+      "secondary_threshold_0.003": true
+    },
+    "H2": {
+      "verdict": "PASS",
+      "strata": {
+        "10000": {
+          "verdict": "PASS",
+          "r2_linear": 0.9979684764386751,
+          "r2_log_linear": 0.9990744578064122,
+          "rmse_linear": 0.23909768148929295,
+          "rmse_log_linear": 0.17396882258056517,
+          "linearity": "log-linear",
+          "r2_ci_lower_95": 0.9955747185406921,
+          "r2_ci_upper_95": 0.9999921232005894,
+          "slope": 0.9429994235303849,
+          "n_m_values": 7
+        },
+        "50000": {
+          "verdict": "PASS",
+          "r2_linear": 0.9998511277199736,
+          "r2_log_linear": 0.9999323444281013,
+          "rmse_linear": 0.20218310220229047,
+          "rmse_log_linear": 0.2879874363380522,
+          "linearity": "linear",
+          "r2_ci_lower_95": 0.9997028504075708,
+          "r2_ci_upper_95": 0.9999996504972707,
+          "slope": 0.9872051933263517,
+          "n_m_values": 7
+        }
+      }
+    },
+    "H3": {
+      "verdict": "PASS",
+      "slope": -3.5030893546371544,
+      "slope_se": 1.4514940837799886,
+      "t_statistic": -2.2067532967793104,
+      "p_value_onesided": 0.024749323459573282,
+      "r_squared": 0.3461984666272906,
+      "n_cells": 13
+    },
+    "H4": {
+      "verdict": "PASS",
+      "comparisons": {
+        "500": {
+          "rust_speedup": 16.73960898034092,
+          "python_speedup": 18.2,
+          "log2_ratio": -0.1206726219808549,
+          "within_2x": true
+        },
+        "1000": {
+          "rust_speedup": 9.182041870986245,
+          "python_speedup": 9.1,
+          "log2_ratio": 0.012948465580862102,
+          "within_2x": true
+        },
+        "2000": {
+          "rust_speedup": 4.579179828389731,
+          "python_speedup": 4.1,
+          "log2_ratio": 0.1594653122870372,
+          "within_2x": true
+        },
+        "5000": {
+          "rust_speedup": 2.002027688585174,
+          "python_speedup": 1.7,
+          "log2_ratio": 0.23592718081207106,
+          "within_2x": true
+        }
+      },
+      "n_evaluated": 4
+    },
+    "H5": {
+      "verdict": "PASS",
+      "t_statistic": -18.033698619722486,
+      "p_value": 1.1286750778708206e-08,
+      "ci_upper_97_5": 0.0029040524097087156,
+      "mean_abs_delta_T": 0.001886260413123364,
+      "max_abs_delta_T": 0.0043923847903369895,
+      "n_seeds": 10,
+      "secondary_threshold_0.003": true
+    },
+    "H6": {
+      "verdict": "PASS",
+      "trials": [
+        {
+          "n": 10000,
+          "m": 10000,
+          "abs_delta_t": 0.0,
+          "pass": true
+        },
+        {
+          "n": 50000,
+          "m": 50000,
+          "abs_delta_t": 0.0,
+          "pass": true
+        }
+      ]
+    }
+  },
+  "overall": "PASS"
+}

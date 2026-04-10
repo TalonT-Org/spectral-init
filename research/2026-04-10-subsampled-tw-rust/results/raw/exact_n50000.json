@@ -1,0 +1,24 @@
+{
+  "abs_delta_t": null,
+  "core_count": 16,
+  "cpu_model": "AMD Ryzen 7 9800X3D 8-Core Processor",
+  "git_commit": "bb6bdb3d730fcd9699bc154843f48799c94908a2",
+  "k": 15,
+  "m": null,
+  "mode": "exact",
+  "n": 50000,
+  "rust_version": "rustc 1.96.0-nightly (23903d01c 2026-03-26)",
+  "seed": null,
+  "t_exact": 0.5440082394968352,
+  "t_sub": null,
+  "wall_exact_ms": [
+    4854.734767,
+    4834.85576,
+    4753.722457,
+    4655.630228,
+    4904.374668
+  ],
+  "wall_sub_ms": null,
+  "warmup_exact_ms": 5405.307438999999,
+  "warmup_sub_ms": null
+}
