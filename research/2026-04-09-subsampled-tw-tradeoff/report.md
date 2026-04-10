@@ -4,13 +4,15 @@
 
 ## Executive Summary
 
-Exact trustworthiness computation is O(n²) and becomes the dominant evaluation cost at large embedding sizes. This experiment establishes the empirical error/speed trade-off for two sub-sampling strategies — Approach A (row sub-sampling, an unbiased estimator of full-n trustworthiness) and Approach B (subset embedding, measuring trustworthiness within the sampled subset) — across MERFISH and Gaussian d=50 datasets at n=10K and n=20K, with 10 random seeds per cell.
+Exact trustworthiness computation is O(n²) [Venna & Kaski 2006; scikit-learn docs] and becomes the dominant evaluation cost at large embedding sizes. This experiment establishes the empirical error/speed trade-off for two sub-sampling strategies — Approach A (row sub-sampling, an approximation of full-n trustworthiness) and Approach B (subset embedding, measuring trustworthiness within the sampled subset) — across MERFISH and Gaussian d=50 datasets at n=10K and n=20K, with 10 random seeds per cell.
+
+**Data scope:** The experiment plan specified n={10K, 50K}; n=50K was replaced by n=20K due to a memory safety constraint (commit `544989f`, `_MEM_LIMIT=4GB`). All scaling analyses (H4, H5, H6) are based on n=[10K, 20K] only — a 2× n-range rather than the planned 5×. This is a single-run experiment (R=1); the 10 seeds per cell quantify within-run variance, not between-run reproducibility.
 
 Both primary hypotheses pass by wide margins. At m=2000, Approach A achieves a mean absolute error of 0.0017 (threshold: 0.01), a 4.1× speedup on MERFISH n=10K, and 9.5× speedup at n=20K — all with std well below the 0.005 threshold. Speed scaling laws are confirmed empirically: Approach A scales as O(mn) (slope 0.956, R²=0.991) and Approach B as O(m²) (slope 1.984, R²=0.995). The recommendation is to ship `trustworthiness_subsampled` in `src/metrics.rs` with Approach A as the default at m=2000.
 
 ## Background and Research Question
 
-Sub-sampling is the only approach that changes the fundamental O(n²) scaling of trustworthiness (prior research eliminated KD-tree and ANN alternatives). However, a prior attempt (H5 in `2026-04-05-tw-perf-rerun-clean`) produced systematically biased results due to a normalization bug that mixed Approach A and B denominators. This experiment re-implements both approaches from scratch with correct denominators and validates them empirically.
+Sub-sampling is the most promising approach for reducing the O(n²) cost of trustworthiness. Prior experiments (`2026-04-06-research-kd-tree-y-k-nn-for-tr`, `2026-04-07-kdtree-y-knn-trustworthiness`) found that KD-tree Y-space neighbor acceleration did not reduce overall trustworthiness cost on synthetic data at tested n values, because Y-space KNN is a minority of the total computation; those experiments did not universally rule out KD-tree for all contexts or n scales. A prior sub-sampling attempt (H5 in `2026-04-05-tw-perf-rerun-clean`) produced large errors (mean|delta|≈0.474); the root cause was not documented in those artifacts, but a denominator inconsistency between approaches is a plausible explanation. This experiment re-implements both approaches from scratch with correct, explicitly verified denominators.
 
 **Research question:** Does sub-sampled trustworthiness achieve mean|ΔT| < 0.01 and std < 0.005 at the pre-specified operating points (Approach A: m=2000, n=10K; Approach B: m=5000, n=10K), and what error/speed trade-off curve should guide default parameter selection?
 
@@ -26,7 +28,7 @@ Two independent hypothesis pairs, each evaluated with its own verdict:
 
 Secondary analyses (H2–H6) characterize variance scaling, dataset effects, speed scaling laws, crossover ratios, and extrapolation to n=100K.
 
-Controlled variables: k=15 (UMAP default), squared Euclidean distance, pre-computed MERFISH UMAP embeddings, scikit-learn 1.6.0, 1 warmup discarded before timing.
+Controlled variables: k=15 (UMAP default [McInnes et al. 2018]), squared Euclidean distance, pre-computed MERFISH UMAP embeddings, scikit-learn 1.6.0 (exact trustworthiness reference), 1 warmup discarded before timing. Note: timing measurements were taken in a WSL2 environment without CPU frequency pinning or process isolation; wall-clock speedup figures may vary under different system loads.
 
 ### Environment
 
@@ -40,12 +42,12 @@ Controlled variables: k=15 (UMAP default), squared Euclidean distance, pre-compu
   - scikit-learn=1.6.0
   - matplotlib=3.10.1
 - **Memory constraint:** `_MEM_LIMIT=4GB`; n=50K dropped in favour of n=20K (memory safety patch, commit `544989f`)
-- **Hardware/OS:** WSL2 (Linux 6.6.87.2-microsoft-standard-WSL2)
+- **Hardware/OS:** WSL2 (Linux 6.6.87.2-microsoft-standard-WSL2). CPU model, core count, and RAM were not recorded; speedup figures are hardware-dependent and may differ on other machines.
 
 ### Procedure
 
 1. **Environment setup:** `micromamba create -f environment.yml -y`
-2. **Data generation:** `python scripts/gen_data.py` — Gaussian d=50 arrays at n=10K and n=20K (seed=42); MERFISH n=10K and n=20K loaded from `research/2026-04-05-tw-perf-rerun-clean/data/merfish/`
+2. **Data generation:** `python scripts/gen_data.py --sizes 10000 20000` — Gaussian d=50 arrays at n=10K and n=20K (seed=42); MERFISH n=10K and n=20K loaded from `research/2026-04-05-tw-perf-rerun-clean/data/merfish/`. (Note: `gen_data.py` defaults to `--sizes 10000 50000`; the `--sizes 10000 20000` override is required due to the n=50K memory constraint.)
 3. **Exact baselines:** `python scripts/compute_exact.py` — 1 warmup + 3 timed runs per dataset; median wall time recorded
 4. **Dry run:** `python scripts/run_subsampling.py --dry-run` — both approaches, MERFISH n=10K, m=2000, seed=0; normalization sanity check passed
 5. **Full experiment:** `python scripts/run_subsampling.py` — 560 trials (2 approaches × 14 m-values × 10 seeds × 2 datasets); no batching triggered (max allocation 2.4 GB < 4 GB limit)
@@ -115,8 +117,10 @@ Thresholds: mean|ΔT| < 0.01 AND max|ΔT| < 0.02 AND std < 0.005. All conditions
 
 | Approach | Slope | R² | Expected |
 |---------|-------|----|---------|
-| A | −0.657 | 0.85 | −0.5 (CLT) |
-| B | −0.582 | 0.80 | −0.5 (CLT) |
+| A | −0.657 | 0.85 | −0.5 (heuristic) |
+| B | −0.582 | 0.80 | −0.5 (heuristic) |
+
+> The −0.5 expected slope is a heuristic based on the CLT scaling for sample means of i.i.d. variables. Trustworthiness is a rank-based statistic computed over structured manifold data; the i.i.d. CLT convergence rate may not apply directly. The observed slopes (steeper than −0.5) are consistent with structured data amplifying the benefit of larger samples, but a formal derivation of the expected rate for this statistic is left for future work.
 
 ### H3: MERFISH vs. Gaussian Variability Ratio
 
@@ -159,15 +163,15 @@ Fit: |ΔT| = 0.000180 × n^0.2404 (Approach A, m=2000, MERFISH, 2 data points)
 
 ## Observations
 
-1. **Both H1 hypotheses pass with wide margins.** H1_A mean|ΔT|=0.00165 (6× below threshold); H1_B mean|ΔT|=0.00124 (8× below threshold). This is a strong, conclusive result.
+1. **Both H1 hypotheses pass with wide margins.** H1_A mean|ΔT|=0.00165 (6× below threshold); H1_B mean|ΔT|=0.00124 (8× below threshold). These are strong results from a single-run experiment with 10 random seeds per cell.
 
-2. **Approach A is an unbiased estimator of full-n T; Approach B estimates a different quantity.** At matched accuracy, Approach B can be far faster (at m=2000, n=20K: 121.9× vs 9.5×), but this comes at the cost of measuring subset-T rather than full-population T.
+2. **Approach A and Approach B estimate different quantities.** Approach A uses m query rows evaluated against all n reference points, so when m=n it exactly reproduces the full-n formula; empirically it closely approximates full-n trustworthiness at m<<n. Approach B (sklearn trustworthiness on the m×m subset) estimates trustworthiness within the sampled subset, not the full population. A formal proof of unbiasedness for Approach A at m<n is not provided here. At matched accuracy, Approach B can be far faster (at m=2000, n=20K: 121.9× vs 9.5×), but this comes at the cost of measuring subset-T rather than full-population T.
 
 3. **Speed scaling laws confirmed with high precision.** Approach A: O(mn) (slope=0.956, R²=0.991). Approach B: O(m²) (slope=1.984, R²=0.995). These match theoretical predictions to within 5%.
 
 4. **No batching was needed.** Peak Approach A memory at m=15K, n=20K was 2.4 GB, well within the 4 GB `_MEM_LIMIT`. The batched code path was implemented but not exercised.
 
-5. **Variance decays faster than CLT predicts** (slopes −0.66 and −0.58 vs expected −0.5). This likely reflects the structured manifold geometry of MERFISH amplifying the benefit of increased sample size.
+5. **Variance decays faster than the heuristic −0.5 expectation** (slopes −0.66 and −0.58). The −0.5 slope is a rough CLT-based heuristic for i.i.d. sample means; trustworthiness is a rank-based statistic and the applicable convergence rate is not derived here. The steeper-than-expected slopes may reflect structured manifold geometry amplifying the benefit of increased sample size, but a formal explanation is deferred.
 
 6. **MERFISH std is consistently 1.2–2.6× higher than Gaussian std**, confirming heterogeneous cluster density increases estimator variance. The ratio is not constant — it varies by approach, n, and m.
 
@@ -175,34 +179,43 @@ Fit: |ΔT| = 0.000180 × n^0.2404 (Approach A, m=2000, MERFISH, 2 data points)
 
 ## Analysis
 
-Both primary hypotheses are supported with substantial margin. The pre-specified four-cell outcome table maps to "Both Pass," unambiguously recommending shipping `trustworthiness_subsampled` with Approach A as the default.
+Both primary hypotheses are supported with substantial margin. The pre-specified four-cell outcome table maps to "Both Pass," strongly supporting shipping `trustworthiness_subsampled` with Approach A as the default.
 
-Approach A is preferable as the default because it is an unbiased estimator of full-n trustworthiness — the same quantity the exact implementation computes — with a correct denominator `m·k·(2n−3k−1)`. Approach B estimates a fundamentally different quantity (trustworthiness within the sampled subset), making it unsuitable as a drop-in replacement for the exact metric without user awareness.
+Approach A is preferable as the default because it targets full-n trustworthiness — the same quantity the exact implementation computes — with denominator `m·k·(2n−3k−1)`. When m=n, Approach A reproduces the sklearn exact result to within 1e-10 (normalization sanity check), though this validates the formula at m=n rather than establishing formal statistical properties at m<<n. The exact trustworthiness baseline uses scikit-learn 1.6.0 as the reference implementation; cross-validation against an independent implementation was not performed. Approach B estimates a fundamentally different quantity (trustworthiness within the sampled subset), making it unsuitable as a drop-in replacement for the exact metric without user awareness.
 
 At m=2000, Approach A delivers a practical trade-off: 0.17% mean error at 4.1× speedup (n=10K) and 0.20% error at 9.5× speedup (n=20K). Increasing m to 5000 reduces error to 0.06% but at diminishing speedup (1.6× for n=10K). The m=2000 default therefore represents the efficient frontier of the trade-off.
 
 The confirmed O(mn) complexity for Approach A means that as n grows, the crossover ratio m/n that achieves a given accuracy threshold decreases — that is, a fixed m=2000 becomes relatively more accurate as n grows, which is the desired behavior for a practical default.
 
-The prior normalization bug (H5 in `tw-perf-rerun-clean`) is now resolved: the correct denominator `m·k·(2n−3k−1)` was validated by asserting that Approach A with m=n reproduces the exact sklearn result to within 1e-10.
+The large errors in the prior H5 attempt (`tw-perf-rerun-clean`, mean|delta|≈0.474) are not reproduced here. The current implementation uses a denominator `m·k·(2n−3k−1)` that is explicitly verified at m=n. The exact root cause of the prior failure is not documented in those artifacts; the current results demonstrate that the present implementation is correct at the tested n values.
+
+## Deviations from Plan
+
+| Deviation | Planned | Actual | Impact |
+|-----------|---------|--------|--------|
+| n-range | n={10K, 50K} | n={10K, 20K} | 2× n-range instead of planned 5×; H4 speed-scaling law and H5 crossover fit from 2 data points only; H6 extrapolation is more speculative |
+| Execution replications | Not specified (single run with 10 seeds/cell) | R=1 | The 10 seeds/cell quantify within-run variance; between-run reproducibility was not assessed |
+
+The n=50K substitution was required by the 4 GB `_MEM_LIMIT` constraint (commit `544989f`). The `analyze_results.py` script retains hardcoded references to n=50K in its H3/H5 analysis loops; those rows appear as N/A in the machine-generated `summary.md`. The executed dataset combinations (n=10K and n=20K, 560 trials total) are complete and consistent; the script-level reference to n=50K is a documentation artifact only and does not affect the reported results.
 
 ## What We Learned
 
-- **Sub-sampled trustworthiness works.** m=2000 gives <0.2% error with 4–10× speedup across n=10K and n=20K on real-world data. The approach is ready to ship.
+- **Sub-sampled trustworthiness works at tested scales.** m=2000 gives <0.2% error with 4–10× speedup across n=10K and n=20K on real-world data. The approach is a strong candidate for shipping; validation at larger n (n=50K was planned but not executed) would further strengthen confidence in the n-scaling claims.
 - **Approach A and B serve different estimands.** They are not interchangeable. Approach A estimates full-n T; Approach B estimates subset-T. Exposing both as named variants prevents confusion.
-- **Normalization correctness is critical.** The previous experiment's failure was purely a denominator bug. Implementing and verifying `|T_A(m=n) - T_exact| < 1e-10` as a first sanity check should be standard practice for any future sub-sampling work.
+- **Normalization correctness is critical.** Implementing and verifying `|T_A(m=n) - T_exact| < 1e-10` as a first sanity check confirms formula correctness at m=n and should be standard practice for sub-sampling work. Note this check validates algebraic correctness when all rows are sampled; it does not directly establish the estimator's statistical properties at m<<n.
 - **Variance decays super-CLT on structured manifolds.** On MERFISH, std scales as m^−0.66 rather than m^−0.5. Future experiments on highly structured data should expect faster variance convergence.
 - **Memory safety.** The `_MEM_LIMIT` guard and batched fallback proved sufficient; the n=50K → n=20K substitution reduced peak allocation from ~10 GB to 2.4 GB without affecting conclusions.
 - **Boundary condition established:** for MERFISH-like data with k=15, any m ≥ 250 achieves mean|ΔT| < 0.01. The accuracy floor is m, not n/m.
 
 ## Conclusions
 
-Both primary hypotheses (H1_A and H1_B) are conclusively supported. Sub-sampled trustworthiness with Approach A at m=2000 achieves <0.2% mean absolute error and <0.5% max error across 10 random seeds on MERFISH data, with 4.1× speedup at n=10K and 9.5× at n=20K. All pre-specified thresholds are met by wide margins.
+Both primary hypotheses (H1_A and H1_B) are strongly supported. Sub-sampled trustworthiness with Approach A at m=2000 achieves <0.2% mean absolute error and <0.5% max error across 10 random seeds on MERFISH data, with 4.1× speedup at n=10K and 9.5× at n=20K. All pre-specified thresholds are met by wide margins. Results are from a single experimental run (R=1) at n≤20K; between-run reproducibility and n>20K behavior have not been empirically verified.
 
 The four-cell outcome is **Both Pass**: ship `trustworthiness_subsampled` in `src/metrics.rs` with Approach A as the default implementation (m=2000 recommended) and Approach B available as an alternative for subset-embedding use cases.
 
 ## Recommendations
 
-1. **Ship Approach A as `trustworthiness_subsampled(X, Y, k, m)` with default m=2000.** Evidence is conclusive. This replaces the prior buggy H5 implementation. Use denominator `m·k·(2n−3k−1)`.
+1. **Ship Approach A as `trustworthiness_subsampled(X, Y, k, m)` with default m=2000.** Evidence is strong across n=10K and n=20K (R=1, 10 seeds/cell). This provides a correct, verified implementation. Use denominator `m·k·(2n−3k−1)`.
 
 2. **Expose Approach B as `trustworthiness_subset_embedding(X, Y, k, m)`.** Useful for interactive subset exploration where subset-T is the intended estimand. Document clearly that it does not estimate full-n T.
 
@@ -233,8 +246,9 @@ M_VALUES_20K = [250, 500, 1000, 2000, 5000, 7500, 10000, 15000]
 def trustworthiness_row_subsampled(X, Y, k, query_idx):
     """Approach A: m query rows, distances to ALL n points.
 
-    Unbiased estimator of full-n trustworthiness.
+    Approximation of full-n trustworthiness using m query rows.
     Denominator m * k * (2n - 3k - 1) matches the full-n formula when m == n.
+    Formal unbiasedness at m < n is not proven; empirically close to full-n T.
     """
     n = X.shape[0]
     m = len(query_idx)
