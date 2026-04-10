@@ -28,7 +28,7 @@ Two independent hypothesis pairs, each evaluated with its own verdict:
 
 Secondary analyses (H2–H6) characterize variance scaling, dataset effects, speed scaling laws, crossover ratios, and extrapolation to n=100K.
 
-Controlled variables: k=15 (UMAP default [McInnes et al. 2018]), squared Euclidean distance, pre-computed MERFISH UMAP embeddings, scikit-learn 1.6.0 (exact trustworthiness reference), 1 warmup discarded before timing. Note: timing measurements were taken in a WSL2 environment without CPU frequency pinning or process isolation; wall-clock speedup figures may vary under different system loads.
+Controlled variables: k=15 (UMAP default [McInnes et al. 2018]), squared Euclidean distance, pre-computed MERFISH UMAP embeddings, scikit-learn 1.6.0 (exact trustworthiness reference), 1 warmup discarded before timing. Note: timing measurements were taken in a WSL2 environment without CPU frequency pinning or process isolation; wall-clock speedup figures may vary under different system loads. All speedup figures are Python-to-Python comparisons (sub-sampled vs. exact using the same NumPy/scikit-learn stack); they reflect GIL scheduling and NumPy dispatch overhead that the Rust implementation in `src/metrics.rs` does not incur. These figures serve as a lower bound for Python callers but do not predict the Rust-native speedup directly.
 
 ### Environment
 
@@ -51,7 +51,7 @@ Controlled variables: k=15 (UMAP default [McInnes et al. 2018]), squared Euclide
 3. **Exact baselines:** `python scripts/compute_exact.py` — 1 warmup + 3 timed runs per dataset; median wall time recorded
 4. **Dry run:** `python scripts/run_subsampling.py --dry-run` — both approaches, MERFISH n=10K, m=2000, seed=0; normalization sanity check passed
 5. **Full experiment:** `python scripts/run_subsampling.py` — 560 trials (2 approaches × 14 m-values × 10 seeds × 2 datasets); no batching triggered (max allocation 2.4 GB < 4 GB limit)
-6. **Analysis:** `python scripts/analyze_results.py` — per-cell statistics, verdict evaluation, scaling fits, plots
+6. **Analysis:** `python scripts/analyze_results.py` — per-cell statistics, verdict evaluation, scaling fits, plots. The script globs `sub_*.json` files in `results/raw/` without verifying file count; a complete run produces 560 trial files (2 approaches × 14 m-values × 10 seeds × 2 datasets). If `results/raw/` is partially populated, analysis will run silently on the available subset.
 
 ## Results
 
@@ -71,7 +71,7 @@ Controlled variables: k=15 (UMAP default [McInnes et al. 2018]), squared Euclide
 | H1_A | Approach A, MERFISH n=10K, m=2000 | 0.00165 | 0.00350 | 0.00215 | **PASS** |
 | H1_B | Approach B, MERFISH n=10K, m=5000 | 0.00124 | 0.00381 | 0.00150 | **PASS** |
 
-Thresholds: mean|ΔT| < 0.01 AND max|ΔT| < 0.02 AND std < 0.005. All conditions met by wide margins (H1_A: 6× below mean threshold; H1_B: 8× below).
+Thresholds: mean|ΔT| < 0.01 AND max|ΔT| < 0.02 AND std < 0.005. All conditions met by wide margins (H1_A: 6× below mean threshold; H1_B: 8× below). Note: the operating points are asymmetric — H1_A was tested at m=2000 and H1_B at m=5000 (a 2.5× sample size advantage for B). Larger m systematically reduces both error and variance, so the favorable conditions for H1_B are noted; the pre-specified operating points were set independently based on the intended use case for each approach.
 
 **Four-cell outcome: Both Pass → Ship `trustworthiness_subsampled` with Approach A (m=2000) as default; Approach B supported as alternative for subset-T use cases.**
 
@@ -175,7 +175,7 @@ Fit: |ΔT| = 0.000180 × n^0.2404 (Approach A, m=2000, MERFISH, 2 data points)
 
 6. **MERFISH std is consistently 1.2–2.6× higher than Gaussian std**, confirming heterogeneous cluster density increases estimator variance. The ratio is not constant — it varies by approach, n, and m.
 
-7. **The crossover m/n ratio improves with n.** At m=2000 fixed, larger n gives better relative accuracy (n=20K: mean|ΔT|=0.00195 vs n=10K: 0.00165 despite higher absolute T).
+7. **The crossover m/n ratio improves with n.** H5 shows the minimum m achieving mean|ΔT| < 0.01 on MERFISH halves from m/n=0.025 (n=10K) to m/n=0.0125 (n=20K) — the required sub-sampling fraction decreases as n grows. Note: at fixed m=2000, absolute error is higher at n=20K (mean|ΔT|=0.00195) than at n=10K (0.00165); the ratio improvement reflects the crossover threshold, not fixed-m accuracy.
 
 ## Analysis
 
@@ -187,6 +187,8 @@ At m=2000, Approach A delivers a practical trade-off: 0.17% mean error at 4.1× 
 
 The confirmed O(mn) complexity for Approach A means that as n grows, the crossover ratio m/n that achieves a given accuracy threshold decreases — that is, a fixed m=2000 becomes relatively more accurate as n grows, which is the desired behavior for a practical default.
 
+**Statistical context:** This is an exploratory single-run engineering experiment (R=1, 10 seeds per cell). No formal alpha level is declared, no multiple comparisons correction is applied across H1–H6, and no Type I/II error rates are specified for the threshold-based PASS/FAIL rule. With n=10 seeds per cell, the 95% CI on σ spans approximately [0.69σ, 1.83σ], so std estimates carry substantial uncertainty. All verdicts should be interpreted in this exploratory context rather than as frequentist hypothesis tests.
+
 The large errors in the prior H5 attempt (`tw-perf-rerun-clean`, mean|delta|≈0.474) are not reproduced here. The current implementation uses a denominator `m·k·(2n−3k−1)` that is explicitly verified at m=n. The exact root cause of the prior failure is not documented in those artifacts; the current results demonstrate that the present implementation is correct at the tested n values.
 
 ## Deviations from Plan
@@ -196,7 +198,7 @@ The large errors in the prior H5 attempt (`tw-perf-rerun-clean`, mean|delta|≈0
 | n-range | n={10K, 50K} | n={10K, 20K} | 2× n-range instead of planned 5×; H4 speed-scaling law and H5 crossover fit from 2 data points only; H6 extrapolation is more speculative |
 | Execution replications | Not specified (single run with 10 seeds/cell) | R=1 | The 10 seeds/cell quantify within-run variance; between-run reproducibility was not assessed |
 
-The n=50K substitution was required by the 4 GB `_MEM_LIMIT` constraint (commit `544989f`). The `analyze_results.py` script retains hardcoded references to n=50K in its H3/H5 analysis loops; those rows appear as N/A in the machine-generated `summary.md`. The executed dataset combinations (n=10K and n=20K, 560 trials total) are complete and consistent; the script-level reference to n=50K is a documentation artifact only and does not affect the reported results.
+The n=50K substitution was required by the 4 GB `_MEM_LIMIT` constraint (commit `544989f`). The `analyze_results.py` script was updated to use n={10K, 20K} throughout; the machine-generated `results/analysis/summary.md` reflects the actual executed combinations. Note: if `analyze_results.py` is re-run, it requires the `--sizes 10000 20000` data generated by `python scripts/gen_data.py --sizes 10000 20000` (the script default `--sizes 10000 50000` will not match). The executed dataset combinations (n=10K and n=20K, 560 trials total) are complete and consistent.
 
 ## What We Learned
 
