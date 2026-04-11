@@ -523,11 +523,11 @@ unsafe fn dist_sq_2d_avx2_batch(yi: &[f64], y_flat: &[f64], n: usize, out: &mut 
 /// `n`-point population. Only the leading factor of the normalization denominator
 /// uses `m = query_indices.len()` — the `(2n − 3k − 1)` factor still uses the
 /// full population `n`.
-fn trustworthiness_inner(
+pub(crate) fn trustworthiness_inner(
     x: ArrayView2<f64>,
     y: ArrayView2<f64>,
     k: usize,
-    query_indices: &[usize],
+    query_indices: Option<&[usize]>,
 ) -> f64 {
     use std::cell::RefCell;
     let n = x.nrows();
@@ -543,6 +543,7 @@ fn trustworthiness_inner(
         this constraint is required by the normalization denominator and matches sklearn's ValueError",
         n / 2
     );
+    let m_query = query_indices.map_or(n, |q| q.len());
 
     #[cfg(feature = "profiling")]
     {
@@ -597,10 +598,7 @@ fn trustworthiness_inner(
     #[cfg(feature = "profiling")]
     static PENALTY_NS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-    let penalty_sum: f64 = query_indices
-        .par_iter()
-        .copied()
-        .map(|i| {
+    let process_row = |i: usize| -> f64 {
             let xi = x.row(i);
             let yi = y.row(i);
 
@@ -762,8 +760,12 @@ fn trustworthiness_inner(
                     })
                 })
             })
-        })
-        .sum();
+    };
+
+    let penalty_sum: f64 = match query_indices {
+        None => (0..n).into_par_iter().map(&process_row).sum(),
+        Some(qi) => qi.par_iter().copied().map(&process_row).sum(),
+    };
 
     #[cfg(feature = "profiling")]
     {
@@ -774,15 +776,12 @@ fn trustworthiness_inner(
         eprintln!("[timing:penalty] {}", PENALTY_NS.load(Ordering::Relaxed));
     }
 
-    let m = query_indices.len();
-    let denom = m as f64 * k as f64 * (2 * n).saturating_sub(3 * k + 1) as f64;
+    let denom = m_query as f64 * k as f64 * (2 * n).saturating_sub(3 * k + 1) as f64;
     1.0 - penalty_sum * 2.0 / denom
 }
 
 pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 {
-    let n = x.nrows();
-    let query_indices: Vec<usize> = (0..n).collect();
-    trustworthiness_inner(x, y, k, &query_indices)
+    trustworthiness_inner(x, y, k, None)
 }
 
 /// Sub-sampled trustworthiness: evaluates only `m` randomly chosen query rows
@@ -823,15 +822,14 @@ pub fn trustworthiness_subsampled(
         "trustworthiness_subsampled: m must be <= n (got m={m}, n={n})"
     );
 
-    let query_indices: Vec<usize> = if m == n {
-        (0..n).collect()
-    } else {
-        use rand::SeedableRng;
-        let mut rng = rand::rngs::SmallRng::seed_from_u64(seed);
-        rand::seq::index::sample(&mut rng, n, m).into_vec()
-    };
+    if m == n {
+        return trustworthiness_inner(x, y, k, None);
+    }
 
-    trustworthiness_inner(x, y, k, &query_indices)
+    use rand::SeedableRng;
+    let mut rng = rand::rngs::SmallRng::seed_from_u64(seed);
+    let query_indices = rand::seq::index::sample(&mut rng, n, m).into_vec();
+    trustworthiness_inner(x, y, k, Some(&query_indices))
 }
 
 // ─── Data structures (testing feature only) ──────────────────────────────────
