@@ -1556,10 +1556,22 @@ mod tests {
         let mut rng = rand::rngs::SmallRng::seed_from_u64(33);
         let n = 200;
         let k = 5;
-        let m = 50;
         let x = ndarray::Array2::from_shape_fn((n, 10), |_| rng.random::<f64>());
         let y = ndarray::Array2::from_shape_fn((n, 2), |_| rng.random::<f64>());
-        let t = trustworthiness_subsampled(x.view(), y.view(), k, m, 7);
+
+        // Hard-coded query indices cross-checked against brute force: guards
+        // against constant-output regressions and is independent of the
+        // production sampling implementation.
+        let query_indices: Vec<usize> = vec![
+            3, 17, 29, 42, 58, 71, 89, 104, 127, 145, 161, 188,
+        ];
+        let t = trustworthiness_inner(x.view(), y.view(), k, Some(&query_indices));
+        let t_ref =
+            trustworthiness_brute_force_subsampled(x.view(), y.view(), k, &query_indices);
+        assert!(
+            (t - t_ref).abs() < 1e-12,
+            "subsampled kernel vs brute force mismatch: inner={t}, brute={t_ref}"
+        );
         assert!(t.is_finite(), "T must be finite, got {t}");
         assert!(t > 0.0 && t <= 1.0, "T out of (0,1]: {t}");
     }
@@ -1587,9 +1599,22 @@ mod tests {
         let m = 20;
         let x = ndarray::Array2::from_shape_fn((n, 6), |_| rng.random::<f64>());
         let y = ndarray::Array2::from_shape_fn((n, 2), |_| rng.random::<f64>());
+
+        // First verify the sampling layer is seed-dependent, independent of
+        // the metric computation.
+        let mut rng_a = rand::rngs::SmallRng::seed_from_u64(1);
+        let indices_a = rand::seq::index::sample(&mut rng_a, n, m).into_vec();
+        let mut rng_b = rand::rngs::SmallRng::seed_from_u64(2);
+        let indices_b = rand::seq::index::sample(&mut rng_b, n, m).into_vec();
+        assert_ne!(
+            indices_a, indices_b,
+            "different seeds must produce different sampled index sets"
+        );
+
+        // Then verify that the metric values computed on different samples differ.
         let a = trustworthiness_subsampled(x.view(), y.view(), k, m, 1);
         let b = trustworthiness_subsampled(x.view(), y.view(), k, m, 2);
-        assert_ne!(a, b, "different seeds must produce different samples");
+        assert_ne!(a, b, "different seeds must produce different metric values");
     }
 
     #[test]
@@ -1628,20 +1653,21 @@ mod tests {
         let mut rng = rand::rngs::SmallRng::seed_from_u64(7777);
         let n = 80;
         let k = 4;
-        let m = 25;
-        let seed: u64 = 314;
         let x = ndarray::Array2::from_shape_fn((n, 6), |_| rng.random::<f64>());
         let y = ndarray::Array2::from_shape_fn((n, 2), |_| rng.random::<f64>());
 
-        // Reproduce the exact same query_indices the production function will use.
-        let mut sample_rng = rand::rngs::SmallRng::seed_from_u64(seed);
-        let query_indices = rand::seq::index::sample(&mut sample_rng, n, m).into_vec();
+        // Hard-coded query indices decouple this correctness test from the
+        // production sampling implementation (RNG choice, call order).
+        let query_indices: Vec<usize> = vec![
+            2, 7, 13, 19, 23, 28, 34, 41, 46, 52, 55, 58, 61, 64, 67, 70, 73, 75, 77, 79,
+        ];
 
-        let t_prod = trustworthiness_subsampled(x.view(), y.view(), k, m, seed);
-        let t_ref = trustworthiness_brute_force_subsampled(x.view(), y.view(), k, &query_indices);
+        let t_kernel = trustworthiness_inner(x.view(), y.view(), k, Some(&query_indices));
+        let t_ref =
+            trustworthiness_brute_force_subsampled(x.view(), y.view(), k, &query_indices);
         assert!(
-            (t_prod - t_ref).abs() < 1e-12,
-            "subsampled brute-force mismatch: prod={t_prod}, ref={t_ref}"
+            (t_kernel - t_ref).abs() < 1e-12,
+            "subsampled brute-force mismatch: kernel={t_kernel}, ref={t_ref}"
         );
     }
 
