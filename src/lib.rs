@@ -204,14 +204,14 @@ pub use crate::metrics::{
     SUBSPACE_GRAM_DET_THRESHOLD, check_eigenvalue_bounds, eigenpair_residual,
     eigenvalue_abs_errors, eigenvalue_condition_number, max_eigenpair_residual,
     orthogonality_error, separation_ratio, sign_agnostic_max_error, spectral_gap,
-    subspace_gram_det_kd, tolerance_margin, trustworthiness,
+    subspace_gram_det_kd, tolerance_margin, trustworthiness, trustworthiness_subsampled,
 };
 
 // Re-export trustworthiness for the CLI binary when built with the `cli` feature.
 // The `testing` block above already covers test builds; this separate cfg avoids
 // double-export when both features are active.
 #[cfg(all(feature = "cli", not(feature = "testing")))]
-pub use crate::metrics::trustworthiness;
+pub use crate::metrics::{trustworthiness, trustworthiness_subsampled};
 
 use ndarray::{Array2, ArrayView2};
 use sprs::CsMatI;

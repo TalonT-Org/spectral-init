@@ -515,7 +515,20 @@ unsafe fn dist_sq_2d_avx2_batch(yi: &[f64], y_flat: &[f64], n: usize, out: &mut 
 /// `G_k = n·k·(2n−3k−1)`: when `k ≥ n/2` this denominator produces T > 1.
 /// The guard uses integer floor division (`n / 2`), matching sklearn's exact boundary
 /// condition (`n_neighbors >= n // 2` raises `ValueError` in sklearn).
-pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 {
+/// Shared inner kernel for [`trustworthiness`] and [`trustworthiness_subsampled`].
+///
+/// `query_indices` selects which rows participate as outer "query" points; values
+/// must lie in `[0, n)` and should be unique (duplicates would double-count their
+/// penalty contribution). The per-row computation always runs against the full
+/// `n`-point population. Only the leading factor of the normalization denominator
+/// uses `m = query_indices.len()` — the `(2n − 3k − 1)` factor still uses the
+/// full population `n`.
+pub(crate) fn trustworthiness_inner(
+    x: ArrayView2<f64>,
+    y: ArrayView2<f64>,
+    k: usize,
+    query_indices: Option<&[usize]>,
+) -> f64 {
     use std::cell::RefCell;
     let n = x.nrows();
     assert_eq!(
@@ -530,6 +543,7 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
         this constraint is required by the normalization denominator and matches sklearn's ValueError",
         n / 2
     );
+    let m_query = query_indices.map_or(n, |q| q.len());
 
     #[cfg(feature = "profiling")]
     {
@@ -584,172 +598,174 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
     #[cfg(feature = "profiling")]
     static PENALTY_NS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-    let penalty_sum: f64 = (0..n)
-        .into_par_iter()
-        .map(|i| {
-            let xi = x.row(i);
-            let yi = y.row(i);
+    let process_row = |i: usize| -> f64 {
+        let xi = x.row(i);
+        let yi = y.row(i);
 
-            COMB_DIST_X.with(|dist_x_cell| {
-                COMB_INDICES.with(|indices_cell| {
-                    let mut dist_x = dist_x_cell.borrow_mut();
-                    let mut indices = indices_cell.borrow_mut();
+        COMB_DIST_X.with(|dist_x_cell| {
+            COMB_INDICES.with(|indices_cell| {
+                let mut dist_x = dist_x_cell.borrow_mut();
+                let mut indices = indices_cell.borrow_mut();
 
-                    // ── x_dist step ──────────────────────────────────────────────
-                    #[cfg(feature = "profiling")]
-                    let t_x_dist = std::time::Instant::now();
+                // ── x_dist step ──────────────────────────────────────────────
+                #[cfg(feature = "profiling")]
+                let t_x_dist = std::time::Instant::now();
 
-                    dist_x.clear();
-                    dist_x.resize(n, 0.0f64);
-                    for j in 0..n {
-                        let xj = x.row(j);
-                        dist_x[j] = {
-                            #[cfg(all(
-                                target_arch = "x86_64",
-                                target_feature = "avx2",
-                                target_feature = "fma"
-                            ))]
-                            {
-                                if use_avx2 && d_x >= 10 {
-                                    let si = xi.as_slice().expect("x row must be contiguous");
-                                    let sj = xj.as_slice().expect("x row must be contiguous");
-                                    // SAFETY: runtime + d_x check guarantees AVX2+FMA and >= 10 elements.
-                                    unsafe { dist_sq_avx2_looped(si, sj) }
-                                } else {
-                                    xi.iter()
-                                        .zip(xj.iter())
-                                        .map(|(&a, &b)| (a - b) * (a - b))
-                                        .sum()
-                                }
-                            }
-                            #[cfg(not(all(
-                                target_arch = "x86_64",
-                                target_feature = "avx2",
-                                target_feature = "fma"
-                            )))]
-                            {
+                dist_x.clear();
+                dist_x.resize(n, 0.0f64);
+                for j in 0..n {
+                    let xj = x.row(j);
+                    dist_x[j] = {
+                        #[cfg(all(
+                            target_arch = "x86_64",
+                            target_feature = "avx2",
+                            target_feature = "fma"
+                        ))]
+                        {
+                            if use_avx2 && d_x >= 10 {
+                                let si = xi.as_slice().expect("x row must be contiguous");
+                                let sj = xj.as_slice().expect("x row must be contiguous");
+                                // SAFETY: runtime + d_x check guarantees AVX2+FMA and >= 10 elements.
+                                unsafe { dist_sq_avx2_looped(si, sj) }
+                            } else {
                                 xi.iter()
                                     .zip(xj.iter())
                                     .map(|(&a, &b)| (a - b) * (a - b))
                                     .sum()
                             }
-                        };
-                    }
+                        }
+                        #[cfg(not(all(
+                            target_arch = "x86_64",
+                            target_feature = "avx2",
+                            target_feature = "fma"
+                        )))]
+                        {
+                            xi.iter()
+                                .zip(xj.iter())
+                                .map(|(&a, &b)| (a - b) * (a - b))
+                                .sum()
+                        }
+                    };
+                }
 
-                    #[cfg(feature = "profiling")]
-                    X_DIST_NS.fetch_add(
-                        t_x_dist.elapsed().as_nanos() as u64,
-                        std::sync::atomic::Ordering::Relaxed,
-                    );
+                #[cfg(feature = "profiling")]
+                X_DIST_NS.fetch_add(
+                    t_x_dist.elapsed().as_nanos() as u64,
+                    std::sync::atomic::Ordering::Relaxed,
+                );
 
-                    // ── x_sort step ──────────────────────────────────────────────
-                    #[cfg(feature = "profiling")]
-                    let t_x_sort = std::time::Instant::now();
+                // ── x_sort step ──────────────────────────────────────────────
+                #[cfg(feature = "profiling")]
+                let t_x_sort = std::time::Instant::now();
 
-                    indices.clear();
-                    indices.extend(0..n);
-                    indices.select_nth_unstable_by(k, |&a, &b| {
-                        dist_x[a].total_cmp(&dist_x[b]).then(a.cmp(&b))
-                    });
+                indices.clear();
+                indices.extend(0..n);
+                indices.select_nth_unstable_by(k, |&a, &b| {
+                    dist_x[a].total_cmp(&dist_x[b]).then(a.cmp(&b))
+                });
 
-                    let knn_x_set: HashSet<usize> =
-                        indices[..=k].iter().filter(|&&m| m != i).copied().collect();
+                let knn_x_set: HashSet<usize> =
+                    indices[..=k].iter().filter(|&&m| m != i).copied().collect();
 
-                    #[cfg(feature = "profiling")]
-                    X_SORT_NS.fetch_add(
-                        t_x_sort.elapsed().as_nanos() as u64,
-                        std::sync::atomic::Ordering::Relaxed,
-                    );
+                #[cfg(feature = "profiling")]
+                X_SORT_NS.fetch_add(
+                    t_x_sort.elapsed().as_nanos() as u64,
+                    std::sync::atomic::Ordering::Relaxed,
+                );
 
-                    // ── y_dist step (flat_simd, replaces BinaryHeap) ─────────────
-                    #[cfg(feature = "profiling")]
-                    let t_y_dist = std::time::Instant::now();
+                // ── y_dist step (flat_simd, replaces BinaryHeap) ─────────────
+                #[cfg(feature = "profiling")]
+                let t_y_dist = std::time::Instant::now();
 
-                    COMB_DIST_Y.with(|dy_cell| {
-                        COMB_INDICES_Y.with(|iy_cell| {
-                            let mut dist_y = dy_cell.borrow_mut();
-                            let mut indices_y = iy_cell.borrow_mut();
+                COMB_DIST_Y.with(|dy_cell| {
+                    COMB_INDICES_Y.with(|iy_cell| {
+                        let mut dist_y = dy_cell.borrow_mut();
+                        let mut indices_y = iy_cell.borrow_mut();
 
-                            dist_y.clear();
-                            dist_y.resize(n, 0.0f64);
+                        dist_y.clear();
+                        dist_y.resize(n, 0.0f64);
 
-                            // Fill Y distances: AVX2 2D batch or scalar fallback.
-                            #[cfg(target_arch = "x86_64")]
-                            if use_avx2_y {
-                                let y_flat = y
-                                    .as_slice()
-                                    .expect("y must be standard layout for AVX2 dispatch");
-                                let yi_slice = &y_flat[i * 2..(i + 1) * 2];
-                                // SAFETY: y_flat has n*d_y elements; yi_slice has 2 elements;
-                                // dist_y has n elements; use_avx2_y guarantees d_y==2,
-                                // standard_layout, and runtime AVX2.
-                                unsafe {
-                                    dist_sq_2d_avx2_batch(yi_slice, y_flat, n, &mut dist_y);
-                                }
-                            } else {
-                                for j in 0..n {
-                                    let yj = y.row(j);
-                                    dist_y[j] = yi
-                                        .iter()
-                                        .zip(yj.iter())
-                                        .map(|(&a, &b)| (a - b) * (a - b))
-                                        .sum();
-                                }
+                        // Fill Y distances: AVX2 2D batch or scalar fallback.
+                        #[cfg(target_arch = "x86_64")]
+                        if use_avx2_y {
+                            let y_flat = y
+                                .as_slice()
+                                .expect("y must be standard layout for AVX2 dispatch");
+                            let yi_slice = &y_flat[i * 2..(i + 1) * 2];
+                            // SAFETY: y_flat has n*d_y elements; yi_slice has 2 elements;
+                            // dist_y has n elements; use_avx2_y guarantees d_y==2,
+                            // standard_layout, and runtime AVX2.
+                            unsafe {
+                                dist_sq_2d_avx2_batch(yi_slice, y_flat, n, &mut dist_y);
                             }
-                            #[cfg(not(target_arch = "x86_64"))]
-                            {
-                                for j in 0..n {
-                                    let yj = y.row(j);
-                                    dist_y[j] = yi
-                                        .iter()
-                                        .zip(yj.iter())
-                                        .map(|(&a, &b)| (a - b) * (a - b))
-                                        .sum();
-                                }
+                        } else {
+                            for j in 0..n {
+                                let yj = y.row(j);
+                                dist_y[j] = yi
+                                    .iter()
+                                    .zip(yj.iter())
+                                    .map(|(&a, &b)| (a - b) * (a - b))
+                                    .sum();
                             }
-
-                            dist_y[i] = f64::INFINITY; // self-exclusion
-
-                            indices_y.clear();
-                            indices_y.extend(0..n);
-                            indices_y.select_nth_unstable_by(k, |&a, &b| {
-                                dist_y[a].total_cmp(&dist_y[b]).then(a.cmp(&b))
-                            });
-
-                            #[cfg(feature = "profiling")]
-                            Y_DIST_NS.fetch_add(
-                                t_y_dist.elapsed().as_nanos() as u64,
-                                std::sync::atomic::Ordering::Relaxed,
-                            );
-
-                            // ── penalty step ──────────────────────────────────────
-                            #[cfg(feature = "profiling")]
-                            let t_penalty = std::time::Instant::now();
-
-                            let mut row_penalty = 0u64;
-                            for &j in &indices_y[..k] {
-                                if !knn_x_set.contains(&j) {
-                                    let dj = dist_x[j];
-                                    let rank: usize = (0..n)
-                                        .filter(|&m| dist_x[m] < dj || (dist_x[m] == dj && m < j))
-                                        .count();
-                                    row_penalty += (rank - k) as u64;
-                                }
+                        }
+                        #[cfg(not(target_arch = "x86_64"))]
+                        {
+                            for j in 0..n {
+                                let yj = y.row(j);
+                                dist_y[j] = yi
+                                    .iter()
+                                    .zip(yj.iter())
+                                    .map(|(&a, &b)| (a - b) * (a - b))
+                                    .sum();
                             }
+                        }
 
-                            #[cfg(feature = "profiling")]
-                            PENALTY_NS.fetch_add(
-                                t_penalty.elapsed().as_nanos() as u64,
-                                std::sync::atomic::Ordering::Relaxed,
-                            );
+                        dist_y[i] = f64::INFINITY; // self-exclusion
 
-                            row_penalty as f64
-                        })
+                        indices_y.clear();
+                        indices_y.extend(0..n);
+                        indices_y.select_nth_unstable_by(k, |&a, &b| {
+                            dist_y[a].total_cmp(&dist_y[b]).then(a.cmp(&b))
+                        });
+
+                        #[cfg(feature = "profiling")]
+                        Y_DIST_NS.fetch_add(
+                            t_y_dist.elapsed().as_nanos() as u64,
+                            std::sync::atomic::Ordering::Relaxed,
+                        );
+
+                        // ── penalty step ──────────────────────────────────────
+                        #[cfg(feature = "profiling")]
+                        let t_penalty = std::time::Instant::now();
+
+                        let mut row_penalty = 0u64;
+                        for &j in &indices_y[..k] {
+                            if !knn_x_set.contains(&j) {
+                                let dj = dist_x[j];
+                                let rank: usize = (0..n)
+                                    .filter(|&m| dist_x[m] < dj || (dist_x[m] == dj && m < j))
+                                    .count();
+                                row_penalty += (rank - k) as u64;
+                            }
+                        }
+
+                        #[cfg(feature = "profiling")]
+                        PENALTY_NS.fetch_add(
+                            t_penalty.elapsed().as_nanos() as u64,
+                            std::sync::atomic::Ordering::Relaxed,
+                        );
+
+                        row_penalty as f64
                     })
                 })
             })
         })
-        .sum();
+    };
+
+    let penalty_sum: f64 = match query_indices {
+        None => (0..n).into_par_iter().map(&process_row).sum(),
+        Some(qi) => qi.par_iter().copied().map(&process_row).sum(),
+    };
 
     #[cfg(feature = "profiling")]
     {
@@ -760,8 +776,60 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
         eprintln!("[timing:penalty] {}", PENALTY_NS.load(Ordering::Relaxed));
     }
 
-    let denom = n as f64 * k as f64 * (2 * n).saturating_sub(3 * k + 1) as f64;
+    let denom = m_query as f64 * k as f64 * (2 * n).saturating_sub(3 * k + 1) as f64;
     1.0 - penalty_sum * 2.0 / denom
+}
+
+pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 {
+    trustworthiness_inner(x, y, k, None)
+}
+
+/// Sub-sampled trustworthiness: evaluates only `m` randomly chosen query rows
+/// against the full `n`-point population.
+///
+/// Identical to [`trustworthiness`] except that the outer iteration is restricted
+/// to `m` query rows sampled uniformly without replacement using `seed`. The
+/// per-row computation (full pairwise X-distances, full Y k-NN, rank penalty
+/// scan) still runs against all `n` points — only the outer iterator and the
+/// leading denominator factor change.
+///
+/// # Formula
+/// `T(k, m) = 1 − (2 / (m·k·(2n−3k−1))) · Σ_{i ∈ Q} Σ_{j ∈ U_i(k)} (r(i,j) − k)`
+///
+/// where `Q ⊂ [0, n)` is the set of `m` sampled query rows. The
+/// `(2n − 3k − 1)` factor uses the full population `n`, so when `m == n` the
+/// result is identical to `trustworthiness(x, y, k)`.
+///
+/// # Determinism
+/// The sample is reproducible: equal `seed` values produce equal row sets.
+/// When `m == n`, the function bypasses sampling entirely and uses the full
+/// `0..n` range, guaranteeing parity with `trustworthiness`.
+///
+/// # Panics
+/// Panics if `k == 0`, `k >= n / 2`, `m == 0`, `m > n`, or if `x` and `y` have
+/// different row counts.
+pub fn trustworthiness_subsampled(
+    x: ArrayView2<f64>,
+    y: ArrayView2<f64>,
+    k: usize,
+    m: usize,
+    seed: u64,
+) -> f64 {
+    let n = x.nrows();
+    assert!(m > 0, "trustworthiness_subsampled: m must be > 0");
+    assert!(
+        m <= n,
+        "trustworthiness_subsampled: m must be <= n (got m={m}, n={n})"
+    );
+
+    if m == n {
+        return trustworthiness_inner(x, y, k, None);
+    }
+
+    use rand::SeedableRng;
+    let mut rng = rand::rngs::SmallRng::seed_from_u64(seed);
+    let query_indices = rand::seq::index::sample(&mut rng, n, m).into_vec();
+    trustworthiness_inner(x, y, k, Some(&query_indices))
 }
 
 // ─── Data structures (testing feature only) ──────────────────────────────────
@@ -1408,6 +1476,195 @@ mod tests {
             let knn: Vec<usize> = dists[..k].iter().map(|&(_, j)| j).collect();
             assert!(!knn.contains(&i), "point {i} appeared in its own k-NN");
         }
+    }
+
+    fn trustworthiness_brute_force_subsampled(
+        x: ndarray::ArrayView2<f64>,
+        y: ndarray::ArrayView2<f64>,
+        k: usize,
+        query_indices: &[usize],
+    ) -> f64 {
+        use std::collections::HashSet;
+        let n = x.nrows();
+        let m = query_indices.len();
+        let penalty_sum: f64 = query_indices
+            .iter()
+            .map(|&i| {
+                let xi = x.row(i);
+                let yi = y.row(i);
+                let mut dist_x: Vec<(f64, usize)> = (0..n)
+                    .map(|j| {
+                        let d: f64 = xi
+                            .iter()
+                            .zip(x.row(j).iter())
+                            .map(|(&a, &b)| (a - b) * (a - b))
+                            .sum();
+                        (d, j)
+                    })
+                    .collect();
+                dist_x.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+                let knn_x: HashSet<usize> = dist_x[1..=k].iter().map(|&(_, j)| j).collect();
+                let mut rank_x = vec![0usize; n];
+                for (rank, &(_, j)) in dist_x.iter().enumerate() {
+                    rank_x[j] = rank;
+                }
+                let mut dist_y: Vec<(f64, usize)> = (0..n)
+                    .filter(|&j| j != i)
+                    .map(|j| {
+                        let d: f64 = yi
+                            .iter()
+                            .zip(y.row(j).iter())
+                            .map(|(&a, &b)| (a - b) * (a - b))
+                            .sum();
+                        (d, j)
+                    })
+                    .collect();
+                dist_y.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+                let knn_y: HashSet<usize> = dist_y[..k].iter().map(|&(_, j)| j).collect();
+                let mut row_penalty = 0u64;
+                for j in &knn_y {
+                    if !knn_x.contains(j) {
+                        row_penalty += (rank_x[*j] - k) as u64;
+                    }
+                }
+                row_penalty as f64
+            })
+            .sum();
+        let denom = m as f64 * k as f64 * (2 * n).saturating_sub(3 * k + 1) as f64;
+        1.0 - penalty_sum * 2.0 / denom
+    }
+
+    #[test]
+    fn t_tws_01_m_equals_n_matches_full_trustworthiness() {
+        use rand::{Rng, SeedableRng};
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(2026);
+        let n = 60;
+        let k = 5;
+        let x = ndarray::Array2::from_shape_fn((n, 8), |_| rng.random::<f64>());
+        let y = ndarray::Array2::from_shape_fn((n, 2), |_| rng.random::<f64>());
+        let t_full = trustworthiness(x.view(), y.view(), k);
+        let t_sub = trustworthiness_subsampled(x.view(), y.view(), k, n, 0);
+        assert!(
+            (t_full - t_sub).abs() < 1e-10,
+            "m==n parity: full={t_full}, subsampled={t_sub}"
+        );
+    }
+
+    #[test]
+    fn t_tws_02_m_less_than_n_in_unit_interval() {
+        use rand::{Rng, SeedableRng};
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(33);
+        let n = 200;
+        let k = 5;
+        let x = ndarray::Array2::from_shape_fn((n, 10), |_| rng.random::<f64>());
+        let y = ndarray::Array2::from_shape_fn((n, 2), |_| rng.random::<f64>());
+
+        // Hard-coded query indices cross-checked against brute force: guards
+        // against constant-output regressions and is independent of the
+        // production sampling implementation.
+        let query_indices: Vec<usize> = vec![3, 17, 29, 42, 58, 71, 89, 104, 127, 145, 161, 188];
+        let t = trustworthiness_inner(x.view(), y.view(), k, Some(&query_indices));
+        let t_ref = trustworthiness_brute_force_subsampled(x.view(), y.view(), k, &query_indices);
+        assert!(
+            (t - t_ref).abs() < 1e-12,
+            "subsampled kernel vs brute force mismatch: inner={t}, brute={t_ref}"
+        );
+        assert!(t.is_finite(), "T must be finite, got {t}");
+        assert!(t > 0.0 && t <= 1.0, "T out of (0,1]: {t}");
+    }
+
+    #[test]
+    fn t_tws_03_same_seed_is_deterministic() {
+        use rand::{Rng, SeedableRng};
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(11);
+        let n = 100;
+        let k = 4;
+        let m = 30;
+        let x = ndarray::Array2::from_shape_fn((n, 6), |_| rng.random::<f64>());
+        let y = ndarray::Array2::from_shape_fn((n, 2), |_| rng.random::<f64>());
+        let a = trustworthiness_subsampled(x.view(), y.view(), k, m, 12345);
+        let b = trustworthiness_subsampled(x.view(), y.view(), k, m, 12345);
+        assert_eq!(a, b, "same seed must produce identical result");
+    }
+
+    #[test]
+    fn t_tws_04_different_seeds_produce_different_results() {
+        use rand::{Rng, SeedableRng};
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(99);
+        let n = 100;
+        let k = 4;
+        let m = 20;
+        let x = ndarray::Array2::from_shape_fn((n, 6), |_| rng.random::<f64>());
+        let y = ndarray::Array2::from_shape_fn((n, 2), |_| rng.random::<f64>());
+
+        // First verify the sampling layer is seed-dependent, independent of
+        // the metric computation.
+        let mut rng_a = rand::rngs::SmallRng::seed_from_u64(1);
+        let indices_a = rand::seq::index::sample(&mut rng_a, n, m).into_vec();
+        let mut rng_b = rand::rngs::SmallRng::seed_from_u64(2);
+        let indices_b = rand::seq::index::sample(&mut rng_b, n, m).into_vec();
+        assert_ne!(
+            indices_a, indices_b,
+            "different seeds must produce different sampled index sets"
+        );
+
+        // Then verify that the metric values computed on different samples differ.
+        let a = trustworthiness_subsampled(x.view(), y.view(), k, m, 1);
+        let b = trustworthiness_subsampled(x.view(), y.view(), k, m, 2);
+        assert_ne!(a, b, "different seeds must produce different metric values");
+    }
+
+    #[test]
+    #[should_panic(expected = "m must be <= n")]
+    fn t_tws_05_panics_when_m_exceeds_n() {
+        let n = 20usize;
+        let x = ndarray::Array2::zeros((n, 4));
+        let y = ndarray::Array2::zeros((n, 2));
+        let _ = trustworthiness_subsampled(x.view(), y.view(), 3, n + 1, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "m must be > 0")]
+    fn t_tws_06_panics_when_m_zero() {
+        let n = 20usize;
+        let x = ndarray::Array2::zeros((n, 4));
+        let y = ndarray::Array2::zeros((n, 2));
+        let _ = trustworthiness_subsampled(x.view(), y.view(), 3, 0, 0);
+    }
+
+    #[test]
+    fn t_tws_07_perfect_preservation_subsampled() {
+        let n = 40;
+        let x = ndarray::Array2::from_shape_fn((n, 4), |(i, d)| (i * 4 + d) as f64);
+        let y = x.slice(ndarray::s![.., ..2]).to_owned();
+        let t = trustworthiness_subsampled(x.view(), y.view(), 5, 10, 0);
+        assert!(
+            (t - 1.0).abs() < 1e-12,
+            "perfect preservation: T={t}, expected 1.0"
+        );
+    }
+
+    #[test]
+    fn t_tws_08_brute_force_reference_matches() {
+        use rand::{Rng, SeedableRng};
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(7777);
+        let n = 80;
+        let k = 4;
+        let x = ndarray::Array2::from_shape_fn((n, 6), |_| rng.random::<f64>());
+        let y = ndarray::Array2::from_shape_fn((n, 2), |_| rng.random::<f64>());
+
+        // Hard-coded query indices decouple this correctness test from the
+        // production sampling implementation (RNG choice, call order).
+        let query_indices: Vec<usize> = vec![
+            2, 7, 13, 19, 23, 28, 34, 41, 46, 52, 55, 58, 61, 64, 67, 70, 73, 75, 77, 79,
+        ];
+
+        let t_kernel = trustworthiness_inner(x.view(), y.view(), k, Some(&query_indices));
+        let t_ref = trustworthiness_brute_force_subsampled(x.view(), y.view(), k, &query_indices);
+        assert!(
+            (t_kernel - t_ref).abs() < 1e-12,
+            "subsampled brute-force mismatch: kernel={t_kernel}, ref={t_ref}"
+        );
     }
 
     #[cfg(feature = "testing")]
