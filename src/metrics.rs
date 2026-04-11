@@ -599,167 +599,167 @@ pub(crate) fn trustworthiness_inner(
     static PENALTY_NS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
     let process_row = |i: usize| -> f64 {
-            let xi = x.row(i);
-            let yi = y.row(i);
+        let xi = x.row(i);
+        let yi = y.row(i);
 
-            COMB_DIST_X.with(|dist_x_cell| {
-                COMB_INDICES.with(|indices_cell| {
-                    let mut dist_x = dist_x_cell.borrow_mut();
-                    let mut indices = indices_cell.borrow_mut();
+        COMB_DIST_X.with(|dist_x_cell| {
+            COMB_INDICES.with(|indices_cell| {
+                let mut dist_x = dist_x_cell.borrow_mut();
+                let mut indices = indices_cell.borrow_mut();
 
-                    // ── x_dist step ──────────────────────────────────────────────
-                    #[cfg(feature = "profiling")]
-                    let t_x_dist = std::time::Instant::now();
+                // ── x_dist step ──────────────────────────────────────────────
+                #[cfg(feature = "profiling")]
+                let t_x_dist = std::time::Instant::now();
 
-                    dist_x.clear();
-                    dist_x.resize(n, 0.0f64);
-                    for j in 0..n {
-                        let xj = x.row(j);
-                        dist_x[j] = {
-                            #[cfg(all(
-                                target_arch = "x86_64",
-                                target_feature = "avx2",
-                                target_feature = "fma"
-                            ))]
-                            {
-                                if use_avx2 && d_x >= 10 {
-                                    let si = xi.as_slice().expect("x row must be contiguous");
-                                    let sj = xj.as_slice().expect("x row must be contiguous");
-                                    // SAFETY: runtime + d_x check guarantees AVX2+FMA and >= 10 elements.
-                                    unsafe { dist_sq_avx2_looped(si, sj) }
-                                } else {
-                                    xi.iter()
-                                        .zip(xj.iter())
-                                        .map(|(&a, &b)| (a - b) * (a - b))
-                                        .sum()
-                                }
-                            }
-                            #[cfg(not(all(
-                                target_arch = "x86_64",
-                                target_feature = "avx2",
-                                target_feature = "fma"
-                            )))]
-                            {
+                dist_x.clear();
+                dist_x.resize(n, 0.0f64);
+                for j in 0..n {
+                    let xj = x.row(j);
+                    dist_x[j] = {
+                        #[cfg(all(
+                            target_arch = "x86_64",
+                            target_feature = "avx2",
+                            target_feature = "fma"
+                        ))]
+                        {
+                            if use_avx2 && d_x >= 10 {
+                                let si = xi.as_slice().expect("x row must be contiguous");
+                                let sj = xj.as_slice().expect("x row must be contiguous");
+                                // SAFETY: runtime + d_x check guarantees AVX2+FMA and >= 10 elements.
+                                unsafe { dist_sq_avx2_looped(si, sj) }
+                            } else {
                                 xi.iter()
                                     .zip(xj.iter())
                                     .map(|(&a, &b)| (a - b) * (a - b))
                                     .sum()
                             }
-                        };
-                    }
+                        }
+                        #[cfg(not(all(
+                            target_arch = "x86_64",
+                            target_feature = "avx2",
+                            target_feature = "fma"
+                        )))]
+                        {
+                            xi.iter()
+                                .zip(xj.iter())
+                                .map(|(&a, &b)| (a - b) * (a - b))
+                                .sum()
+                        }
+                    };
+                }
 
-                    #[cfg(feature = "profiling")]
-                    X_DIST_NS.fetch_add(
-                        t_x_dist.elapsed().as_nanos() as u64,
-                        std::sync::atomic::Ordering::Relaxed,
-                    );
+                #[cfg(feature = "profiling")]
+                X_DIST_NS.fetch_add(
+                    t_x_dist.elapsed().as_nanos() as u64,
+                    std::sync::atomic::Ordering::Relaxed,
+                );
 
-                    // ── x_sort step ──────────────────────────────────────────────
-                    #[cfg(feature = "profiling")]
-                    let t_x_sort = std::time::Instant::now();
+                // ── x_sort step ──────────────────────────────────────────────
+                #[cfg(feature = "profiling")]
+                let t_x_sort = std::time::Instant::now();
 
-                    indices.clear();
-                    indices.extend(0..n);
-                    indices.select_nth_unstable_by(k, |&a, &b| {
-                        dist_x[a].total_cmp(&dist_x[b]).then(a.cmp(&b))
-                    });
+                indices.clear();
+                indices.extend(0..n);
+                indices.select_nth_unstable_by(k, |&a, &b| {
+                    dist_x[a].total_cmp(&dist_x[b]).then(a.cmp(&b))
+                });
 
-                    let knn_x_set: HashSet<usize> =
-                        indices[..=k].iter().filter(|&&m| m != i).copied().collect();
+                let knn_x_set: HashSet<usize> =
+                    indices[..=k].iter().filter(|&&m| m != i).copied().collect();
 
-                    #[cfg(feature = "profiling")]
-                    X_SORT_NS.fetch_add(
-                        t_x_sort.elapsed().as_nanos() as u64,
-                        std::sync::atomic::Ordering::Relaxed,
-                    );
+                #[cfg(feature = "profiling")]
+                X_SORT_NS.fetch_add(
+                    t_x_sort.elapsed().as_nanos() as u64,
+                    std::sync::atomic::Ordering::Relaxed,
+                );
 
-                    // ── y_dist step (flat_simd, replaces BinaryHeap) ─────────────
-                    #[cfg(feature = "profiling")]
-                    let t_y_dist = std::time::Instant::now();
+                // ── y_dist step (flat_simd, replaces BinaryHeap) ─────────────
+                #[cfg(feature = "profiling")]
+                let t_y_dist = std::time::Instant::now();
 
-                    COMB_DIST_Y.with(|dy_cell| {
-                        COMB_INDICES_Y.with(|iy_cell| {
-                            let mut dist_y = dy_cell.borrow_mut();
-                            let mut indices_y = iy_cell.borrow_mut();
+                COMB_DIST_Y.with(|dy_cell| {
+                    COMB_INDICES_Y.with(|iy_cell| {
+                        let mut dist_y = dy_cell.borrow_mut();
+                        let mut indices_y = iy_cell.borrow_mut();
 
-                            dist_y.clear();
-                            dist_y.resize(n, 0.0f64);
+                        dist_y.clear();
+                        dist_y.resize(n, 0.0f64);
 
-                            // Fill Y distances: AVX2 2D batch or scalar fallback.
-                            #[cfg(target_arch = "x86_64")]
-                            if use_avx2_y {
-                                let y_flat = y
-                                    .as_slice()
-                                    .expect("y must be standard layout for AVX2 dispatch");
-                                let yi_slice = &y_flat[i * 2..(i + 1) * 2];
-                                // SAFETY: y_flat has n*d_y elements; yi_slice has 2 elements;
-                                // dist_y has n elements; use_avx2_y guarantees d_y==2,
-                                // standard_layout, and runtime AVX2.
-                                unsafe {
-                                    dist_sq_2d_avx2_batch(yi_slice, y_flat, n, &mut dist_y);
-                                }
-                            } else {
-                                for j in 0..n {
-                                    let yj = y.row(j);
-                                    dist_y[j] = yi
-                                        .iter()
-                                        .zip(yj.iter())
-                                        .map(|(&a, &b)| (a - b) * (a - b))
-                                        .sum();
-                                }
+                        // Fill Y distances: AVX2 2D batch or scalar fallback.
+                        #[cfg(target_arch = "x86_64")]
+                        if use_avx2_y {
+                            let y_flat = y
+                                .as_slice()
+                                .expect("y must be standard layout for AVX2 dispatch");
+                            let yi_slice = &y_flat[i * 2..(i + 1) * 2];
+                            // SAFETY: y_flat has n*d_y elements; yi_slice has 2 elements;
+                            // dist_y has n elements; use_avx2_y guarantees d_y==2,
+                            // standard_layout, and runtime AVX2.
+                            unsafe {
+                                dist_sq_2d_avx2_batch(yi_slice, y_flat, n, &mut dist_y);
                             }
-                            #[cfg(not(target_arch = "x86_64"))]
-                            {
-                                for j in 0..n {
-                                    let yj = y.row(j);
-                                    dist_y[j] = yi
-                                        .iter()
-                                        .zip(yj.iter())
-                                        .map(|(&a, &b)| (a - b) * (a - b))
-                                        .sum();
-                                }
+                        } else {
+                            for j in 0..n {
+                                let yj = y.row(j);
+                                dist_y[j] = yi
+                                    .iter()
+                                    .zip(yj.iter())
+                                    .map(|(&a, &b)| (a - b) * (a - b))
+                                    .sum();
                             }
-
-                            dist_y[i] = f64::INFINITY; // self-exclusion
-
-                            indices_y.clear();
-                            indices_y.extend(0..n);
-                            indices_y.select_nth_unstable_by(k, |&a, &b| {
-                                dist_y[a].total_cmp(&dist_y[b]).then(a.cmp(&b))
-                            });
-
-                            #[cfg(feature = "profiling")]
-                            Y_DIST_NS.fetch_add(
-                                t_y_dist.elapsed().as_nanos() as u64,
-                                std::sync::atomic::Ordering::Relaxed,
-                            );
-
-                            // ── penalty step ──────────────────────────────────────
-                            #[cfg(feature = "profiling")]
-                            let t_penalty = std::time::Instant::now();
-
-                            let mut row_penalty = 0u64;
-                            for &j in &indices_y[..k] {
-                                if !knn_x_set.contains(&j) {
-                                    let dj = dist_x[j];
-                                    let rank: usize = (0..n)
-                                        .filter(|&m| dist_x[m] < dj || (dist_x[m] == dj && m < j))
-                                        .count();
-                                    row_penalty += (rank - k) as u64;
-                                }
+                        }
+                        #[cfg(not(target_arch = "x86_64"))]
+                        {
+                            for j in 0..n {
+                                let yj = y.row(j);
+                                dist_y[j] = yi
+                                    .iter()
+                                    .zip(yj.iter())
+                                    .map(|(&a, &b)| (a - b) * (a - b))
+                                    .sum();
                             }
+                        }
 
-                            #[cfg(feature = "profiling")]
-                            PENALTY_NS.fetch_add(
-                                t_penalty.elapsed().as_nanos() as u64,
-                                std::sync::atomic::Ordering::Relaxed,
-                            );
+                        dist_y[i] = f64::INFINITY; // self-exclusion
 
-                            row_penalty as f64
-                        })
+                        indices_y.clear();
+                        indices_y.extend(0..n);
+                        indices_y.select_nth_unstable_by(k, |&a, &b| {
+                            dist_y[a].total_cmp(&dist_y[b]).then(a.cmp(&b))
+                        });
+
+                        #[cfg(feature = "profiling")]
+                        Y_DIST_NS.fetch_add(
+                            t_y_dist.elapsed().as_nanos() as u64,
+                            std::sync::atomic::Ordering::Relaxed,
+                        );
+
+                        // ── penalty step ──────────────────────────────────────
+                        #[cfg(feature = "profiling")]
+                        let t_penalty = std::time::Instant::now();
+
+                        let mut row_penalty = 0u64;
+                        for &j in &indices_y[..k] {
+                            if !knn_x_set.contains(&j) {
+                                let dj = dist_x[j];
+                                let rank: usize = (0..n)
+                                    .filter(|&m| dist_x[m] < dj || (dist_x[m] == dj && m < j))
+                                    .count();
+                                row_penalty += (rank - k) as u64;
+                            }
+                        }
+
+                        #[cfg(feature = "profiling")]
+                        PENALTY_NS.fetch_add(
+                            t_penalty.elapsed().as_nanos() as u64,
+                            std::sync::atomic::Ordering::Relaxed,
+                        );
+
+                        row_penalty as f64
                     })
                 })
             })
+        })
     };
 
     let penalty_sum: f64 = match query_indices {
@@ -1562,12 +1562,9 @@ mod tests {
         // Hard-coded query indices cross-checked against brute force: guards
         // against constant-output regressions and is independent of the
         // production sampling implementation.
-        let query_indices: Vec<usize> = vec![
-            3, 17, 29, 42, 58, 71, 89, 104, 127, 145, 161, 188,
-        ];
+        let query_indices: Vec<usize> = vec![3, 17, 29, 42, 58, 71, 89, 104, 127, 145, 161, 188];
         let t = trustworthiness_inner(x.view(), y.view(), k, Some(&query_indices));
-        let t_ref =
-            trustworthiness_brute_force_subsampled(x.view(), y.view(), k, &query_indices);
+        let t_ref = trustworthiness_brute_force_subsampled(x.view(), y.view(), k, &query_indices);
         assert!(
             (t - t_ref).abs() < 1e-12,
             "subsampled kernel vs brute force mismatch: inner={t}, brute={t_ref}"
@@ -1663,8 +1660,7 @@ mod tests {
         ];
 
         let t_kernel = trustworthiness_inner(x.view(), y.view(), k, Some(&query_indices));
-        let t_ref =
-            trustworthiness_brute_force_subsampled(x.view(), y.view(), k, &query_indices);
+        let t_ref = trustworthiness_brute_force_subsampled(x.view(), y.view(), k, &query_indices);
         assert!(
             (t_kernel - t_ref).abs() < 1e-12,
             "subsampled brute-force mismatch: kernel={t_kernel}, ref={t_ref}"
