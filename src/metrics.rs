@@ -515,7 +515,20 @@ unsafe fn dist_sq_2d_avx2_batch(yi: &[f64], y_flat: &[f64], n: usize, out: &mut 
 /// `G_k = n·k·(2n−3k−1)`: when `k ≥ n/2` this denominator produces T > 1.
 /// The guard uses integer floor division (`n / 2`), matching sklearn's exact boundary
 /// condition (`n_neighbors >= n // 2` raises `ValueError` in sklearn).
-pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 {
+/// Shared inner kernel for [`trustworthiness`] and [`trustworthiness_subsampled`].
+///
+/// `query_indices` selects which rows participate as outer "query" points; values
+/// must lie in `[0, n)` and should be unique (duplicates would double-count their
+/// penalty contribution). The per-row computation always runs against the full
+/// `n`-point population. Only the leading factor of the normalization denominator
+/// uses `m = query_indices.len()` — the `(2n − 3k − 1)` factor still uses the
+/// full population `n`.
+fn trustworthiness_inner(
+    x: ArrayView2<f64>,
+    y: ArrayView2<f64>,
+    k: usize,
+    query_indices: &[usize],
+) -> f64 {
     use std::cell::RefCell;
     let n = x.nrows();
     assert_eq!(
@@ -584,8 +597,9 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
     #[cfg(feature = "profiling")]
     static PENALTY_NS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-    let penalty_sum: f64 = (0..n)
-        .into_par_iter()
+    let penalty_sum: f64 = query_indices
+        .par_iter()
+        .copied()
         .map(|i| {
             let xi = x.row(i);
             let yi = y.row(i);
@@ -760,8 +774,64 @@ pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 
         eprintln!("[timing:penalty] {}", PENALTY_NS.load(Ordering::Relaxed));
     }
 
-    let denom = n as f64 * k as f64 * (2 * n).saturating_sub(3 * k + 1) as f64;
+    let m = query_indices.len();
+    let denom = m as f64 * k as f64 * (2 * n).saturating_sub(3 * k + 1) as f64;
     1.0 - penalty_sum * 2.0 / denom
+}
+
+pub fn trustworthiness(x: ArrayView2<f64>, y: ArrayView2<f64>, k: usize) -> f64 {
+    let n = x.nrows();
+    let query_indices: Vec<usize> = (0..n).collect();
+    trustworthiness_inner(x, y, k, &query_indices)
+}
+
+/// Sub-sampled trustworthiness: evaluates only `m` randomly chosen query rows
+/// against the full `n`-point population.
+///
+/// Identical to [`trustworthiness`] except that the outer iteration is restricted
+/// to `m` query rows sampled uniformly without replacement using `seed`. The
+/// per-row computation (full pairwise X-distances, full Y k-NN, rank penalty
+/// scan) still runs against all `n` points — only the outer iterator and the
+/// leading denominator factor change.
+///
+/// # Formula
+/// `T(k, m) = 1 − (2 / (m·k·(2n−3k−1))) · Σ_{i ∈ Q} Σ_{j ∈ U_i(k)} (r(i,j) − k)`
+///
+/// where `Q ⊂ [0, n)` is the set of `m` sampled query rows. The
+/// `(2n − 3k − 1)` factor uses the full population `n`, so when `m == n` the
+/// result is identical to `trustworthiness(x, y, k)`.
+///
+/// # Determinism
+/// The sample is reproducible: equal `seed` values produce equal row sets.
+/// When `m == n`, the function bypasses sampling entirely and uses the full
+/// `0..n` range, guaranteeing parity with `trustworthiness`.
+///
+/// # Panics
+/// Panics if `k == 0`, `k >= n / 2`, `m == 0`, `m > n`, or if `x` and `y` have
+/// different row counts.
+pub fn trustworthiness_subsampled(
+    x: ArrayView2<f64>,
+    y: ArrayView2<f64>,
+    k: usize,
+    m: usize,
+    seed: u64,
+) -> f64 {
+    let n = x.nrows();
+    assert!(m > 0, "trustworthiness_subsampled: m must be > 0");
+    assert!(
+        m <= n,
+        "trustworthiness_subsampled: m must be <= n (got m={m}, n={n})"
+    );
+
+    let query_indices: Vec<usize> = if m == n {
+        (0..n).collect()
+    } else {
+        use rand::SeedableRng;
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(seed);
+        rand::seq::index::sample(&mut rng, n, m).into_vec()
+    };
+
+    trustworthiness_inner(x, y, k, &query_indices)
 }
 
 // ─── Data structures (testing feature only) ──────────────────────────────────
@@ -1408,6 +1478,173 @@ mod tests {
             let knn: Vec<usize> = dists[..k].iter().map(|&(_, j)| j).collect();
             assert!(!knn.contains(&i), "point {i} appeared in its own k-NN");
         }
+    }
+
+    fn trustworthiness_brute_force_subsampled(
+        x: ndarray::ArrayView2<f64>,
+        y: ndarray::ArrayView2<f64>,
+        k: usize,
+        query_indices: &[usize],
+    ) -> f64 {
+        use std::collections::HashSet;
+        let n = x.nrows();
+        let m = query_indices.len();
+        let penalty_sum: f64 = query_indices
+            .iter()
+            .map(|&i| {
+                let xi = x.row(i);
+                let yi = y.row(i);
+                let mut dist_x: Vec<(f64, usize)> = (0..n)
+                    .map(|j| {
+                        let d: f64 = xi
+                            .iter()
+                            .zip(x.row(j).iter())
+                            .map(|(&a, &b)| (a - b) * (a - b))
+                            .sum();
+                        (d, j)
+                    })
+                    .collect();
+                dist_x.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+                let knn_x: HashSet<usize> = dist_x[1..=k].iter().map(|&(_, j)| j).collect();
+                let mut rank_x = vec![0usize; n];
+                for (rank, &(_, j)) in dist_x.iter().enumerate() {
+                    rank_x[j] = rank;
+                }
+                let mut dist_y: Vec<(f64, usize)> = (0..n)
+                    .filter(|&j| j != i)
+                    .map(|j| {
+                        let d: f64 = yi
+                            .iter()
+                            .zip(y.row(j).iter())
+                            .map(|(&a, &b)| (a - b) * (a - b))
+                            .sum();
+                        (d, j)
+                    })
+                    .collect();
+                dist_y.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+                let knn_y: HashSet<usize> = dist_y[..k].iter().map(|&(_, j)| j).collect();
+                let mut row_penalty = 0u64;
+                for j in &knn_y {
+                    if !knn_x.contains(j) {
+                        row_penalty += (rank_x[*j] - k) as u64;
+                    }
+                }
+                row_penalty as f64
+            })
+            .sum();
+        let denom = m as f64 * k as f64 * (2 * n).saturating_sub(3 * k + 1) as f64;
+        1.0 - penalty_sum * 2.0 / denom
+    }
+
+    #[test]
+    fn t_tws_01_m_equals_n_matches_full_trustworthiness() {
+        use rand::{Rng, SeedableRng};
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(2026);
+        let n = 60;
+        let k = 5;
+        let x = ndarray::Array2::from_shape_fn((n, 8), |_| rng.random::<f64>());
+        let y = ndarray::Array2::from_shape_fn((n, 2), |_| rng.random::<f64>());
+        let t_full = trustworthiness(x.view(), y.view(), k);
+        let t_sub = trustworthiness_subsampled(x.view(), y.view(), k, n, 0);
+        assert!(
+            (t_full - t_sub).abs() < 1e-10,
+            "m==n parity: full={t_full}, subsampled={t_sub}"
+        );
+    }
+
+    #[test]
+    fn t_tws_02_m_less_than_n_in_unit_interval() {
+        use rand::{Rng, SeedableRng};
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(33);
+        let n = 200;
+        let k = 5;
+        let m = 50;
+        let x = ndarray::Array2::from_shape_fn((n, 10), |_| rng.random::<f64>());
+        let y = ndarray::Array2::from_shape_fn((n, 2), |_| rng.random::<f64>());
+        let t = trustworthiness_subsampled(x.view(), y.view(), k, m, 7);
+        assert!(t.is_finite(), "T must be finite, got {t}");
+        assert!(t > 0.0 && t <= 1.0, "T out of (0,1]: {t}");
+    }
+
+    #[test]
+    fn t_tws_03_same_seed_is_deterministic() {
+        use rand::{Rng, SeedableRng};
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(11);
+        let n = 100;
+        let k = 4;
+        let m = 30;
+        let x = ndarray::Array2::from_shape_fn((n, 6), |_| rng.random::<f64>());
+        let y = ndarray::Array2::from_shape_fn((n, 2), |_| rng.random::<f64>());
+        let a = trustworthiness_subsampled(x.view(), y.view(), k, m, 12345);
+        let b = trustworthiness_subsampled(x.view(), y.view(), k, m, 12345);
+        assert_eq!(a, b, "same seed must produce identical result");
+    }
+
+    #[test]
+    fn t_tws_04_different_seeds_produce_different_results() {
+        use rand::{Rng, SeedableRng};
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(99);
+        let n = 100;
+        let k = 4;
+        let m = 20;
+        let x = ndarray::Array2::from_shape_fn((n, 6), |_| rng.random::<f64>());
+        let y = ndarray::Array2::from_shape_fn((n, 2), |_| rng.random::<f64>());
+        let a = trustworthiness_subsampled(x.view(), y.view(), k, m, 1);
+        let b = trustworthiness_subsampled(x.view(), y.view(), k, m, 2);
+        assert_ne!(a, b, "different seeds must produce different samples");
+    }
+
+    #[test]
+    #[should_panic(expected = "m must be <= n")]
+    fn t_tws_05_panics_when_m_exceeds_n() {
+        let n = 20usize;
+        let x = ndarray::Array2::zeros((n, 4));
+        let y = ndarray::Array2::zeros((n, 2));
+        let _ = trustworthiness_subsampled(x.view(), y.view(), 3, n + 1, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "m must be > 0")]
+    fn t_tws_06_panics_when_m_zero() {
+        let n = 20usize;
+        let x = ndarray::Array2::zeros((n, 4));
+        let y = ndarray::Array2::zeros((n, 2));
+        let _ = trustworthiness_subsampled(x.view(), y.view(), 3, 0, 0);
+    }
+
+    #[test]
+    fn t_tws_07_perfect_preservation_subsampled() {
+        let n = 40;
+        let x = ndarray::Array2::from_shape_fn((n, 4), |(i, d)| (i * 4 + d) as f64);
+        let y = x.slice(ndarray::s![.., ..2]).to_owned();
+        let t = trustworthiness_subsampled(x.view(), y.view(), 5, 10, 0);
+        assert!(
+            (t - 1.0).abs() < 1e-12,
+            "perfect preservation: T={t}, expected 1.0"
+        );
+    }
+
+    #[test]
+    fn t_tws_08_brute_force_reference_matches() {
+        use rand::{Rng, SeedableRng};
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(7777);
+        let n = 80;
+        let k = 4;
+        let m = 25;
+        let seed: u64 = 314;
+        let x = ndarray::Array2::from_shape_fn((n, 6), |_| rng.random::<f64>());
+        let y = ndarray::Array2::from_shape_fn((n, 2), |_| rng.random::<f64>());
+
+        // Reproduce the exact same query_indices the production function will use.
+        let mut sample_rng = rand::rngs::SmallRng::seed_from_u64(seed);
+        let query_indices = rand::seq::index::sample(&mut sample_rng, n, m).into_vec();
+
+        let t_prod = trustworthiness_subsampled(x.view(), y.view(), k, m, seed);
+        let t_ref = trustworthiness_brute_force_subsampled(x.view(), y.view(), k, &query_indices);
+        assert!(
+            (t_prod - t_ref).abs() < 1e-12,
+            "subsampled brute-force mismatch: prod={t_prod}, ref={t_ref}"
+        );
     }
 
     #[cfg(feature = "testing")]
