@@ -414,14 +414,14 @@ def _find_tw_binary() -> "pathlib.Path":
     """Resolve path to the compiled Rust trustworthiness binary.
 
     Raises RuntimeError if the binary is not present.
-    Build it with: cargo build --release --features cli
+    Build it with: cargo build --release -p trustworthiness --features cli
     """
     import pathlib
     candidate = pathlib.Path(__file__).parents[2] / "target" / "release" / "trustworthiness"
     if not candidate.exists():
         raise RuntimeError(
             f"Rust trustworthiness binary not found: {candidate}\n"
-            "Build it with: cargo build --release --features cli"
+            "Build it with: cargo build --release -p trustworthiness --features cli"
         )
     return candidate
 

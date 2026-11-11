@@ -58,13 +58,7 @@ sprs = "0.11"
 
 ### Feature Flags
 
-| Flag | Purpose |
-|------|---------|
-| `testing` | Exposes internal solver functions. **Not stable API.** Only for integration testing. |
-| `cli` | Builds the `trustworthiness` and `tw_profiler` quality-assessment binaries. |
-| `profiling` | Enables timing instrumentation in the solver escalation chain. |
-
-Normal users only need the default features (none enabled).
+The crate has no public Cargo features.
 
 ---
 
@@ -428,7 +422,4 @@ This is especially effective when `ComputeMode::RustNative` is selected.
 
 The eigensolver escalates through up to six levels automatically; you do not need
 to tune it. For graphs with `n < 2 000`, dense EVD is used directly (fast and exact).
-For larger graphs, LOBPCG iterative solvers are used. The dense EVD threshold can be
-overridden via the `SPECTRAL_DENSE_N_THRESHOLD` environment variable, but this is
-only available in test builds (`--features testing`) and is intended for integration
-tests — not for production or general benchmarking use.
+For larger graphs, LOBPCG iterative solvers are used.

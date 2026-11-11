@@ -30,4 +30,4 @@ jobs:
           tool: cargo-nextest
 
       - name: Run slow tests
-        run: cargo nextest run --profile slow --features testing
+        run: cargo nextest run --locked --workspace --all-features --profile slow

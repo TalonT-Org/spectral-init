@@ -230,7 +230,7 @@ The `export_rust_init` test loads each `{name}_graph.npz` from Phase 1, runs
 `{name}_rust_init.npy`. Parameters: `n_components=2, seed=42, PythonCompat` mode.
 
 ```bash
-cargo test --test export_rust_init --features testing -- --ignored --nocapture
+cargo test -p spectral-init-eval --test export_rust_init -- --ignored --nocapture
 ```
 
 ### Phase 2 — Comparison (`--phase compare`)

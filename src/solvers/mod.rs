@@ -25,29 +25,23 @@
 //! which would indicate an OOM or a faer bug — both are unrecoverable.
 
 mod dense;
-#[doc(hidden)]
-pub mod lobpcg;
-// pub(crate) visibility only needed when the testing feature exposes rsvd_solve via lib.rs.
-#[cfg(feature = "testing")]
+pub(crate) mod lobpcg;
+pub(crate) mod quality;
 pub(crate) mod rsvd;
-#[cfg(not(feature = "testing"))]
-mod rsvd;
-#[cfg(feature = "testing")]
 pub(crate) mod sinv;
-#[cfg(not(feature = "testing"))]
-mod sinv;
 
-// pub (not pub(crate)) so lib.rs can re-export it for integration tests.
 pub use dense::dense_evd;
 
+use crate::SpectralError;
 use crate::config::ComputeMode;
-use crate::metrics::{
+use crate::operator::CsrOperator;
+use ndarray::{Array1, Array2};
+use quality::{
     DENSE_EVD_QUALITY_THRESHOLD, LOBPCG_QUALITY_THRESHOLD, RSVD_QUALITY_THRESHOLD,
     SINV_LOBPCG_QUALITY_THRESHOLD, max_eigenpair_residual,
 };
-use crate::operator::CsrOperator;
-use ndarray::{Array1, Array2};
 use sprs::CsMatI;
+use std::time::{Duration, Instant};
 
 /// Eigendecomposition result: (eigenvalues of shape `[k]`, eigenvectors of shape `[n, k]`).
 pub type EigenResult = (Array1<f64>, Array2<f64>);
@@ -55,23 +49,109 @@ pub type EigenResult = (Array1<f64>, Array2<f64>);
 /// Graphs with n < DENSE_N_THRESHOLD use Level 0 (dense EVD) directly.
 const DENSE_N_THRESHOLD: usize = 2000;
 
-/// Returns the effective dense-EVD size threshold.
-///
-/// In test builds (`--features testing`), reads the `SPECTRAL_DENSE_N_THRESHOLD`
-/// environment variable, falling back to `DENSE_N_THRESHOLD` on absence or
-/// parse error.  In release builds the function is a trivial constant return
-/// that the compiler inlines away entirely.
-#[cfg(feature = "testing")]
-fn dense_n_threshold() -> usize {
-    std::env::var("SPECTRAL_DENSE_N_THRESHOLD")
-        .ok()
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or(DENSE_N_THRESHOLD)
+/// Level of the solver escalation chain.
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SolverLevel {
+    /// Level 0: dense EVD, tried first for small problems.
+    DenseEvd = 0,
+    /// Level 1: LOBPCG without regularization.
+    Lobpcg = 1,
+    /// Level 2: shift-and-invert LOBPCG.
+    SinvLobpcg = 2,
+    /// Level 3: LOBPCG with ε·I regularization.
+    LobpcgRegularized = 3,
+    /// Level 4: randomized SVD.
+    Rsvd = 4,
+    /// Level 5: forced dense EVD.
+    ForcedDense = 5,
 }
 
-#[cfg(not(feature = "testing"))]
-fn dense_n_threshold() -> usize {
-    DENSE_N_THRESHOLD
+impl SolverLevel {
+    /// Human-readable solver name.
+    pub fn name(self) -> &'static str {
+        match self {
+            SolverLevel::DenseEvd => "Dense EVD",
+            SolverLevel::Lobpcg => "LOBPCG",
+            SolverLevel::SinvLobpcg => "SINV LOBPCG",
+            SolverLevel::LobpcgRegularized => "LOBPCG+reg",
+            SolverLevel::Rsvd => "rSVD",
+            SolverLevel::ForcedDense => "Forced Dense EVD",
+        }
+    }
+}
+
+/// Residual thresholds of the escalation chain. A level's result is accepted when its
+/// max eigenpair residual is strictly below the level's gate.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct QualityGates {
+    /// Gate for Level 0 (dense EVD).
+    pub dense: f64,
+    /// Gate for Levels 1 and 3 (LOBPCG, plain and regularized).
+    pub lobpcg: f64,
+    /// Gate for Level 2 (shift-and-invert LOBPCG).
+    pub sinv: f64,
+    /// Gate for Level 4 (randomized SVD).
+    pub rsvd: f64,
+}
+
+impl Default for QualityGates {
+    fn default() -> Self {
+        Self {
+            dense: DENSE_EVD_QUALITY_THRESHOLD,
+            lobpcg: LOBPCG_QUALITY_THRESHOLD,
+            sinv: SINV_LOBPCG_QUALITY_THRESHOLD,
+            rsvd: RSVD_QUALITY_THRESHOLD,
+        }
+    }
+}
+
+/// Tunable parameters of the solver escalation chain.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SolverParams {
+    /// Problems with `n < dense_n_threshold` start at Level 0 (dense EVD).
+    pub dense_n_threshold: usize,
+    /// Oversampling of the randomized SVD subspace; `None` selects the n-dependent default.
+    pub rsvd_oversampling: Option<usize>,
+    /// Number of power-iteration passes of the randomized SVD.
+    pub rsvd_nbiter: usize,
+    /// Per-level residual acceptance thresholds.
+    pub gates: QualityGates,
+}
+
+impl Default for SolverParams {
+    fn default() -> Self {
+        Self {
+            dense_n_threshold: DENSE_N_THRESHOLD,
+            rsvd_oversampling: None,
+            rsvd_nbiter: rsvd::DEFAULT_NBITER,
+            gates: QualityGates::default(),
+        }
+    }
+}
+
+/// What the escalation chain did to produce a result.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SolveReport {
+    /// Level whose result was returned.
+    pub level: SolverLevel,
+    /// Max eigenpair residual of the returned result.
+    pub residual: f64,
+    /// Wall-clock time spent in each level that ran, indexed by level number.
+    pub level_elapsed: [Option<Duration>; 6],
+}
+
+impl SolveReport {
+    /// Emits one `log::debug!` line describing the solve of a problem of size `n`.
+    pub(crate) fn log(&self, context: &str, n: usize) {
+        log::debug!(
+            "[spectral] {context}: n={n}, level {} ({}), max_residual={:.2e}, elapsed per level={:?}",
+            self.level as u8,
+            self.level.name(),
+            self.residual,
+            self.level_elapsed
+        );
+    }
 }
 
 /// Enforce the mathematical PSD contract on solver output.
@@ -91,12 +171,29 @@ fn enforce_psd_contract(result: EigenResult) -> EigenResult {
     (clamped, eigenvectors)
 }
 
+/// Packages an accepted eigenpair set with the report describing how it was obtained.
+fn accepted(
+    result: EigenResult,
+    level: SolverLevel,
+    residual: f64,
+    level_elapsed: [Option<Duration>; 6],
+) -> (EigenResult, SolveReport) {
+    (
+        enforce_psd_contract(result),
+        SolveReport {
+            level,
+            residual,
+            level_elapsed,
+        },
+    )
+}
+
 /// Core solver escalation chain, parameterized over the `LinearOperator` used for LOBPCG.
 ///
 /// Returns `n_components+1` eigenpairs (including the trivial λ≈0 vector at index 0)
 /// so that the caller can apply `select_eigenvectors` uniformly across all solver paths.
 ///
-/// Level 0: Dense EVD (n < 2000, O(n³)).
+/// Level 0: Dense EVD (n < `params.dense_n_threshold`, O(n³)).
 /// Level 1: LOBPCG without regularization.
 /// Level 2: Shift-and-invert LOBPCG via sparse Cholesky.
 /// Level 3: LOBPCG with ε·I regularization.
@@ -113,29 +210,30 @@ fn solve_eigenproblem_with_op<O: crate::operator::LinearOperator>(
     n_components: usize,
     seed: u64,
     sqrt_deg: &ndarray::Array1<f64>,
-) -> (EigenResult, u8) {
-    #[cfg(feature = "testing")]
-    let _t_solve = std::time::Instant::now();
-
+    params: &SolverParams,
+) -> Result<(EigenResult, SolveReport), SpectralError> {
     let n = laplacian.rows();
+    let gates = &params.gates;
+    let mut level_elapsed: [Option<Duration>; 6] = [None; 6];
 
     // Level 0: Dense EVD — exact, used for small n where O(n³) is acceptable.
-    if n < dense_n_threshold() {
-        #[cfg(feature = "testing")]
-        let _t0 = std::time::Instant::now();
-        let _l0_result = dense_evd(laplacian, n_components + 1);
-        #[cfg(feature = "testing")]
-        eprintln!("[timing:level_0] {}µs", _t0.elapsed().as_micros());
-        match _l0_result {
+    if n < params.dense_n_threshold {
+        let started = Instant::now();
+        let l0_result = dense_evd(laplacian, n_components + 1);
+        level_elapsed[SolverLevel::DenseEvd as usize] = Some(started.elapsed());
+        match l0_result {
             Ok((eigs, vecs)) => {
                 let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
-                if quality < DENSE_EVD_QUALITY_THRESHOLD {
+                if quality < gates.dense {
                     log::debug!(
                         "[spectral] Level 0 (dense EVD) succeeded (n={n}, max_residual={quality:.2e})"
                     );
-                    #[cfg(feature = "testing")]
-                    eprintln!("[timing:level_total] {}µs", _t_solve.elapsed().as_micros());
-                    return (enforce_psd_contract((eigs, vecs)), 0);
+                    return Ok(accepted(
+                        (eigs, vecs),
+                        SolverLevel::DenseEvd,
+                        quality,
+                        level_elapsed,
+                    ));
                 }
                 log::debug!(
                     "[spectral] Level 0 (dense EVD) poor quality \
@@ -149,20 +247,21 @@ fn solve_eigenproblem_with_op<O: crate::operator::LinearOperator>(
     }
 
     // Level 1: LOBPCG without regularization.
-    #[cfg(feature = "testing")]
-    let _t1 = std::time::Instant::now();
-    let _l1 = lobpcg::lobpcg_solve(&op, n_components, seed, false, sqrt_deg);
-    #[cfg(feature = "testing")]
-    eprintln!("[timing:level_1] {}µs", _t1.elapsed().as_micros());
-    if let Some(((eigs, vecs), _restarts)) = _l1 {
+    let started = Instant::now();
+    let l1 = lobpcg::lobpcg_solve(&op, n_components, seed, false, sqrt_deg);
+    level_elapsed[SolverLevel::Lobpcg as usize] = Some(started.elapsed());
+    if let Some(((eigs, vecs), _restarts)) = l1 {
         let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
-        if quality < LOBPCG_QUALITY_THRESHOLD {
+        if quality < gates.lobpcg {
             log::debug!(
                 "[spectral] Level 1 (LOBPCG) succeeded (n={n}, max_residual={quality:.2e})"
             );
-            #[cfg(feature = "testing")]
-            eprintln!("[timing:level_total] {}µs", _t_solve.elapsed().as_micros());
-            return (enforce_psd_contract((eigs, vecs)), 1);
+            return Ok(accepted(
+                (eigs, vecs),
+                SolverLevel::Lobpcg,
+                quality,
+                level_elapsed,
+            ));
         }
         log::debug!(
             "[spectral] Level 1 (LOBPCG) poor quality \
@@ -174,20 +273,21 @@ fn solve_eigenproblem_with_op<O: crate::operator::LinearOperator>(
     // sprs_csc_to_faer converts the Laplacian to faer CSC and adds SINV_SHIFT to the
     // diagonal, producing M = L + εI. sp_cholesky factorizes M; if it fails (e.g. M
     // is not SPD due to numerical degenerate edges) we skip silently to Level 3.
-    #[cfg(feature = "testing")]
-    let _t2 = std::time::Instant::now();
-    let _l2 = sinv::lobpcg_sinv_solve(laplacian, n_components, seed, sqrt_deg);
-    #[cfg(feature = "testing")]
-    eprintln!("[timing:level_2] {}µs", _t2.elapsed().as_micros());
-    if let Some((eigs, vecs)) = _l2 {
+    let started = Instant::now();
+    let l2 = sinv::lobpcg_sinv_solve(laplacian, n_components, seed, sqrt_deg);
+    level_elapsed[SolverLevel::SinvLobpcg as usize] = Some(started.elapsed());
+    if let Some((eigs, vecs)) = l2 {
         let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
-        if quality < SINV_LOBPCG_QUALITY_THRESHOLD {
+        if quality < gates.sinv {
             log::debug!(
                 "[spectral] Level 2 (sinv LOBPCG) succeeded (n={n}, max_residual={quality:.2e})"
             );
-            #[cfg(feature = "testing")]
-            eprintln!("[timing:level_total] {}µs", _t_solve.elapsed().as_micros());
-            return (enforce_psd_contract((eigs, vecs)), 2);
+            return Ok(accepted(
+                (eigs, vecs),
+                SolverLevel::SinvLobpcg,
+                quality,
+                level_elapsed,
+            ));
         }
         log::debug!(
             "[spectral] Level 2 (sinv LOBPCG) poor quality \
@@ -199,20 +299,21 @@ fn solve_eigenproblem_with_op<O: crate::operator::LinearOperator>(
     // lobpcg_solve(regularize=true) applies Rayleigh-Ritz refinement internally
     // (G = X^T L X against the true Laplacian), so eigs are exact Rayleigh quotients
     // and can be passed directly to the residual check.
-    #[cfg(feature = "testing")]
-    let _t3 = std::time::Instant::now();
-    let _l3 = lobpcg::lobpcg_solve(&op, n_components, seed, true, sqrt_deg);
-    #[cfg(feature = "testing")]
-    eprintln!("[timing:level_3] {}µs", _t3.elapsed().as_micros());
-    if let Some(((eigs, vecs), _restarts)) = _l3 {
+    let started = Instant::now();
+    let l3 = lobpcg::lobpcg_solve(&op, n_components, seed, true, sqrt_deg);
+    level_elapsed[SolverLevel::LobpcgRegularized as usize] = Some(started.elapsed());
+    if let Some(((eigs, vecs), _restarts)) = l3 {
         let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
-        if quality < LOBPCG_QUALITY_THRESHOLD {
+        if quality < gates.lobpcg {
             log::debug!(
                 "[spectral] Level 3 (LOBPCG+reg) succeeded (n={n}, max_residual={quality:.2e})"
             );
-            #[cfg(feature = "testing")]
-            eprintln!("[timing:level_total] {}µs", _t_solve.elapsed().as_micros());
-            return (enforce_psd_contract((eigs, vecs)), 3);
+            return Ok(accepted(
+                (eigs, vecs),
+                SolverLevel::LobpcgRegularized,
+                quality,
+                level_elapsed,
+            ));
         }
         log::debug!(
             "[spectral] Level 3 (LOBPCG+reg) poor quality \
@@ -223,17 +324,18 @@ fn solve_eigenproblem_with_op<O: crate::operator::LinearOperator>(
     // Level 4: Randomized SVD via 2I-L trick.
     // rsvd_solve is infallible; gate on output quality via residual check.
     {
-        #[cfg(feature = "testing")]
-        let _t4 = std::time::Instant::now();
-        let (eigs, vecs) = rsvd::rsvd_solve(laplacian, n_components, seed);
-        #[cfg(feature = "testing")]
-        eprintln!("[timing:level_4] {}µs", _t4.elapsed().as_micros());
+        let started = Instant::now();
+        let (eigs, vecs) = rsvd::rsvd_solve(laplacian, n_components, seed, params);
+        level_elapsed[SolverLevel::Rsvd as usize] = Some(started.elapsed());
         let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
-        if quality < RSVD_QUALITY_THRESHOLD {
+        if quality < gates.rsvd {
             log::debug!("[spectral] Level 4 (rSVD) succeeded (n={n}, max_residual={quality:.2e})");
-            #[cfg(feature = "testing")]
-            eprintln!("[timing:level_total] {}µs", _t_solve.elapsed().as_micros());
-            return (enforce_psd_contract((eigs, vecs)), 4);
+            return Ok(accepted(
+                (eigs, vecs),
+                SolverLevel::Rsvd,
+                quality,
+                level_elapsed,
+            ));
         }
         log::debug!(
             "[spectral] Level 4 (rSVD) poor quality (max_residual={quality:.2e}), \
@@ -247,18 +349,20 @@ fn solve_eigenproblem_with_op<O: crate::operator::LinearOperator>(
     // unrecoverable and should surface as an assertion failure, not a silent
     // ConvergenceFailure that would produce a garbage embedding.
     log::debug!("[spectral] Level 5 (forced dense EVD) (n={n})");
-    #[cfg(feature = "testing")]
-    let _t5 = std::time::Instant::now();
-    let result = dense_evd(laplacian, n_components + 1).expect(
+    let started = Instant::now();
+    let (eigs, vecs) = dense_evd(laplacian, n_components + 1).expect(
         "solve_eigenproblem: Level 5 forced dense EVD failed — \
          this is a bug; the spectral theorem guarantees eigenvectors \
          exist for any symmetric positive semidefinite matrix",
     );
-    #[cfg(feature = "testing")]
-    eprintln!("[timing:level_5] {}µs", _t5.elapsed().as_micros());
-    #[cfg(feature = "testing")]
-    eprintln!("[timing:level_total] {}µs", _t_solve.elapsed().as_micros());
-    (enforce_psd_contract(result), 5)
+    level_elapsed[SolverLevel::ForcedDense as usize] = Some(started.elapsed());
+    let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
+    Ok(accepted(
+        (eigs, vecs),
+        SolverLevel::ForcedDense,
+        quality,
+        level_elapsed,
+    ))
 }
 
 /// Solver escalation chain with runtime operator dispatch.
@@ -267,16 +371,19 @@ fn solve_eigenproblem_with_op<O: crate::operator::LinearOperator>(
 /// levels through `CsrOperatorSimd`; all other configurations use scalar `CsrOperator`.
 /// `ComputeMode::PythonCompat` always uses the scalar path regardless of CPU features.
 ///
+/// Returns the `n_components + 1` smallest eigenpairs together with a [`SolveReport`].
+///
 /// # Panics
 ///
 /// Panics at Level 5 exhaustion — this represents a bug, not a user error.
-pub(crate) fn solve_eigenproblem(
+pub fn solve_eigenproblem(
     laplacian: &CsMatI<f64, usize>,
     n_components: usize,
     seed: u64,
     sqrt_deg: &ndarray::Array1<f64>,
     compute_mode: ComputeMode,
-) -> (EigenResult, u8) {
+    params: &SolverParams,
+) -> Result<(EigenResult, SolveReport), SpectralError> {
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     if matches!(compute_mode, ComputeMode::RustNative)
         && is_x86_feature_detected!("avx2")
@@ -284,10 +391,10 @@ pub(crate) fn solve_eigenproblem(
     {
         use crate::operator::CsrOperatorSimd;
         let op = CsrOperatorSimd::new(laplacian);
-        return solve_eigenproblem_with_op(laplacian, op, n_components, seed, sqrt_deg);
+        return solve_eigenproblem_with_op(laplacian, op, n_components, seed, sqrt_deg, params);
     }
     let op = CsrOperator(laplacian);
-    solve_eigenproblem_with_op(laplacian, op, n_components, seed, sqrt_deg)
+    solve_eigenproblem_with_op(laplacian, op, n_components, seed, sqrt_deg, params)
 }
 
 // ─── Unit Tests ──────────────────────────────────────────────────────────────
@@ -295,9 +402,6 @@ pub(crate) fn solve_eigenproblem(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::metrics::{
-        DENSE_EVD_QUALITY_THRESHOLD, LOBPCG_QUALITY_THRESHOLD, max_eigenpair_residual,
-    };
 
     /// Build a 6-node path-graph Laplacian in CSR format.
     ///
@@ -340,7 +444,9 @@ mod tests {
             42,
             &ndarray::Array1::ones(6),
             ComputeMode::PythonCompat,
-        );
+            &SolverParams::default(),
+        )
+        .expect("solve_eigenproblem failed");
 
         // All eigenvalues must be non-negative
         for &v in eigvals.iter() {
@@ -369,7 +475,9 @@ mod tests {
             42,
             &ndarray::Array1::ones(6),
             ComputeMode::PythonCompat,
-        );
+            &SolverParams::default(),
+        )
+        .expect("solve_eigenproblem failed");
         assert_eq!(eigs.len(), 3, "expected n_components+1=3 eigenvalues");
         assert_eq!(
             vecs.shape(),
@@ -403,7 +511,9 @@ mod tests {
             42,
             &ndarray::Array1::ones(n),
             ComputeMode::PythonCompat,
-        );
+            &SolverParams::default(),
+        )
+        .expect("solve_eigenproblem failed");
 
         assert_eq!(
             eigvals.len(),
@@ -428,16 +538,27 @@ mod tests {
         // For a well-conditioned diagonal Laplacian, Level 1 (plain LOBPCG) succeeds.
         let n = 2001;
         let laplacian = diagonal_laplacian(n);
-        let (_, level) = solve_eigenproblem(
+        let (_, report) = solve_eigenproblem(
             &laplacian,
             2,
             42,
             &ndarray::Array1::ones(n),
             ComputeMode::PythonCompat,
-        );
+            &SolverParams::default(),
+        )
+        .expect("solve_eigenproblem failed");
+        let level = report.level as u8;
         assert!(
             (1..=5).contains(&level),
             "expected level in {{1,2,3,4,5}}, got {level}"
+        );
+        assert!(
+            report.level_elapsed[SolverLevel::DenseEvd as usize].is_none(),
+            "Level 0 must not run above the dense threshold"
+        );
+        assert!(
+            report.level_elapsed[level as usize].is_some(),
+            "the accepted level must have a recorded duration"
         );
     }
 
@@ -504,13 +625,16 @@ mod tests {
     fn level0_result_passes_dense_evd_quality_gate() {
         // 6-node path graph, n=6 < 2000 → Level 0 dense EVD.
         let laplacian = path_graph_laplacian_6();
-        let ((eigs, vecs), _) = solve_eigenproblem(
+        let ((eigs, vecs), report) = solve_eigenproblem(
             &laplacian,
             2,
             42,
             &ndarray::Array1::ones(6),
             ComputeMode::PythonCompat,
-        );
+            &SolverParams::default(),
+        )
+        .expect("solve_eigenproblem failed");
+        assert_eq!(report.level, SolverLevel::DenseEvd);
         let residual = max_eigenpair_residual(&laplacian, &eigs, &vecs);
         assert!(
             residual < DENSE_EVD_QUALITY_THRESHOLD,
@@ -519,37 +643,56 @@ mod tests {
     }
 
     #[test]
-    fn dense_n_threshold_returns_default_when_env_unset() {
-        // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
-        unsafe {
-            std::env::remove_var("SPECTRAL_DENSE_N_THRESHOLD");
-        }
-        assert_eq!(dense_n_threshold(), DENSE_N_THRESHOLD);
-    }
-
-    #[cfg(feature = "testing")]
-    #[test]
-    fn dense_n_threshold_reads_env_override() {
-        // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
-        unsafe {
-            std::env::set_var("SPECTRAL_DENSE_N_THRESHOLD", "50");
-        }
-        assert_eq!(dense_n_threshold(), 50);
-        unsafe {
-            std::env::remove_var("SPECTRAL_DENSE_N_THRESHOLD");
-        }
+    fn default_params_match_the_documented_chain() {
+        let params = SolverParams::default();
+        assert_eq!(params.dense_n_threshold, DENSE_N_THRESHOLD);
+        assert_eq!(params.rsvd_oversampling, None);
+        assert_eq!(params.rsvd_nbiter, 2);
+        assert_eq!(params.gates.dense, DENSE_EVD_QUALITY_THRESHOLD);
+        assert_eq!(params.gates.lobpcg, LOBPCG_QUALITY_THRESHOLD);
+        assert_eq!(params.gates.sinv, SINV_LOBPCG_QUALITY_THRESHOLD);
+        assert_eq!(params.gates.rsvd, RSVD_QUALITY_THRESHOLD);
     }
 
     #[test]
-    fn dense_n_threshold_falls_back_on_parse_error() {
-        // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
-        unsafe {
-            std::env::set_var("SPECTRAL_DENSE_N_THRESHOLD", "not_a_number");
+    fn dense_n_threshold_zero_skips_level_0() {
+        // n=6 would use Level 0 by default; a zero threshold must route it to Level 1+.
+        let params = SolverParams {
+            dense_n_threshold: 0,
+            ..SolverParams::default()
+        };
+        let (_, report) = solve_eigenproblem(
+            &path_graph_laplacian_6(),
+            2,
+            42,
+            &ndarray::Array1::ones(6),
+            ComputeMode::PythonCompat,
+            &params,
+        )
+        .expect("solve_eigenproblem failed");
+        assert!(
+            report.level >= SolverLevel::Lobpcg,
+            "expected Level 1 or later, got {:?}",
+            report.level
+        );
+        assert!(report.level_elapsed[SolverLevel::DenseEvd as usize].is_none());
+    }
+
+    #[test]
+    fn solver_level_discriminants_and_names() {
+        let levels = [
+            SolverLevel::DenseEvd,
+            SolverLevel::Lobpcg,
+            SolverLevel::SinvLobpcg,
+            SolverLevel::LobpcgRegularized,
+            SolverLevel::Rsvd,
+            SolverLevel::ForcedDense,
+        ];
+        for (expected, level) in levels.iter().enumerate() {
+            assert_eq!(*level as usize, expected);
+            assert!(!level.name().is_empty());
         }
-        assert_eq!(dense_n_threshold(), DENSE_N_THRESHOLD);
-        unsafe {
-            std::env::remove_var("SPECTRAL_DENSE_N_THRESHOLD");
-        }
+        assert!(SolverLevel::DenseEvd < SolverLevel::ForcedDense);
     }
 
     #[test]

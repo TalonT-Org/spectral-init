@@ -6,13 +6,14 @@ use crate::{
     laplacian::{build_normalized_laplacian, compute_degrees},
     scaling,
     selection::select_eigenvectors,
-    solvers::solve_eigenproblem,
+    solvers::{SolverParams, solve_eigenproblem},
 };
 
 /// Computes spectral embedding for disconnected graphs.
 /// Each component is embedded independently; component embeddings are aligned
 /// into a common coordinate frame via centroid meta-embedding.
-pub(crate) fn embed_disconnected(
+#[allow(clippy::too_many_arguments)]
+pub fn embed_disconnected(
     graph: &CsMatI<f32, u32, usize>,
     component_labels: &[usize],
     n_conn_components: usize,
@@ -20,6 +21,7 @@ pub(crate) fn embed_disconnected(
     seed: u64,
     data: Option<ArrayView2<'_, f32>>,
     compute_mode: ComputeMode,
+    params: &SolverParams,
 ) -> Result<Array2<f64>, SpectralError> {
     let n = graph.rows();
 
@@ -36,6 +38,7 @@ pub(crate) fn embed_disconnected(
                 n_embedding_dims,
                 seed,
                 compute_mode,
+                params,
             )?,
             None => {
                 return Err(SpectralError::InvalidGraph(
@@ -63,6 +66,7 @@ pub(crate) fn embed_disconnected(
             &meta_pos,
             seed,
             compute_mode,
+            params,
         )?;
         for (local_i, &orig_i) in members.iter().enumerate() {
             result.row_mut(orig_i).assign(&comp_coords.row(local_i));
@@ -149,6 +153,7 @@ fn spectral_meta_embedding(
     n_embedding_dims: usize,
     seed: u64,
     compute_mode: ComputeMode,
+    params: &SolverParams,
 ) -> Result<Array2<f64>, SpectralError> {
     let n_features = data.ncols();
 
@@ -206,13 +211,15 @@ fn spectral_meta_embedding(
     let centroid_laplacian = tri.to_csr();
 
     let sqrt_deg_meta = ndarray::Array1::from_iter(degrees.iter().map(|&d| d.sqrt()));
-    let ((evals, evecs), _) = solve_eigenproblem(
+    let ((evals, evecs), report) = solve_eigenproblem(
         &centroid_laplacian,
         n_embedding_dims,
         seed,
         &sqrt_deg_meta,
         compute_mode,
-    );
+        params,
+    )?;
+    report.log("component meta-embedding", n_comp);
     let evals_slice = evals
         .as_slice_memory_order()
         .ok_or(SpectralError::ConvergenceFailure)?;
@@ -266,6 +273,7 @@ fn compute_data_range(meta_embedding: &Array2<f64>) -> Vec<f64> {
 /// translated to its position in meta-embedding space.
 ///
 /// Tiny components (`size < 2 * n_embedding_dims`) are placed directly at `meta_pos`.
+#[allow(clippy::too_many_arguments)]
 fn embed_single_component(
     graph: &CsMatI<f32, u32, usize>,
     members: &[usize],
@@ -274,6 +282,7 @@ fn embed_single_component(
     meta_pos: &ArrayView1<f64>,
     seed: u64,
     compute_mode: ComputeMode,
+    params: &SolverParams,
 ) -> Result<Array2<f64>, SpectralError> {
     let size = members.len();
 
@@ -296,8 +305,15 @@ fn embed_single_component(
         .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
         .collect();
     let laplacian = build_normalized_laplacian(&sub_graph, &inv_sqrt_deg);
-    let ((evals, evecs), _) =
-        solve_eigenproblem(&laplacian, n_embedding_dims, seed, &sqrt_deg, compute_mode);
+    let ((evals, evecs), report) = solve_eigenproblem(
+        &laplacian,
+        n_embedding_dims,
+        seed,
+        &sqrt_deg,
+        compute_mode,
+        params,
+    )?;
+    report.log("component", size);
     let evals_slice = evals
         .as_slice_memory_order()
         .ok_or(SpectralError::ConvergenceFailure)?;
@@ -435,7 +451,16 @@ mod tests {
     fn test_embed_disconnected_two_pairs_shape_and_finite() {
         let g = make_two_pair_graph();
         let labels = vec![0usize, 0, 1, 1];
-        let result = embed_disconnected(&g, &labels, 2, 2, 42, None, ComputeMode::PythonCompat);
+        let result = embed_disconnected(
+            &g,
+            &labels,
+            2,
+            2,
+            42,
+            None,
+            ComputeMode::PythonCompat,
+            &SolverParams::default(),
+        );
         let arr = result.expect("embed_disconnected should succeed");
         assert_eq!(arr.shape(), &[4, 2]);
         for &v in arr.iter() {
@@ -450,7 +475,16 @@ mod tests {
         // Both size=1 < 2*dim=4 → placed at meta centroid
         let g = make_empty_pair_graph();
         let labels = vec![0usize, 1];
-        let result = embed_disconnected(&g, &labels, 2, 2, 42, None, ComputeMode::PythonCompat);
+        let result = embed_disconnected(
+            &g,
+            &labels,
+            2,
+            2,
+            42,
+            None,
+            ComputeMode::PythonCompat,
+            &SolverParams::default(),
+        );
         let arr = result.expect("embed_disconnected should succeed for tiny components");
         assert_eq!(arr.shape(), &[2, 2]);
         let eps = 1e-10;
@@ -485,7 +519,16 @@ mod tests {
         // strictly greater than the max intra-component spread (≤ data_range = sqrt(2)/2).
         let g = make_3_clique_graph();
         let labels: Vec<usize> = (0..12).map(|i| i / 4).collect();
-        let result = embed_disconnected(&g, &labels, 3, 2, 42, None, ComputeMode::PythonCompat);
+        let result = embed_disconnected(
+            &g,
+            &labels,
+            3,
+            2,
+            42,
+            None,
+            ComputeMode::PythonCompat,
+            &SolverParams::default(),
+        );
         let arr = result.expect("embed_disconnected on 3-clique graph should succeed");
         assert_eq!(arr.shape(), &[12, 2]);
 

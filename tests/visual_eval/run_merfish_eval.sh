@@ -43,9 +43,9 @@ cd "$PROJECT_ROOT"
 RUST_PERF_FILE="$SCRIPT_DIR/output/merfish_${SUBSET}_rust_perf.txt"
 /usr/bin/time -o "$RUST_PERF_FILE" -f "%e %M" \
     cargo nextest run \
+        -p spectral-init-eval \
         --profile merfish-eval \
         --run-ignored all \
-        --features testing \
         -E "test(export_merfish_init_${SUBSET})"
 
 echo ""

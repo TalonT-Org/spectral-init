@@ -13,7 +13,8 @@ test_check:
   - cargo
   - nextest
   - run
+  - --locked
+  - --workspace
+  - --all-features
   - --profile
   - ci
-  - --features
-  - testing

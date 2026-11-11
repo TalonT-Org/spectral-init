@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 /// BFS connected-component labelling on a sparse graph.
 /// Returns a Vec of length n where `result[i]` is the component index for node i,
 /// and the number of distinct components.
-pub(crate) fn find_components(graph: &CsMatI<f32, u32, usize>) -> (Vec<usize>, usize) {
+pub fn find_components(graph: &CsMatI<f32, u32, usize>) -> (Vec<usize>, usize) {
     debug_assert!(
         graph.is_csr(),
         "find_components requires CSR storage; a CSC matrix would silently traverse \

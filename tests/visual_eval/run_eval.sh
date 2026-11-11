@@ -10,7 +10,7 @@ python "$SCRIPT_DIR/generate_umap_comparisons.py" --phase baseline
 echo ""
 echo "=== Rust Export: Generate spectral init coordinates ==="
 cd "$PROJECT_ROOT"
-cargo test --test export_rust_init --features testing -- --ignored --nocapture
+cargo test -p spectral-init-eval --test export_rust_init -- --ignored --nocapture
 
 echo ""
 echo "=== Phase 2: Compare and evaluate ==="

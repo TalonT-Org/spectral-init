@@ -41,7 +41,7 @@
 //!
 //! The eigensolver uses a 6-level escalation chain (dense EVD → LOBPCG →
 //! shift-invert LOBPCG → LOBPCG+regularization → randomized SVD → forced dense EVD)
-//! to guarantee convergence on any valid graph. See [`solvers`] for details.
+//! to guarantee convergence on any valid graph.
 //!
 //! # Compute Mode
 //!
@@ -53,11 +53,7 @@
 //!
 //! # Feature Flags
 //!
-//! | Flag | Purpose |
-//! |------|---------|
-//! | `testing` | Exposes internal solver functions for integration tests. Not part of the stable public API. |
-//! | `cli` | Builds the `trustworthiness` and `tw_profiler` binaries for embedding quality evaluation. |
-//! | `profiling` | Enables timing instrumentation in the solver escalation chain. |
+//! The crate has no public Cargo features.
 //!
 //! # Integration with umap-rs
 //!
@@ -81,146 +77,50 @@
 mod components;
 mod config;
 mod laplacian;
-#[doc(hidden)]
-pub mod metrics;
 mod multi_component;
-#[doc(hidden)]
-pub mod operator;
+mod operator;
 mod scaling;
 mod selection;
-#[doc(hidden)]
-pub mod solvers;
+mod solvers;
 
 pub use config::{ComputeMode, SpectralInitConfig};
 
-// Re-exported for component-level integration tests. These are internal pipeline
-// functions, not part of the stable public API.
-pub use crate::laplacian::build_normalized_laplacian;
-pub use crate::laplacian::compute_degrees;
-pub use crate::selection::select_eigenvectors;
-/// Dense EVD solver. Exposed for component-level integration tests; not part of the
-/// stable public API and may change without notice.
-pub use crate::solvers::dense_evd;
-
-#[cfg(feature = "testing")]
-#[doc(hidden)]
-pub fn find_components(graph: &sprs::CsMatI<f32, u32, usize>) -> (Vec<usize>, usize) {
-    components::find_components(graph)
-}
-
-#[cfg(feature = "testing")]
-#[doc(hidden)]
-pub fn rsvd_solve(
-    laplacian: &sprs::CsMatI<f64, usize>,
-    n_components: usize,
-    seed: u64,
-) -> (ndarray::Array1<f64>, ndarray::Array2<f64>) {
-    crate::solvers::rsvd::rsvd_solve(laplacian, n_components, seed)
-}
-
-#[cfg(feature = "testing")]
-#[doc(hidden)]
-pub fn rsvd_solve_accurate(
-    laplacian: &sprs::CsMatI<f64, usize>,
-    n_components: usize,
-    seed: u64,
-    k_sub: usize,
-    nbiter: usize,
-) -> (ndarray::Array1<f64>, ndarray::Array2<f64>) {
-    crate::solvers::rsvd::rsvd_solve_accurate(laplacian, n_components, seed, k_sub, nbiter)
-}
-
-#[cfg(feature = "testing")]
-#[doc(hidden)]
-/// Exposes `solve_eigenproblem` for integration tests that need to assert which
-/// solver level was reached.
+/// Internal pipeline pieces for this crate's own integration tests and research harness.
 ///
-/// **Test-only seam — not part of the stable public API.**  The returned `u8`
-/// encodes the solver level (0 = dense EVD, 1 = LOBPCG, 2 = sinv LOBPCG,
-/// 3 = LOBPCG+reg, 4 = rSVD, 5 = forced dense EVD) and may change if the
-/// escalation chain is reordered or extended.  Test code that asserts on this
-/// value is intentionally coupled to the current chain ordering.
-pub fn solve_eigenproblem_pub(
-    laplacian: &sprs::CsMatI<f64, usize>,
-    n_components: usize,
-    seed: u64,
-    compute_mode: ComputeMode,
-) -> ((ndarray::Array1<f64>, ndarray::Array2<f64>), u8) {
-    let n = laplacian.rows();
-    let sqrt_deg = ndarray::Array1::ones(n);
-    crate::solvers::solve_eigenproblem(laplacian, n_components, seed, &sqrt_deg, compute_mode)
+/// Exempt from semver: anything in this module may change or disappear in any release.
+#[cfg(feature = "__internal")]
+#[doc(hidden)]
+pub mod __internal {
+    #[doc(hidden)]
+    pub use crate::components::find_components;
+    #[doc(hidden)]
+    pub use crate::laplacian::{build_normalized_laplacian, compute_degrees};
+    #[doc(hidden)]
+    pub use crate::multi_component::embed_disconnected;
+    #[doc(hidden)]
+    pub use crate::operator::{CsrOperator, LinearOperator, spmv_csr};
+    #[cfg(target_arch = "x86_64")]
+    #[doc(hidden)]
+    pub use crate::operator::{CsrOperatorSimd, spmv_avx2_gather};
+    #[doc(hidden)]
+    pub use crate::scaling::{normalize_signs, scale_and_add_noise, scale_coords};
+    #[doc(hidden)]
+    pub use crate::selection::select_eigenvectors;
+    #[doc(hidden)]
+    pub use crate::solvers::dense_evd;
+    #[doc(hidden)]
+    pub use crate::solvers::lobpcg::lobpcg_solve;
+    #[doc(hidden)]
+    pub use crate::solvers::quality::*;
+    #[doc(hidden)]
+    pub use crate::solvers::rsvd::{rsvd_solve, rsvd_solve_accurate};
+    #[doc(hidden)]
+    pub use crate::solvers::sinv::lobpcg_sinv_solve;
+    #[doc(hidden)]
+    pub use crate::solvers::{
+        EigenResult, QualityGates, SolveReport, SolverLevel, SolverParams, solve_eigenproblem,
+    };
 }
-
-#[cfg(feature = "testing")]
-#[doc(hidden)]
-pub use crate::solvers::lobpcg::lobpcg_solve;
-
-#[cfg(feature = "testing")]
-#[doc(hidden)]
-pub fn embed_disconnected(
-    graph: &sprs::CsMatI<f32, u32, usize>,
-    component_labels: &[usize],
-    n_conn_components: usize,
-    n_embedding_dims: usize,
-    seed: u64,
-    data: Option<ndarray::ArrayView2<'_, f32>>,
-    compute_mode: ComputeMode,
-) -> Result<ndarray::Array2<f64>, SpectralError> {
-    crate::multi_component::embed_disconnected(
-        graph,
-        component_labels,
-        n_conn_components,
-        n_embedding_dims,
-        seed,
-        data,
-        compute_mode,
-    )
-}
-
-#[cfg(feature = "testing")]
-#[doc(hidden)]
-pub use crate::solvers::sinv::lobpcg_sinv_solve;
-
-#[cfg(feature = "testing")]
-#[doc(hidden)]
-pub fn scale_coords(
-    coords: &ndarray::Array2<f64>,
-    max_coord: f64,
-) -> Result<ndarray::Array2<f32>, SpectralError> {
-    crate::scaling::scale_coords(coords, max_coord)
-}
-
-#[cfg(feature = "testing")]
-#[doc(hidden)]
-pub fn scale_and_add_noise_pub(
-    coords: ndarray::Array2<f64>,
-    seed: u64,
-) -> Result<ndarray::Array2<f32>, SpectralError> {
-    crate::scaling::scale_and_add_noise(coords, seed)
-}
-
-#[cfg(feature = "testing")]
-#[doc(hidden)]
-pub fn normalize_signs_pub(coords: &mut ndarray::Array2<f64>) {
-    crate::scaling::normalize_signs(coords)
-}
-
-#[cfg(feature = "testing")]
-#[doc(hidden)]
-pub use crate::metrics::{
-    AssessmentReport, DEGENERATE_GAP_THRESHOLD, DENSE_EVD_QUALITY_THRESHOLD, ExperimentMetrics,
-    LOBPCG_QUALITY_THRESHOLD, MetricResult, RSVD_QUALITY_THRESHOLD, SINV_LOBPCG_QUALITY_THRESHOLD,
-    SUBSPACE_GRAM_DET_THRESHOLD, check_eigenvalue_bounds, eigenpair_residual,
-    eigenvalue_abs_errors, eigenvalue_condition_number, max_eigenpair_residual,
-    orthogonality_error, separation_ratio, sign_agnostic_max_error, spectral_gap,
-    subspace_gram_det_kd, tolerance_margin, trustworthiness, trustworthiness_subsampled,
-};
-
-// Re-export trustworthiness for the CLI binary when built with the `cli` feature.
-// The `testing` block above already covers test builds; this separate cfg avoids
-// double-export when both features are active.
-#[cfg(all(feature = "cli", not(feature = "testing")))]
-pub use crate::metrics::{trustworthiness, trustworthiness_subsampled};
 
 use ndarray::{Array2, ArrayView2};
 use sprs::CsMatI;
@@ -308,6 +208,8 @@ pub fn spectral_init(
         });
     }
 
+    let solver_params = solvers::SolverParams::default();
+
     // ── Component A: connectivity check ───────────────────────────────────
     let (labels, n_conn_components) = components::find_components(graph);
     if n_conn_components > 1 {
@@ -319,6 +221,7 @@ pub fn spectral_init(
             seed,
             data,
             config.compute_mode,
+            &solver_params,
         )?;
         return scaling::scale_and_add_noise(coords, seed);
     }
@@ -334,8 +237,15 @@ pub fn spectral_init(
     let lap = laplacian::build_normalized_laplacian(graph, &inv_sqrt_deg);
 
     // ── Component D: eigensolver escalation chain ─────────────────────────
-    let ((eigenvalues, eigenvectors), _) =
-        solvers::solve_eigenproblem(&lap, n_components, seed, &sqrt_deg, config.compute_mode);
+    let ((eigenvalues, eigenvectors), report) = solvers::solve_eigenproblem(
+        &lap,
+        n_components,
+        seed,
+        &sqrt_deg,
+        config.compute_mode,
+        &solver_params,
+    )?;
+    report.log("connected graph", n);
 
     // ── Component E: eigenvector selection ────────────────────────────────
     let mut selected = selection::select_eigenvectors(
@@ -358,16 +268,6 @@ pub fn spectral_init(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[cfg(all(feature = "testing", test))]
-    #[test]
-    fn scale_and_add_noise_pub_is_accessible() {
-        let coords =
-            ndarray::Array2::<f64>::from_shape_vec((2, 2), vec![1.0, 2.0, 3.0, 4.0]).unwrap();
-        let result = scale_and_add_noise_pub(coords, 42);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().shape(), &[2, 2]);
-    }
 
     #[test]
     fn spectral_error_is_std_error() {

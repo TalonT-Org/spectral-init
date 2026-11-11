@@ -21,7 +21,7 @@ extern crate ndarray16;
 use ndarray16 as nd16;
 
 use super::EigenResult;
-use crate::metrics::LOBPCG_ACCEPT_TOL;
+use super::quality::LOBPCG_ACCEPT_TOL;
 use crate::operator::LinearOperator;
 use faer::linalg::solvers::SelfAdjointEigen;
 use faer::{Mat as FaerMat, Side};

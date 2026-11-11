@@ -6,7 +6,7 @@ use rand_distr::{Distribution, Normal};
 /// Internal helper: deterministic scaling only (no noise).
 /// Scales `coords` so the global max absolute value equals `max_coord`, then
 /// casts to f32.
-pub(crate) fn scale_coords(
+pub fn scale_coords(
     coords: &Array2<f64>,
     max_coord: f64,
 ) -> Result<Array2<f32>, crate::SpectralError> {
@@ -59,7 +59,7 @@ pub(crate) fn noisy_scale_coords(
 ///
 /// Must be called on f64 eigenvectors after `select_eigenvectors` and before
 /// `scale_and_add_noise`.
-pub(crate) fn normalize_signs(coords: &mut Array2<f64>) {
+pub fn normalize_signs(coords: &mut Array2<f64>) {
     for col in 0..coords.ncols() {
         let sign = coords
             .column(col)
@@ -82,7 +82,7 @@ pub(crate) fn normalize_signs(coords: &mut Array2<f64>) {
 
 /// Scales columns so max absolute value is 10.0, then adds Gaussian noise
 /// with scale=0.0001. Downcasts to f32.
-pub(crate) fn scale_and_add_noise(
+pub fn scale_and_add_noise(
     coords: Array2<f64>,
     seed: u64,
 ) -> Result<Array2<f32>, crate::SpectralError> {

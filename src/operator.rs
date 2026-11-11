@@ -3,6 +3,7 @@ use sprs::CsMatI;
 
 // ─── Trait ───────────────────────────────────────────────────────────────────
 
+/// A square linear operator applied to blocks of column vectors.
 #[doc(hidden)]
 pub trait LinearOperator {
     /// Apply operator: y = self * x. Both arrays have shape [n, k].
@@ -15,50 +16,13 @@ pub trait LinearOperator {
 
 /// CSR sparse-matrix × dense-vector product: y = A * x.
 ///
-/// This is the Phase 3 SIMD replacement point. The raw-slice signature exposes
-/// the memory layout that AVX-512 / SELL-C-sigma intrinsics require. Do not
-/// change the signature; replace the body in Phase 3.
-///
-/// `pub` under the `testing` feature (bench/test access) with always-on
-/// precondition assertions; `pub(crate)` otherwise with `debug_assert!` guards.
-#[cfg(feature = "testing")]
+/// The raw-slice signature exposes the CSR memory layout directly, so scalar and
+/// SIMD kernels share one calling convention. The CSR invariants (`indptr.len() ==
+/// y.len() + 1`, every column index below `x.len()`, `data` at least `nnz` long) are
+/// checked with `debug_assert!`; violating them in a release build panics on the
+/// out-of-bounds index.
 #[doc(hidden)]
 pub fn spmv_csr(indptr: &[usize], indices: &[usize], data: &[f64], x: &[f64], y: &mut [f64]) {
-    assert!(
-        indptr.len() == y.len() + 1,
-        "CSR invariant violated: indptr.len()={} != y.len()+1={}",
-        indptr.len(),
-        y.len() + 1
-    );
-    assert!(
-        indices.iter().all(|&j| j < x.len()),
-        "CSR invariant violated: column index out of bounds (x.len()={})",
-        x.len()
-    );
-    assert!(
-        data.len() >= indptr.last().copied().unwrap_or(0),
-        "CSR invariant violated: data.len()={} < nnz={}",
-        data.len(),
-        indptr.last().copied().unwrap_or(0)
-    );
-    for i in 0..y.len() {
-        let mut acc = 0.0_f64;
-        for k in indptr[i]..indptr[i + 1] {
-            acc += data[k] * x[indices[k]];
-        }
-        y[i] = acc;
-    }
-}
-
-#[cfg(not(feature = "testing"))]
-#[allow(dead_code)] // only used in #[cfg(test)] unit tests
-pub(crate) fn spmv_csr(
-    indptr: &[usize],
-    indices: &[usize],
-    data: &[f64],
-    x: &[f64],
-    y: &mut [f64],
-) {
     debug_assert!(
         indptr.len() == y.len() + 1,
         "CSR invariant violated: indptr.len()={} != y.len()+1={}",
@@ -138,14 +102,15 @@ unsafe fn spmv_avx2_gather_inner(
     }
 }
 
-/// Safe public wrapper around the AVX2+FMA gather SpMV kernel.
+/// Safe wrapper around the AVX2+FMA gather SpMV kernel, for tests.
 ///
 /// Panics if AVX2 or FMA is not available on the current CPU.
-/// Under `#[cfg(all(feature = "testing", any(target_arch = "x86", target_arch = "x86_64")))]`
-/// only — not part of the stable public API.
-#[cfg(all(feature = "testing", any(target_arch = "x86", target_arch = "x86_64")))]
+#[cfg(all(
+    any(test, feature = "__internal"),
+    any(target_arch = "x86", target_arch = "x86_64")
+))]
 #[doc(hidden)]
-pub fn spmv_avx2_gather_pub(
+pub fn spmv_avx2_gather(
     indptr: &[usize],
     indices: &[usize],
     data: &[f64],
@@ -154,7 +119,7 @@ pub fn spmv_avx2_gather_pub(
 ) {
     assert!(
         is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma"),
-        "spmv_avx2_gather_pub: AVX2+FMA not available on this CPU"
+        "spmv_avx2_gather: AVX2+FMA not available on this CPU"
     );
     // SAFETY: feature detection above guarantees avx2+fma are present.
     unsafe { spmv_avx2_gather_inner(indptr, indices, data, x, y) }
@@ -563,9 +528,9 @@ mod tests {
 
     // ─── AVX2/SIMD operator tests ────────────────────────────────────────────
 
-    #[cfg(all(feature = "testing", any(target_arch = "x86", target_arch = "x86_64")))]
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     #[test]
-    fn test_spmv_avx2_gather_pub_matches_scalar() {
+    fn test_spmv_avx2_gather_matches_scalar() {
         if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
             return; // skip on non-AVX2 machines
         }
@@ -576,7 +541,7 @@ mod tests {
         let mut y_scalar = vec![0.0_f64; 3];
         let mut y_avx2 = vec![0.0_f64; 3];
         spmv_csr(&indptr, &indices, &data, &x, &mut y_scalar);
-        spmv_avx2_gather_pub(&indptr, &indices, &data, &x, &mut y_avx2);
+        spmv_avx2_gather(&indptr, &indices, &data, &x, &mut y_avx2);
         for i in 0..3 {
             assert!(
                 (y_avx2[i] - y_scalar[i]).abs() < 1e-13,

@@ -31,7 +31,7 @@ pub fn dense_evd(laplacian: &CsMatI<f64, usize>, k: usize) -> Result<EigenResult
     }
 
     let evd = dense.self_adjoint_eigen(Side::Lower).map_err(|e| {
-        eprintln!("dense_evd: faer self_adjoint_eigen failed: {e:?}");
+        log::warn!("dense_evd: faer self_adjoint_eigen failed: {e:?}");
         SpectralError::ConvergenceFailure
     })?;
 

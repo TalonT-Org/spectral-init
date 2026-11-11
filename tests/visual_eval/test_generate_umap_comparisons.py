@@ -100,7 +100,7 @@ def test_find_tw_binary_raises_when_absent(monkeypatch):
         lambda self: False if self.name == "trustworthiness" else _real_exists(self),
     )
     from tests.visual_eval.generate_umap_comparisons import _find_tw_binary
-    with pytest.raises(RuntimeError, match="cargo build --release --features cli"):
+    with pytest.raises(RuntimeError, match="cargo build --release -p trustworthiness --features cli"):
         _find_tw_binary()
 
 

@@ -12,7 +12,7 @@
 //! residual threshold (1e-2) means Level 4 rarely fails its quality gate. If it does,
 //! Level 5 (forced dense EVD) is the final fallback.
 
-use super::EigenResult;
+use super::{EigenResult, SolverParams};
 use faer::linalg::solvers::{Qr, SelfAdjointEigen};
 use faer::{Mat as FaerMat, Side};
 use ndarray::{Array1, Array2};
@@ -93,53 +93,19 @@ fn sym_eig(b: &Array2<f64>) -> (Vec<f64>, Array2<f64>) {
     (eigenvalues, eigenvectors)
 }
 
+/// Default number of QR-stabilized power-iteration passes.
+pub(crate) const DEFAULT_NBITER: usize = 2;
+
 /// Returns the subspace size k for randomized SVD.
 ///
-/// Oversampling scales with n/10 so large graphs get a subspace large enough to
-/// produce residuals below `RSVD_QUALITY_THRESHOLD`, avoiding fallthrough to the
-/// O(n³) Level 5 dense EVD.
-fn rsvd_k_sub(n: usize, rank: usize) -> usize {
-    let oversampling = (n / 10).max(rank.max(5)).min(n.saturating_sub(rank));
+/// With `oversampling = None` the oversampling scales with n/10 so large graphs get a
+/// subspace large enough to produce residuals below `RSVD_QUALITY_THRESHOLD`, avoiding
+/// fallthrough to the O(n³) Level 5 dense EVD. An explicit oversampling count is used
+/// as given. The result never exceeds `n`.
+fn rsvd_k_sub(n: usize, rank: usize, oversampling: Option<usize>) -> usize {
+    let oversampling =
+        oversampling.unwrap_or_else(|| (n / 10).max(rank.max(5)).min(n.saturating_sub(rank)));
     (rank + oversampling).min(n)
-}
-
-/// Returns the effective subspace size k for randomized SVD.
-///
-/// In test builds (`--features testing`), reads the `SPECTRAL_RSVD_OVERSAMPLING`
-/// environment variable as the oversampling count, falling back to `rsvd_k_sub`
-/// on absence or parse error. In release builds the function is a trivial delegate
-/// that the compiler inlines away entirely.
-#[cfg(feature = "testing")]
-fn rsvd_k_sub_effective(n: usize, rank: usize) -> usize {
-    std::env::var("SPECTRAL_RSVD_OVERSAMPLING")
-        .ok()
-        .and_then(|s| s.parse::<usize>().ok())
-        .map(|oversampling| (rank + oversampling).min(n))
-        .unwrap_or_else(|| rsvd_k_sub(n, rank))
-}
-
-#[cfg(not(feature = "testing"))]
-fn rsvd_k_sub_effective(n: usize, rank: usize) -> usize {
-    rsvd_k_sub(n, rank)
-}
-
-/// Returns the effective number of power-iteration passes for randomized SVD.
-///
-/// In test builds (`--features testing`), reads the `SPECTRAL_RSVD_NBITER`
-/// environment variable as the iteration count, falling back to `2` on absence
-/// or parse error. In release builds the function always returns `2` and the
-/// compiler inlines it away entirely.
-#[cfg(feature = "testing")]
-fn rsvd_nbiter_effective() -> usize {
-    std::env::var("SPECTRAL_RSVD_NBITER")
-        .ok()
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or(2)
-}
-
-#[cfg(not(feature = "testing"))]
-fn rsvd_nbiter_effective() -> usize {
-    2
 }
 
 /// Randomized SVD eigensolver via the 2I − L trick (Level 3).
@@ -149,10 +115,11 @@ fn rsvd_nbiter_effective() -> usize {
 /// - Computes the top-(n_components+1) eigenvalues/vectors of M via randomized SVD
 /// - Discards the trivial eigenvector (column 0, corresponding to λ_L ≈ 0)
 /// - Maps eigenvalues back to L eigenvalues via λ_L = 2 − σ_M
-pub(crate) fn rsvd_solve(
+pub fn rsvd_solve(
     laplacian: &CsMatI<f64, usize>,
     n_components: usize,
     seed: u64,
+    params: &SolverParams,
 ) -> EigenResult {
     let n = laplacian.rows();
     assert!(
@@ -166,8 +133,8 @@ pub(crate) fn rsvd_solve(
     // rank = n_components + 1: request one extra so we can discard the trivial vector
     let rank = n_components + 1;
     // k = total random vectors; see rsvd_k_sub for the oversampling formula.
-    let k = rsvd_k_sub_effective(n, rank);
-    let nbiter = rsvd_nbiter_effective(); // QR-stabilized subspace iterations (Halko-Tropp Algorithm 4.4)
+    let k = rsvd_k_sub(n, rank, params.rsvd_oversampling);
+    let nbiter = params.rsvd_nbiter; // QR-stabilized subspace iterations (Halko-Tropp Algorithm 4.4)
 
     // ── Step A: Form M = 2I - L ──────────────────────────────────────────────
     let m = two_i_minus_laplacian(laplacian);
@@ -246,8 +213,8 @@ pub(crate) fn rsvd_solve(
 ///
 /// `k_sub` controls the subspace size; larger values give higher accuracy at
 /// higher cost.  Must satisfy `k_sub > n_components + 1`.
-#[cfg(feature = "testing")]
-pub(crate) fn rsvd_solve_accurate(
+#[cfg(feature = "__internal")]
+pub fn rsvd_solve_accurate(
     laplacian: &CsMatI<f64, usize>,
     n_components: usize,
     seed: u64,
@@ -380,7 +347,8 @@ mod tests {
         let l = build_normalized_laplacian(&graph, inv_sqrt_deg.as_slice().unwrap());
 
         let n_components = 2;
-        let (eigenvalues, eigenvectors) = rsvd_solve(&l, n_components, 42);
+        let (eigenvalues, eigenvectors) =
+            rsvd_solve(&l, n_components, 42, &SolverParams::default());
 
         assert_eq!(
             eigenvalues.shape(),
@@ -432,7 +400,7 @@ mod tests {
         let l = build_normalized_laplacian(&graph, inv_sqrt_deg.as_slice().unwrap());
 
         let n_components = 2;
-        let (eigenvalues, eigenvectors) = rsvd_solve(&l, n_components, 0);
+        let (eigenvalues, eigenvectors) = rsvd_solve(&l, n_components, 0, &SolverParams::default());
 
         let eig_slice = eigenvalues.as_slice().unwrap();
 
@@ -472,87 +440,43 @@ mod tests {
         }
     }
 
-    // T1 — formula preserved when env var is absent
     #[test]
-    fn rsvd_k_sub_returns_default_when_env_unset() {
-        // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
-        unsafe {
-            std::env::remove_var("SPECTRAL_RSVD_OVERSAMPLING");
-        }
-        let n = 200_usize;
-        let rank = 3_usize;
-        let oversampling = (n / 10).max(rank.max(5)).min(n.saturating_sub(rank));
-        let expected = (rank + oversampling).min(n);
-        assert_eq!(rsvd_k_sub_effective(n, rank), expected);
+    fn rsvd_k_sub_default_oversampling_scales_with_n() {
+        // n/10 dominates for large n; the floor of 5 applies for small n.
+        assert_eq!(rsvd_k_sub(200, 3, None), 3 + 20);
+        assert_eq!(rsvd_k_sub(20, 3, None), 3 + 5);
+        // Never larger than n.
+        assert_eq!(rsvd_k_sub(6, 3, None), 6);
     }
 
-    // T2 — env override is respected
-    #[cfg(feature = "testing")]
     #[test]
-    fn rsvd_k_sub_reads_env_override() {
-        // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
-        unsafe {
-            std::env::set_var("SPECTRAL_RSVD_OVERSAMPLING", "10");
-        }
-        let n = 200_usize;
-        let rank = 3_usize;
-        assert_eq!(rsvd_k_sub_effective(n, rank), rank + 10);
-        unsafe {
-            std::env::remove_var("SPECTRAL_RSVD_OVERSAMPLING");
-        }
+    fn rsvd_k_sub_uses_explicit_oversampling() {
+        assert_eq!(rsvd_k_sub(200, 3, Some(10)), 13);
+        assert_eq!(rsvd_k_sub(200, 3, Some(0)), 3);
+        // Clamped to n.
+        assert_eq!(rsvd_k_sub(8, 3, Some(100)), 8);
     }
 
-    // T3 — unparseable value falls back to formula
     #[test]
-    fn rsvd_k_sub_falls_back_on_parse_error() {
-        // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
-        unsafe {
-            std::env::set_var("SPECTRAL_RSVD_OVERSAMPLING", "abc");
-        }
-        let n = 200_usize;
-        let rank = 3_usize;
-        let oversampling = (n / 10).max(rank.max(5)).min(n.saturating_sub(rank));
-        let expected = (rank + oversampling).min(n);
-        assert_eq!(rsvd_k_sub_effective(n, rank), expected);
-        unsafe {
-            std::env::remove_var("SPECTRAL_RSVD_OVERSAMPLING");
-        }
-    }
+    fn rsvd_solve_honours_params() {
+        // A larger explicit subspace and more power iterations must still produce the
+        // analytical 6-ring eigenvalues (0, 0.5, 0.5).
+        let n = 6;
+        let edges: Vec<(usize, usize, f32)> = (0..n).map(|i| (i, (i + 1) % n, 1.0f32)).collect();
+        let graph = make_graph(n, &edges);
+        let (_, sqrt_deg) = crate::laplacian::compute_degrees(&graph, ComputeMode::PythonCompat);
+        let inv_sqrt_deg = sqrt_deg.mapv(|x| if x == 0.0 { 0.0 } else { 1.0 / x });
+        let l = build_normalized_laplacian(&graph, inv_sqrt_deg.as_slice().unwrap());
 
-    // T-NBE-1 — rsvd_nbiter_effective returns 2 when env var is absent
-    #[test]
-    fn rsvd_nbiter_returns_default_when_env_unset() {
-        // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
-        unsafe {
-            std::env::remove_var("SPECTRAL_RSVD_NBITER");
-        }
-        assert_eq!(rsvd_nbiter_effective(), 2);
-    }
-
-    // T-NBE-2 — rsvd_nbiter_effective reads SPECTRAL_RSVD_NBITER env var (testing only)
-    #[cfg(feature = "testing")]
-    #[test]
-    fn rsvd_nbiter_reads_env_override() {
-        // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
-        unsafe {
-            std::env::set_var("SPECTRAL_RSVD_NBITER", "4");
-        }
-        assert_eq!(rsvd_nbiter_effective(), 4);
-        unsafe {
-            std::env::remove_var("SPECTRAL_RSVD_NBITER");
-        }
-    }
-
-    // T-NBE-3 — rsvd_nbiter_effective falls back to 2 on parse error
-    #[test]
-    fn rsvd_nbiter_falls_back_on_parse_error() {
-        // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
-        unsafe {
-            std::env::set_var("SPECTRAL_RSVD_NBITER", "xyz");
-        }
-        assert_eq!(rsvd_nbiter_effective(), 2);
-        unsafe {
-            std::env::remove_var("SPECTRAL_RSVD_NBITER");
-        }
+        let params = SolverParams {
+            rsvd_oversampling: Some(2),
+            rsvd_nbiter: 4,
+            ..SolverParams::default()
+        };
+        let (eigenvalues, eigenvectors) = rsvd_solve(&l, 2, 0, &params);
+        assert_eq!(eigenvectors.shape(), &[n, 3]);
+        assert!(eigenvalues[0].abs() < 1e-3);
+        assert!((eigenvalues[1] - 0.5).abs() < 1e-4);
+        assert!((eigenvalues[2] - 0.5).abs() < 1e-4);
     }
 }

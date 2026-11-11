@@ -102,11 +102,9 @@ See [`examples/compute_modes.rs`](examples/compute_modes.rs) for a side-by-side 
 
 ## Feature Flags
 
-| Feature | Description |
-|---------|-------------|
-| `testing` | Exposes internal solver functions for integration tests. **Not stable API.** |
-| `cli` | Builds `trustworthiness` and `tw_profiler` binaries for embedding quality assessment. |
-| `profiling` | Enables timing instrumentation in the solver escalation chain. |
+The crate has no public Cargo features. The `trustworthiness` and `tw_profiler`
+embedding-quality tools are a separate workspace package, [`trustworthiness/`](trustworthiness/)
+(`cargo build --release -p trustworthiness --features cli`).
 
 ## Performance
 
@@ -121,7 +119,7 @@ Benchmarks run on a 2000-node ring graph (4 neighbours per node):
 
 > These are pre-optimization baselines on a regular ring graph. Real k-NN graphs
 > have non-uniform degree distributions; expect 2–4× slower SpMV in practice.
-> See [`benches/README.md`](benches/README.md) for methodology and inputs.
+> See [`eval/benches/README.md`](eval/benches/README.md) for methodology and inputs.
 
 ## Correctness
 
@@ -150,24 +148,19 @@ Install [`cargo-nextest`](https://nexte.st/) if not already present:
 cargo install cargo-nextest
 ```
 
-Run the test suite (synthetic tests only — no fixture generation required):
+Run the whole workspace (the reference fixtures are committed; no generation step is needed):
 
 ```sh
-cargo nextest run --features testing
+cargo nextest run --workspace --all-features
 ```
 
 Run with CI profile:
 
 ```sh
-cargo nextest run --profile ci --features testing
+cargo nextest run --workspace --all-features --profile ci
 ```
 
-Run fixture-dependent tests (requires Python fixture generation first):
-
-```sh
-python tests/generate_fixtures.py
-cargo nextest run --profile with-fixtures --run-ignored all --features testing
-```
+`cargo test` on its own runs only the published crate's default-feature tests.
 
 ## License
 

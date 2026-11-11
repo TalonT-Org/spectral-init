@@ -28,7 +28,7 @@ use rand_distr::{Distribution, StandardNormal};
 use sprs::CsMatI;
 
 use super::EigenResult;
-use crate::metrics::{SINV_LINFA_TOL, SINV_LOBPCG_QUALITY_THRESHOLD};
+use super::quality::{SINV_LINFA_TOL, SINV_LOBPCG_QUALITY_THRESHOLD};
 
 /// Diagonal shift ε making M = L + εI strictly SPD (REQ-SINV-002).
 pub(crate) const SINV_SHIFT: f64 = 1e-4;
@@ -281,8 +281,11 @@ mod tests {
 
         // All residuals < 1e-8.
         for i in 0..eigvals.len() {
-            let r =
-                crate::metrics::eigenpair_residual(&mat, &eigvecs.column(i).to_owned(), eigvals[i]);
+            let r = crate::solvers::quality::eigenpair_residual(
+                &mat,
+                &eigvecs.column(i).to_owned(),
+                eigvals[i],
+            );
             assert!(r < 1e-8, "residual for eigenpair {i}: {r} >= 1e-8");
         }
     }

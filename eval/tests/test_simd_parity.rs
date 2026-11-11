@@ -1,0 +1,255 @@
+#[path = "../../tests/common/fixtures.rs"]
+mod fixtures;
+#[path = "../../tests/common/internals.rs"]
+mod internals;
+
+use internals::solve_with_unit_hint;
+use ndarray::Ix1;
+use rand::SeedableRng;
+use rand::rngs::StdRng;
+use rand_distr::{Distribution, StandardNormal};
+use serde_json::json;
+#[cfg(target_arch = "x86_64")]
+use spectral_init::__internal::spmv_avx2_gather;
+use spectral_init::__internal::{SolverParams, spmv_csr};
+#[cfg(target_arch = "x86_64")]
+use spectral_init::__internal::{normalize_signs, scale_and_add_noise};
+use spectral_init::ComputeMode;
+use spectral_init_eval::results_dir;
+
+const FIXTURES: &[&str] = &[
+    "blobs_50",
+    "near_dupes_100",
+    "moons_200",
+    "blobs_connected_200",
+    "disconnected_200",
+    "circles_300",
+    "blobs_500",
+    "blobs_connected_2000",
+    "blobs_5000",
+];
+
+fn ulp_distance(a: f64, b: f64) -> u64 {
+    // Both exactly zero: 0 ULPs by definition.
+    if a == 0.0 && b == 0.0 {
+        return 0;
+    }
+    let ai = a.to_bits() as i64;
+    let bi = b.to_bits() as i64;
+    if (ai >= 0) == (bi >= 0) {
+        // Same sign: direct subtraction in the ordered float integer space.
+        (ai - bi).unsigned_abs()
+    } else {
+        // Opposite signs (non-zero): sum of distances from zero in each sign-half.
+        // Handles -0.0 vs +0.0 edge case (both == 0.0 caught above, so this only
+        // fires for genuine opposite-sign non-zero pairs).
+        ai.unsigned_abs() + bi.unsigned_abs()
+    }
+}
+
+#[test]
+fn test_spmv_divergence() {
+    let results_dir = results_dir();
+    std::fs::create_dir_all(&results_dir).expect("cannot create RESULTS_DIR");
+
+    let mut records: Vec<serde_json::Value> = Vec::new();
+
+    for (fixture_idx, &fixture) in FIXTURES.iter().enumerate() {
+        let lap_path = fixtures::fixture_path(fixture, "comp_b_laplacian.npz");
+        let laplacian = fixtures::load_sparse_csr(&lap_path);
+        let n = laplacian.rows();
+        let nnz = laplacian.nnz();
+        let indptr = laplacian.indptr().raw_storage().to_vec();
+        let indices = laplacian.indices().to_vec();
+        let data = laplacian.data().to_vec();
+
+        for vec_idx in 0..5usize {
+            let seed = (fixture_idx * 5 + vec_idx) as u64;
+            let mut rng = StdRng::seed_from_u64(seed);
+            let x: Vec<f64> = (0..n).map(|_| StandardNormal.sample(&mut rng)).collect();
+
+            let mut y_scalar = vec![0.0_f64; n];
+            spmv_csr(&indptr, &indices, &data, &x, &mut y_scalar);
+
+            #[cfg(target_arch = "x86_64")]
+            let (max_abs_diff, rms_diff, max_ulp) = {
+                let mut y_avx2 = vec![0.0_f64; n];
+                spmv_avx2_gather(&indptr, &indices, &data, &x, &mut y_avx2);
+
+                let mut max_abs: f64 = 0.0;
+                let mut sum_sq: f64 = 0.0;
+                let mut max_u: u64 = 0;
+                for (s, a) in y_scalar.iter().zip(y_avx2.iter()) {
+                    let diff = (s - a).abs();
+                    if diff > max_abs {
+                        max_abs = diff;
+                    }
+                    sum_sq += diff * diff;
+                    let u = ulp_distance(*s, *a);
+                    if u > max_u {
+                        max_u = u;
+                    }
+                }
+                let rms = (sum_sq / n as f64).sqrt();
+                (max_abs, rms, max_u)
+            };
+
+            // On non-x86_64: scalar-only, divergence is zero by definition.
+            #[cfg(not(target_arch = "x86_64"))]
+            let (max_abs_diff, rms_diff, max_ulp): (f64, f64, u64) = (0.0, 0.0, 0);
+
+            records.push(json!({
+                "fixture": fixture,
+                "n": n,
+                "nnz": nnz,
+                "vec_idx": vec_idx,
+                "max_abs_diff": max_abs_diff,
+                "rms_diff": rms_diff,
+                "max_ulp": max_ulp,
+            }));
+        }
+    }
+
+    let json_str = serde_json::to_string_pretty(&records).expect("serialization failed");
+    std::fs::write(results_dir.join("spmv_divergence.json"), json_str)
+        .expect("cannot write spmv_divergence.json");
+}
+
+#[test]
+fn test_solver_divergence() {
+    #[cfg(target_arch = "x86_64")]
+    if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
+        eprintln!(
+            "test_solver_divergence: skipping — AVX2/FMA not available; \
+             ComputeMode::RustNative falls back to scalar, making the SIMD comparison vacuous"
+        );
+        return;
+    }
+
+    let results_dir = results_dir();
+    std::fs::create_dir_all(&results_dir).expect("cannot create RESULTS_DIR");
+    std::fs::create_dir_all(results_dir.join("eigenvectors")).expect("cannot create eigenvectors/");
+
+    let mut records: Vec<serde_json::Value> = Vec::new();
+
+    for &fixture in FIXTURES.iter() {
+        let lap_path = fixtures::fixture_path(fixture, "comp_b_laplacian.npz");
+        let laplacian = fixtures::load_sparse_csr(&lap_path);
+        let n = laplacian.rows();
+
+        let params = SolverParams::default();
+        let ((_, eigvec_scalar), report_scalar) =
+            solve_with_unit_hint(&laplacian, 2, 42, ComputeMode::PythonCompat, &params);
+        let solver_level_scalar = report_scalar.level as u8;
+
+        // x86_64 path: run SIMD solver and compare.
+        #[cfg(target_arch = "x86_64")]
+        let record = {
+            let mut eigvec_scalar = eigvec_scalar; // rebind as mut — normalize_signs needs &mut
+            let ((_, mut eigvec_avx2), report_avx2) =
+                solve_with_unit_hint(&laplacian, 2, 42, ComputeMode::RustNative, &params);
+            let solver_level_avx2 = report_avx2.level as u8;
+
+            normalize_signs(&mut eigvec_scalar); // match production E.5
+            normalize_signs(&mut eigvec_avx2); // match production E.5
+
+            let scaled_scalar =
+                scale_and_add_noise(eigvec_scalar, 42).expect("scale_and_add_noise failed");
+            let scaled_avx2 =
+                scale_and_add_noise(eigvec_avx2, 42).expect("scale_and_add_noise failed");
+
+            let f32_total = scaled_scalar.len();
+            let f32_bitwise_identical = scaled_scalar
+                .iter()
+                .zip(scaled_avx2.iter())
+                .filter(|(a, b)| a.to_bits() == b.to_bits())
+                .count();
+            let f32_max_abs_diff = scaled_scalar
+                .iter()
+                .zip(scaled_avx2.iter())
+                .map(|(a, b)| (a - b).abs())
+                .fold(0.0f32, f32::max);
+
+            let eigenvectors_saved = if solver_level_scalar >= 1 {
+                let scalar_path = results_dir
+                    .join("eigenvectors")
+                    .join(format!("{}_scalar.npy", fixture));
+                let avx2_path = results_dir
+                    .join("eigenvectors")
+                    .join(format!("{}_avx2.npy", fixture));
+                ndarray_npy::write_npy(&scalar_path, &scaled_scalar)
+                    .expect("write_npy scalar failed");
+                ndarray_npy::write_npy(&avx2_path, &scaled_avx2).expect("write_npy avx2 failed");
+                true
+            } else {
+                false
+            };
+
+            json!({
+                "fixture": fixture,
+                "n": n,
+                "solver_level_scalar": solver_level_scalar,
+                "solver_level_avx2": solver_level_avx2,
+                "f32_bitwise_identical": f32_bitwise_identical,
+                "f32_total_elements": f32_total,
+                "f32_max_abs_diff": f32_max_abs_diff,
+                "eigenvectors_saved": eigenvectors_saved,
+            })
+        };
+
+        // Non-x86_64 path: record scalar result only; SIMD path does not exist.
+        #[cfg(not(target_arch = "x86_64"))]
+        let record = {
+            // Suppress unused variable: eigvec_scalar consumed but comparison skipped.
+            let _ = eigvec_scalar;
+            json!({
+                "fixture": fixture,
+                "n": n,
+                "solver_level_scalar": solver_level_scalar,
+                "solver_level_avx2": "not_applicable",
+                "f32_bitwise_identical": null,
+                "f32_total_elements": null,
+                "f32_max_abs_diff": null,
+                "eigenvectors_saved": false,
+            })
+        };
+
+        records.push(record);
+    }
+
+    let json_str = serde_json::to_string_pretty(&records).expect("serialization failed");
+    std::fs::write(results_dir.join("solver_divergence.json"), json_str)
+        .expect("cannot write solver_divergence.json");
+}
+
+#[test]
+fn test_spectral_gaps() {
+    let results_dir = results_dir();
+    std::fs::create_dir_all(&results_dir).expect("cannot create RESULTS_DIR");
+
+    let mut records: Vec<serde_json::Value> = Vec::new();
+
+    for &fixture in FIXTURES.iter() {
+        let lap_path = fixtures::fixture_path(fixture, "comp_b_laplacian.npz");
+        let laplacian = fixtures::load_sparse_csr(&lap_path);
+        let n = laplacian.rows();
+
+        let ev_path = fixtures::fixture_path(fixture, "comp_d_eigensolver.npz");
+        let gaps: ndarray::Array1<f64> =
+            fixtures::load_dense::<f64, Ix1>(&ev_path, "eigenvalue_gaps");
+
+        let gaps_vec: Vec<f64> = gaps.iter().copied().collect();
+        let min_gap = gaps_vec.iter().copied().fold(f64::MAX, f64::min);
+
+        records.push(json!({
+            "fixture": fixture,
+            "n": n,
+            "eigenvalue_gaps": gaps_vec,
+            "min_gap": min_gap,
+        }));
+    }
+
+    let json_str = serde_json::to_string_pretty(&records).expect("serialization failed");
+    std::fs::write(results_dir.join("spectral_gaps.json"), json_str)
+        .expect("cannot write spectral_gaps.json");
+}

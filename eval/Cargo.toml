@@ -1,0 +1,38 @@
+[package]
+name = "spectral-init-eval"
+version = "0.1.0"
+edition = "2024"
+description = "Research harness for spectral-init: solver benchmarks, sweeps and exporters"
+license = "MIT"
+repository = "https://github.com/TalonT-Org/spectral-init"
+# One release above the library's MSRV: `simd_spmv_exp` benchmarks an AVX-512 kernel
+# whose intrinsics are stable from Rust 1.89.
+rust-version = "1.89"
+publish = false
+
+[dependencies]
+spectral-init = { path = "..", features = ["__internal"] }
+ndarray = "0.17"
+sprs = "0.11"
+faer = "0.24"
+rand = "0.9"
+rand_distr = "0.5"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ndarray-npy = "0.10"
+criterion = { version = "0.5", features = ["html_reports"] }
+humantime = "2"
+linfa-linalg = "0.2"
+ndarray16 = { package = "ndarray", version = "0.16" }
+
+[[bench]]
+name = "spectral_bench"
+harness = false
+
+[[bench]]
+name = "lobpcg_bench"
+harness = false
+
+[[bench]]
+name = "simd_spmv_exp"
+harness = false

@@ -74,15 +74,19 @@ information gaps and produce the best possible experiment plan.
 **Minimum subagents:**
 
 **Subagent A — Measurement Feasibility:**
-> Read `src/metrics.rs` to inventory all canonical metric names, quality
-> dimensions (Accuracy, Parity, Performance), and threshold constants.
-> If `src/metrics.rs` does not exist or is unreadable, treat all dependent
-> variables as "NEW" and flag the missing file in your report.
+> Read the metric sources to inventory all canonical metric names, quality
+> dimensions (Accuracy, Parity, Performance), and threshold constants:
+> `src/solvers/quality.rs` (solver residual thresholds and residual checks),
+> `tests/common/diagnostics.rs` (accuracy, parity and conditioning metrics),
+> `eval/src/` (assessment report structures) and `trustworthiness/src/` (the
+> trustworthiness metric).
+> If a source does not exist or is unreadable, treat the dependent variables it
+> would define as "NEW" and flag the missing file in your report.
 > Cross-reference against the scope report's Metric Context section if present;
 > if the scope report lacks a Metric Context section (e.g., scope ran before
 > this tooling was added), proceed without it and note the gap.
 > For each dependent variable in the research question: verify it has a
-> canonical name in `src/metrics.rs`, or flag it as "NEW" requiring formula,
+> canonical name in those sources, or flag it as "NEW" requiring formula,
 > unit, and threshold definition. Report what measurement infrastructure
 > already exists vs. what needs to be built.
 
@@ -139,9 +143,10 @@ measurable outcome}
 
 | Metric | Unit | Collection Method | Canonical Name |
 |--------|------|-------------------|----------------|
-| {metric1} | {unit} | {how collected} | {name in src/metrics.rs, or "NEW"} |
+| {metric1} | {unit} | {how collected} | {name in the metric sources, or "NEW"} |
 
-Canonical names must match entries in `src/metrics.rs`. For any metric marked
+Canonical names must match entries in `src/solvers/quality.rs`,
+`tests/common/diagnostics.rs` or `trustworthiness/src/`. For any metric marked
 "NEW", include: formula, unit, threshold value, and a note that it must be added
 to the catalog before the experiment is finalized.
 
