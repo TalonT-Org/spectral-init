@@ -6,7 +6,7 @@
 [![docs.rs](https://img.shields.io/docsrs/spectral-init)](https://docs.rs/spectral-init)
 [![CI](https://github.com/TalonT-Org/spectral-init/actions/workflows/test.yml/badge.svg)](https://github.com/TalonT-Org/spectral-init/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-blue)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0.html)
+[![MSRV: 1.88](https://img.shields.io/badge/MSRV-1.88-blue)](https://blog.rust-lang.org/2025/06/26/Rust-1.88.0/)
 
 [Docs](https://docs.rs/spectral-init) · [Crate](https://crates.io/crates/spectral-init) · [User Guide](docs/user-guide.md)
 
@@ -137,7 +137,7 @@ for the full algorithmic design.
 
 ## Requirements
 
-- **MSRV:** Rust 1.85
+- **MSRV:** Rust 1.88
 - **No LAPACK/BLAS dependency** — pure Rust via `linfa-linalg` (LOBPCG) and `faer` (dense EVD)
 - **AVX2+FMA** is optional and only used when `ComputeMode::RustNative` is selected on x86\_64
 - Tested on Linux x86\_64; should work on any platform supported by the above crates

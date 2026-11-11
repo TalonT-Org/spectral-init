@@ -39,7 +39,7 @@ fn make_ring_graph(n: usize, half: usize) -> sprs::CsMatI<f32, u32, usize> {
         row_cols.dedup();
         let nnz = row_cols.len();
         indices.extend_from_slice(&row_cols);
-        data.extend(std::iter::repeat(1.0_f32).take(nnz));
+        data.extend(std::iter::repeat_n(1.0_f32, nnz));
         indptr[i + 1] = indptr[i] + nnz;
     }
 

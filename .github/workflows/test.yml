@@ -17,9 +17,6 @@ jobs:
     name: cargo nextest
     runs-on: ubuntu-latest
 
-    env:
-      RUSTFLAGS: "-C target-cpu=x86-64-v3"
-
     steps:
       - uses: actions/checkout@v4
 
@@ -35,7 +32,7 @@ jobs:
           tool: cargo-nextest
 
       - name: Run tests (CI profile)
-        run: cargo nextest run --profile ci --features testing
+        run: cargo nextest run --locked --profile ci --features testing
 
       - name: Upload JUnit XML
         uses: actions/upload-artifact@v4
@@ -69,9 +66,66 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Check formatting
-        run: cargo fmt --check
+        run: cargo fmt --all --check
 
       - name: Clippy
-        run: cargo clippy --all-features -- -D warnings -A missing_docs
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
+
+  docs:
+    name: docs
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build rustdoc
+        run: cargo doc --locked --no-deps -p spectral-init
         env:
-          RUSTFLAGS: "-C target-cpu=x86-64-v3"
+          RUSTDOCFLAGS: "-D warnings"
+
+      - name: Run doctests
+        run: cargo test --locked --doc
+
+  msrv:
+    name: msrv
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read rust-version from the manifest
+        id: msrv
+        run: echo "version=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)" >> "$GITHUB_OUTPUT"
+
+      - name: Install Rust ${{ steps.msrv.outputs.version }}
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.msrv.outputs.version }}
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check the library on the MSRV toolchain
+        run: cargo check --locked --lib -p spectral-init
+
+  package:
+    name: package
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Package gate
+        run: .github/scripts/check-package.sh

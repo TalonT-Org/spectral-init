@@ -17,7 +17,8 @@ use ndarray::{Array1, Array2};
 use sprs::CsMatI;
 
 /// Dense eigendecomposition via faer for small n.
-/// Returns (eigenvalues shape [k], eigenvectors shape [n, k]) sorted ascending by eigenvalue.
+/// Returns (eigenvalues of shape `[k]`, eigenvectors of shape `[n, k]`) sorted ascending by
+/// eigenvalue.
 pub fn dense_evd(laplacian: &CsMatI<f64, usize>, k: usize) -> Result<EigenResult, SpectralError> {
     let n = laplacian.rows();
     if k > n {

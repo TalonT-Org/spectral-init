@@ -39,7 +39,7 @@ body:
     id: rust_version
     attributes:
       label: Rust Version
-      placeholder: "rustc 1.85.0 (e71f9a9a9 2025-01-27)"
+      placeholder: "rustc 1.88.0 (6b00bc388 2025-06-23)"
     validations:
       required: true
 
@@ -55,8 +55,8 @@ body:
     id: cpu_features
     attributes:
       label: CPU Features
-      description: Output of `RUSTFLAGS="-C target-cpu=native" cargo rustc -- --print cfg 2>&1 | grep target_feature`
-      placeholder: 'target_feature = "avx2"'
+      description: CPU model and, on x86_64, whether it supports AVX2 and FMA (Linux — `lscpu | grep -o -w -E 'avx2|fma' | sort -u`)
+      placeholder: "AMD Ryzen 9 7950X — avx2, fma"
 
   - type: input
     id: graph_size

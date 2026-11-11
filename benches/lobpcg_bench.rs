@@ -27,7 +27,7 @@
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use ndarray_npy::{NpzReader, ReadNpyError, ReadNpzError};
-use spectral_init::solve_eigenproblem_pub;
+use spectral_init::{ComputeMode, solve_eigenproblem_pub};
 use std::hint::black_box;
 use std::path::Path;
 use std::time::Duration;
@@ -118,7 +118,12 @@ fn bench_lobpcg_blobs5000(c: &mut Criterion) {
 
     // One call outside the timed loop: primes instruction caches and surfaces
     // the solver level via the --features testing timing lines on stderr.
-    let _ = solve_eigenproblem_pub(black_box(&laplacian), black_box(2), black_box(seed));
+    let _ = solve_eigenproblem_pub(
+        black_box(&laplacian),
+        black_box(2),
+        black_box(seed),
+        ComputeMode::RustNative,
+    );
     eprintln!("[lobpcg_bench] blobs_5000 ready: n={n}");
 
     let mut group = c.benchmark_group("lobpcg_blobs5000");
@@ -132,6 +137,7 @@ fn bench_lobpcg_blobs5000(c: &mut Criterion) {
                 black_box(&laplacian),
                 black_box(2),
                 black_box(seed),
+                ComputeMode::RustNative,
             ))
         });
     });
@@ -157,7 +163,12 @@ fn bench_lobpcg_merfish_10k(c: &mut Criterion) {
 
     // One call outside the timed loop: primes instruction caches and surfaces
     // the solver level via the --features testing timing lines on stderr.
-    let _ = solve_eigenproblem_pub(black_box(&laplacian), black_box(2), black_box(seed));
+    let _ = solve_eigenproblem_pub(
+        black_box(&laplacian),
+        black_box(2),
+        black_box(seed),
+        ComputeMode::RustNative,
+    );
     eprintln!("[lobpcg_bench] merfish_10k ready: n={n}");
 
     let mut group = c.benchmark_group("lobpcg_merfish_10k");
@@ -171,6 +182,7 @@ fn bench_lobpcg_merfish_10k(c: &mut Criterion) {
                 black_box(&laplacian),
                 black_box(2),
                 black_box(seed),
+                ComputeMode::RustNative,
             ))
         });
     });
@@ -196,7 +208,12 @@ fn bench_lobpcg_merfish_100k(c: &mut Criterion) {
 
     // One call outside the timed loop: primes instruction caches and surfaces
     // the solver level via the --features testing timing lines on stderr.
-    let _ = solve_eigenproblem_pub(black_box(&laplacian), black_box(2), black_box(seed));
+    let _ = solve_eigenproblem_pub(
+        black_box(&laplacian),
+        black_box(2),
+        black_box(seed),
+        ComputeMode::RustNative,
+    );
     eprintln!("[lobpcg_bench] merfish_100k ready: n={n}");
 
     let mut group = c.benchmark_group("lobpcg_merfish_100k");
@@ -211,6 +228,7 @@ fn bench_lobpcg_merfish_100k(c: &mut Criterion) {
                 black_box(&laplacian),
                 black_box(2),
                 black_box(seed),
+                ComputeMode::RustNative,
             ))
         });
     });

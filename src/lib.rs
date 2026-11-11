@@ -183,6 +183,15 @@ pub use crate::solvers::sinv::lobpcg_sinv_solve;
 
 #[cfg(feature = "testing")]
 #[doc(hidden)]
+pub fn scale_coords(
+    coords: &ndarray::Array2<f64>,
+    max_coord: f64,
+) -> Result<ndarray::Array2<f32>, SpectralError> {
+    crate::scaling::scale_coords(coords, max_coord)
+}
+
+#[cfg(feature = "testing")]
+#[doc(hidden)]
 pub fn scale_and_add_noise_pub(
     coords: ndarray::Array2<f64>,
     seed: u64,
@@ -464,9 +473,12 @@ mod config_tests {
 
     #[test]
     fn compute_mode_copy_clone_eq() {
+        fn clone_of<T: Clone>(value: &T) -> T {
+            value.clone()
+        }
         let a = ComputeMode::PythonCompat;
         let b = a; // Copy
-        let c = a.clone(); // Clone
+        let c = clone_of(&a); // Clone
         assert_eq!(a, b); // PartialEq, Eq
         assert_eq!(a, c);
         let _ = format!("{a:?}"); // Debug

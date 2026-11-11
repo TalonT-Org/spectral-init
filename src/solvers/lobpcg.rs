@@ -33,7 +33,7 @@ use rand_distr::{Distribution, StandardNormal};
 
 // ─── ndarray 0.16 ↔ 0.17 conversion helpers ──────────────────────────────────
 
-/// Convert an owned ndarray 0.17 Array2<f64> to ndarray 0.16 Array2<f64>.
+/// Convert an owned ndarray 0.17 `Array2<f64>` to ndarray 0.16 `Array2<f64>`.
 fn to_nd16_array2(a: Array2<f64>) -> nd16::Array2<f64> {
     let (rows, cols) = (a.nrows(), a.ncols());
     // iter() respects logical shape regardless of memory layout or slicing.
@@ -42,7 +42,7 @@ fn to_nd16_array2(a: Array2<f64>) -> nd16::Array2<f64> {
         .expect("shape/data mismatch converting nd17→nd16 Array2")
 }
 
-/// Convert an ndarray 0.16 ArrayView2<f64> to an owned ndarray 0.17 Array2<f64>.
+/// Convert an ndarray 0.16 `ArrayView2<f64>` to an owned ndarray 0.17 `Array2<f64>`.
 fn from_nd16_view2(v: nd16::ArrayView2<f64>) -> Array2<f64> {
     let (rows, cols) = (v.nrows(), v.ncols());
     let raw: Vec<f64> = v.iter().copied().collect();
@@ -50,7 +50,7 @@ fn from_nd16_view2(v: nd16::ArrayView2<f64>) -> Array2<f64> {
         .expect("shape/data mismatch converting nd16→nd17 ArrayView2")
 }
 
-/// Convert an owned ndarray 0.16 Array1<f64> to ndarray 0.17 Array1<f64>.
+/// Convert an owned ndarray 0.16 `Array1<f64>` to ndarray 0.17 `Array1<f64>`.
 ///
 /// Uses `iter()` instead of `into_raw_vec()` because linfa-linalg can return sliced arrays
 /// whose backing Vec is longer than the logical length. `iter()` always respects logical size.
@@ -58,7 +58,7 @@ fn from_nd16_array1(a: nd16::Array1<f64>) -> Array1<f64> {
     Array1::from_iter(a.iter().copied())
 }
 
-/// Convert an owned ndarray 0.16 Array2<f64> to ndarray 0.17 Array2<f64>.
+/// Convert an owned ndarray 0.16 `Array2<f64>` to ndarray 0.17 `Array2<f64>`.
 ///
 /// Uses `iter()` for the same reason as `from_nd16_array1`: slice_move can leave backing
 /// Vecs larger than the logical extent, and `into_raw_vec()` would return all elements.

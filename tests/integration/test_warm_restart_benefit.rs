@@ -119,7 +119,7 @@ fn epsilon_bridge_laplacian(cluster_size: usize, bridge_weight: f64) -> CsMatI<f
         if i < cs {
             for j in 0..cs {
                 if j != i {
-                    row_entries.push((j, -1.0 * inv_sqrt_deg[i] * inv_sqrt_deg[j]));
+                    row_entries.push((j, -inv_sqrt_deg[i] * inv_sqrt_deg[j]));
                 }
             }
             if i == cs - 1 {
@@ -128,7 +128,7 @@ fn epsilon_bridge_laplacian(cluster_size: usize, bridge_weight: f64) -> CsMatI<f
         } else {
             for j in cs..n {
                 if j != i {
-                    row_entries.push((j, -1.0 * inv_sqrt_deg[i] * inv_sqrt_deg[j]));
+                    row_entries.push((j, -inv_sqrt_deg[i] * inv_sqrt_deg[j]));
                 }
             }
             if i == cs {

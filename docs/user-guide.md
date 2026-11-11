@@ -17,7 +17,7 @@
 
 ## Prerequisites
 
-**Rust 1.85 or later (MSRV).** Install Rust via [rustup](https://www.rust-lang.org/tools/install).
+**Rust 1.88 or later (MSRV).** Install Rust via [rustup](https://www.rust-lang.org/tools/install).
 
 **No LAPACK/BLAS required** — this crate is pure Rust. All linear algebra is
 handled by `linfa-linalg` (LOBPCG) and `faer` (dense EVD).

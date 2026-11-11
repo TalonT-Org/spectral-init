@@ -62,7 +62,7 @@ fn from_nd16_array2(a: nd16::Array2<f64>) -> Array2<f64> {
 
 // ─── sprs ↔ faer sparse conversion ───────────────────────────────────────────
 
-/// Convert a sprs CsMat<f64> (CSR or CSC) to a faer SparseColMat<usize, f64>,
+/// Convert a sprs `CsMat<f64>` (CSR or CSC) to a faer `SparseColMat<usize, f64>`,
 /// adding `diag_shift` to every diagonal entry (used to build M = L + εI).
 ///
 /// The conversion goes CSR/CSC → sprs CSC → raw arrays → faer CSC.
@@ -90,20 +90,20 @@ fn sprs_csc_to_faer(
 
 // ─── ndarray 0.17 ↔ faer dense bridge helpers ────────────────────────────────
 
-/// Convert ndarray 0.17 ArrayView2<f64> [n, k] to a faer Mat<f64> [n, k].
+/// Convert ndarray 0.17 `ArrayView2<f64>` `[n, k]` to a faer `Mat<f64>` `[n, k]`.
 /// Copies element-by-element to handle ndarray row-major vs faer column-major.
 fn nd17_view_to_faer(x: ArrayView2<f64>) -> faer::Mat<f64> {
     let (nrows, ncols) = x.dim();
     faer::Mat::<f64>::from_fn(nrows, ncols, |i, j| x[[i, j]])
 }
 
-/// Convert a faer Mat<f64> [n, k] to ndarray 0.17 Array2<f64>.
+/// Convert a faer `Mat<f64>` `[n, k]` to ndarray 0.17 `Array2<f64>`.
 fn faer_to_nd17(x: &faer::Mat<f64>) -> Array2<f64> {
     let (nrows, ncols) = (x.nrows(), x.ncols());
     Array2::from_shape_fn((nrows, ncols), |(i, j)| x[(i, j)])
 }
 
-/// Convert a faer Mat<f64> [n, k] to ndarray 0.16 Array2<f64>.
+/// Convert a faer `Mat<f64>` `[n, k]` to ndarray 0.16 `Array2<f64>`.
 fn faer_to_nd17_nd16(x: &faer::Mat<f64>) -> nd16::Array2<f64> {
     to_nd16_array2(faer_to_nd17(x))
 }

@@ -5,15 +5,11 @@
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use std::hint::black_box;
 
-#[cfg(all(
-    target_arch = "x86_64",
-    target_feature = "avx2",
-    target_feature = "fma"
-))]
+#[cfg(target_arch = "x86_64")]
 use spectral_init::metrics::dist_sq_avx2_looped;
 
-// Note: on non-AVX2 hosts the avx2_looped benchmark arm is omitted by cfg; only the scalar
-// variant runs. CI should build with RUSTFLAGS="-C target-cpu=native" to include AVX2 coverage.
+// Note: the avx2_looped benchmark arm runs only when AVX2 and FMA are detected at runtime;
+// on other hosts only the scalar variant runs.
 
 fn make_vectors(d: usize, seed: u64) -> (Vec<f64>, Vec<f64>) {
     use std::collections::hash_map::DefaultHasher;
@@ -39,14 +35,13 @@ fn bench_dist_sq_kernels(c: &mut Criterion) {
     for &d in &[10_usize, 50] {
         let (xi, xj) = make_vectors(d, 42);
 
-        #[cfg(all(
-            target_arch = "x86_64",
-            target_feature = "avx2",
-            target_feature = "fma"
-        ))]
-        group.bench_with_input(BenchmarkId::new("avx2_looped", d), &d, |b, _| {
-            b.iter(|| unsafe { dist_sq_avx2_looped(black_box(&xi), black_box(&xj)) })
-        });
+        #[cfg(target_arch = "x86_64")]
+        if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
+            group.bench_with_input(BenchmarkId::new("avx2_looped", d), &d, |b, _| {
+                // SAFETY: AVX2 and FMA were detected above; both slices have `d` elements.
+                b.iter(|| unsafe { dist_sq_avx2_looped(black_box(&xi), black_box(&xj)) })
+            });
+        }
 
         group.bench_with_input(BenchmarkId::new("scalar", d), &d, |b, _| {
             b.iter(|| {

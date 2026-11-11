@@ -10,11 +10,11 @@
 //!
 //! | Level | Condition | Solver | Quality Threshold |
 //! |-------|-----------|--------|-------------------|
-//! | 0 | n < 2000 | Dense EVD ([`dense`]) via faer | 1e-6 |
-//! | 1 | n ≥ 2000 | LOBPCG ([`lobpcg`]) without regularization | 2e-5 |
-//! | 2 | Level 1 quality failed | Shift-invert LOBPCG ([`sinv`]) via faer Cholesky | 1e-6 |
-//! | 3 | Level 2 quality failed | LOBPCG ([`lobpcg`]) with ε·I regularization | 2e-5 |
-//! | 4 | Level 3 quality failed | Randomized SVD ([`rsvd`]) via 2I−L trick | 1e-2 |
+//! | 0 | n < 2000 | Dense EVD (`dense`) via faer | 1e-6 |
+//! | 1 | n ≥ 2000 | LOBPCG (`lobpcg`) without regularization | 2e-5 |
+//! | 2 | Level 1 quality failed | Shift-invert LOBPCG (`sinv`) via faer Cholesky | 1e-6 |
+//! | 3 | Level 2 quality failed | LOBPCG (`lobpcg`) with ε·I regularization | 2e-5 |
+//! | 4 | Level 3 quality failed | Randomized SVD (`rsvd`) via 2I−L trick | 1e-2 |
 //! | 5 | Level 4 quality failed | Forced dense EVD — always accepted | — |
 //!
 //! A level "fails" when its residual exceeds the threshold, not when it returns an
@@ -49,7 +49,7 @@ use crate::operator::CsrOperator;
 use ndarray::{Array1, Array2};
 use sprs::CsMatI;
 
-/// Eigendecomposition result: (eigenvalues shape [k], eigenvectors shape [n, k]).
+/// Eigendecomposition result: (eigenvalues of shape `[k]`, eigenvectors of shape `[n, k]`).
 pub type EigenResult = (Array1<f64>, Array2<f64>);
 
 /// Graphs with n < DENSE_N_THRESHOLD use Level 0 (dense EVD) directly.
@@ -436,7 +436,7 @@ mod tests {
             ComputeMode::PythonCompat,
         );
         assert!(
-            level >= 1 && level <= 5,
+            (1..=5).contains(&level),
             "expected level in {{1,2,3,4,5}}, got {level}"
         );
     }

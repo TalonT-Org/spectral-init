@@ -3,7 +3,6 @@ use spectral_init::trustworthiness;
 /// Sklearn parity: load fixture and assert |rust − sklearn| < 1e-6.
 /// Requires: python tests/visual_eval/generate_tw_fixture.py
 #[test]
-#[ignore = "requires fixture; run: python tests/visual_eval/generate_tw_fixture.py"]
 fn sklearn_parity_synthetic() {
     use ndarray_npy::NpzReader;
     use std::fs::File;

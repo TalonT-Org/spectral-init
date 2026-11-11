@@ -51,7 +51,7 @@ fn datasets_to_run() -> Vec<(&'static str, usize, bool, usize)> {
     let filter = std::env::var("SPECTRAL_DATASET").ok();
     DATASETS
         .iter()
-        .filter(|(name, ..)| filter.as_deref().map_or(true, |f| *name == f))
+        .filter(|(name, ..)| filter.as_deref().is_none_or(|f| *name == f))
         .copied()
         .collect()
 }
@@ -232,7 +232,6 @@ fn parity_to_markdown(experiment: &ExperimentMetrics, solver_levels: &[Option<u8
 }
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
 fn assess_accuracy() {
     let run_set = datasets_to_run();
     let mut all_reports: Vec<AssessmentReport> = Vec::new();
@@ -421,7 +420,6 @@ fn assess_accuracy() {
 }
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
 fn assess_parity() {
     let run_set = datasets_to_run();
     let mut all_reports: Vec<AssessmentReport> = Vec::new();

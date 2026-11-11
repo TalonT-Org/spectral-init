@@ -408,11 +408,7 @@ pub fn eigenvalue_condition_number(eigenvalues: &Array1<f64>) -> f64 {
 /// Both slices must have the same length and at least 10 elements (caller ensures
 /// `xi.len() == xj.len()` and `d_x >= 10` at the dispatch site).
 #[doc(hidden)]
-#[cfg(all(
-    target_arch = "x86_64",
-    target_feature = "avx2",
-    target_feature = "fma"
-))]
+#[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2,fma")]
 pub unsafe fn dist_sq_avx2_looped(xi: &[f64], xj: &[f64]) -> f64 {
     debug_assert_eq!(
@@ -556,22 +552,15 @@ pub(crate) fn trustworthiness_inner(
 
     #[cfg(target_arch = "x86_64")]
     let use_avx2 = is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma");
-    #[cfg(not(target_arch = "x86_64"))]
-    let use_avx2 = false;
+    #[cfg(target_arch = "x86_64")]
     let d_x = x.ncols();
-    let d_y = y.ncols();
 
     #[cfg(target_arch = "x86_64")]
-    let use_avx2_y = { d_y == 2 && y.is_standard_layout() && is_x86_feature_detected!("avx2") };
-    #[cfg(not(target_arch = "x86_64"))]
-    let use_avx2_y = false;
+    let use_avx2_y =
+        { y.ncols() == 2 && y.is_standard_layout() && is_x86_feature_detected!("avx2") };
 
     // Validate contiguity once before the parallel loop: SIMD dispatch requires C-contiguous rows.
-    #[cfg(all(
-        target_arch = "x86_64",
-        target_feature = "avx2",
-        target_feature = "fma"
-    ))]
+    #[cfg(target_arch = "x86_64")]
     if use_avx2 && d_x >= 10 {
         assert!(
             x.is_standard_layout(),
@@ -616,11 +605,7 @@ pub(crate) fn trustworthiness_inner(
                 for j in 0..n {
                     let xj = x.row(j);
                     dist_x[j] = {
-                        #[cfg(all(
-                            target_arch = "x86_64",
-                            target_feature = "avx2",
-                            target_feature = "fma"
-                        ))]
+                        #[cfg(target_arch = "x86_64")]
                         {
                             if use_avx2 && d_x >= 10 {
                                 let si = xi.as_slice().expect("x row must be contiguous");
@@ -634,11 +619,7 @@ pub(crate) fn trustworthiness_inner(
                                     .sum()
                             }
                         }
-                        #[cfg(not(all(
-                            target_arch = "x86_64",
-                            target_feature = "avx2",
-                            target_feature = "fma"
-                        )))]
+                        #[cfg(not(target_arch = "x86_64"))]
                         {
                             xi.iter()
                                 .zip(xj.iter())
@@ -891,8 +872,8 @@ mod tests {
     #[test]
     fn t_const_02_threshold_ordering() {
         assert_eq!(DENSE_EVD_QUALITY_THRESHOLD, SINV_LOBPCG_QUALITY_THRESHOLD);
-        assert!(SINV_LOBPCG_QUALITY_THRESHOLD < LOBPCG_QUALITY_THRESHOLD);
-        assert!(LOBPCG_QUALITY_THRESHOLD < RSVD_QUALITY_THRESHOLD);
+        const { assert!(SINV_LOBPCG_QUALITY_THRESHOLD < LOBPCG_QUALITY_THRESHOLD) };
+        const { assert!(LOBPCG_QUALITY_THRESHOLD < RSVD_QUALITY_THRESHOLD) };
     }
 
     // ── Accuracy: eigenpair_residual ─────────────────────────────────────────
@@ -1189,7 +1170,7 @@ mod tests {
         let x = ndarray::Array2::from_shape_fn((20, 10), |_| rng.random::<f64>());
         let y = ndarray::Array2::from_shape_fn((20, 2), |_| rng.random::<f64>());
         let t = trustworthiness(x.view(), y.view(), 5);
-        assert!(t >= 0.0 && t <= 1.0, "T out of [0,1]: {t}");
+        assert!((0.0..=1.0).contains(&t), "T out of [0,1]: {t}");
     }
 
     /// Hand-verifiable 4-point, k=1 example with exactly one violation of rank penalty 1.
@@ -1236,7 +1217,7 @@ mod tests {
         let y = ndarray::Array2::from_shape_fn((n, 2), |_| rng.random::<f64>());
         let t = trustworthiness(x.view(), y.view(), k);
         assert!(t.is_finite(), "T should be finite at k=n/2-1: {t}");
-        assert!(t >= 0.0 && t <= 1.0, "T out of [0,1] at k=n/2-1: {t}");
+        assert!((0.0..=1.0).contains(&t), "T out of [0,1] at k=n/2-1: {t}");
     }
 
     #[test]
@@ -1249,13 +1230,12 @@ mod tests {
         let _ = trustworthiness(x.view(), y.view(), k);
     }
 
-    #[cfg(all(
-        target_arch = "x86_64",
-        target_feature = "avx2",
-        target_feature = "fma"
-    ))]
+    #[cfg(target_arch = "x86_64")]
     #[test]
     fn t_tw_06_avx2_looped_kernel_matches_scalar() {
+        if !(is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma")) {
+            return; // skip on CPUs without AVX2+FMA
+        }
         use rand::{Rng, SeedableRng};
         let mut rng = rand::rngs::SmallRng::seed_from_u64(42);
         for len in [10, 13, 16, 50, 100] {
@@ -1266,6 +1246,7 @@ mod tests {
                 .zip(b.iter())
                 .map(|(&x, &y)| (x - y) * (x - y))
                 .sum();
+            // SAFETY: runtime check above guarantees AVX2+FMA; both slices have `len` elements.
             let avx2 = unsafe { super::dist_sq_avx2_looped(&a, &b) };
             assert!(
                 (avx2 - scalar).abs() < 1e-10,
@@ -1400,7 +1381,7 @@ mod tests {
             let t = trustworthiness(x.view(), y.view(), k);
             let t_ref = trustworthiness_brute_force(x.view(), y.view(), k);
             assert!(t.is_finite(), "T(k={k}) must be finite, got {t}");
-            assert!(t >= 0.0 && t <= 1.0, "T(k={k}) out of [0,1]: {t}");
+            assert!((0.0..=1.0).contains(&t), "T(k={k}) out of [0,1]: {t}");
             assert!(
                 (t - t_ref).abs() < 1e-12,
                 "T(k={k}) combined={t} diverges from brute-force reference={t_ref}"

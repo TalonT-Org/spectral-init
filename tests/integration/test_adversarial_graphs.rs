@@ -260,11 +260,6 @@ fn large_ring_laplacian(n: usize) -> CsMatI<f64, usize> {
     CsMatI::new((n, n), indptr, indices, data)
 }
 
-/// sqrt_deg vector for C_n (ring graph): all entries are sqrt(2).
-fn ring_sqrt_deg(n: usize) -> Array1<f64> {
-    Array1::from_elem(n, 2.0_f64.sqrt())
-}
-
 /// Normalized Laplacian of the epsilon-bridge graph in f64.
 /// Two complete subgraphs of size `cluster_size` connected by a single edge
 /// of weight `bridge_weight`. Total n = 2 * cluster_size.
@@ -299,7 +294,7 @@ fn large_epsilon_bridge_laplacian(cluster_size: usize, bridge_weight: f64) -> Cs
             // First clique: connect to all other first-clique nodes
             for j in 0..cs {
                 if j != i {
-                    let w_off = -1.0 * inv_sqrt_deg[i] * inv_sqrt_deg[j];
+                    let w_off = -inv_sqrt_deg[i] * inv_sqrt_deg[j];
                     row_entries.push((j, w_off));
                 }
             }
@@ -312,7 +307,7 @@ fn large_epsilon_bridge_laplacian(cluster_size: usize, bridge_weight: f64) -> Cs
             // Second clique: connect to all other second-clique nodes
             for j in cs..n {
                 if j != i {
-                    let w_off = -1.0 * inv_sqrt_deg[i] * inv_sqrt_deg[j];
+                    let w_off = -inv_sqrt_deg[i] * inv_sqrt_deg[j];
                     row_entries.push((j, w_off));
                 }
             }
@@ -330,19 +325,6 @@ fn large_epsilon_bridge_laplacian(cluster_size: usize, bridge_weight: f64) -> Cs
         indptr[i + 1] = indices.len();
     }
     CsMatI::new((n, n), indptr, indices, data)
-}
-
-/// sqrt_deg vector for the epsilon-bridge graph.
-/// Bridge nodes have degree (cluster_size - 1 + bridge_weight); others have degree cluster_size - 1.
-fn epsilon_bridge_sqrt_deg(cluster_size: usize, bridge_weight: f64) -> Array1<f64> {
-    let cs = cluster_size;
-    let n = 2 * cs;
-    let deg_regular = ((cs - 1) as f64).sqrt();
-    let deg_bridge = ((cs - 1) as f64 + bridge_weight).sqrt();
-    let mut v = vec![deg_regular; n];
-    v[cs - 1] = deg_bridge;
-    v[cs] = deg_bridge;
-    Array1::from_vec(v)
 }
 
 /// 6-node unnormalized path-graph Laplacian, mirroring `path_graph_laplacian_6` in
@@ -711,12 +693,12 @@ fn large_epsilon_bridge_laplacian_shape_and_symmetry() {
         let lji: Option<f64> = lap
             .outer_view(j)
             .and_then(|row| row.iter().find(|(col, _)| *col == i).map(|(_, val)| *val));
-        match (lij, lji) {
-            (Some(a), Some(b)) => assert!(
+        // A non-edge (both None) is fine.
+        if let (Some(a), Some(b)) = (lij, lji) {
+            assert!(
                 (a - b).abs() < 1e-14,
                 "Laplacian not symmetric: L[{i},{j}]={a} != L[{j},{i}]={b}"
-            ),
-            _ => {} // non-edge: both None is fine
+            );
         }
     }
 }

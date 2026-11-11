@@ -1,7 +1,7 @@
 #[path = "../common/mod.rs"]
 mod common;
 
-use ndarray::{Array1, Array2};
+use ndarray::Array2;
 use serde_json::json;
 use spectral_init::metrics::{
     max_eigenpair_residual, sign_agnostic_max_error, subspace_gram_det_kd,
@@ -10,11 +10,8 @@ use spectral_init::{
     ComputeMode, DEGENERATE_GAP_THRESHOLD, normalize_signs_pub, solve_eigenproblem_pub,
 };
 use sprs::CsMatI;
-use std::fs;
 
-const SIMD_PARITY_F32_THRESHOLD: f64 = 4.0 * f32::EPSILON as f64;
 const SUBSPACE_ANGLE_SENSITIVITY_RAD: f64 = 1e-6;
-const SUBSPACE_ANGLE_FAILURE_RAD: f64 = 0.01;
 const BRIDGE_WEIGHTS: [f64; 7] = [1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8];
 const DISCRETE_WEIGHTS: [f64; 3] = [0.25, 2.5e-4, 2.5e-7];
 const SEEDS: [u64; 5] = [42, 123, 777, 1337, 9999];
@@ -64,7 +61,7 @@ fn large_epsilon_bridge_laplacian(cluster_size: usize, bridge_weight: f64) -> Cs
             // First clique: connect to all other first-clique nodes
             for j in 0..cs {
                 if j != i {
-                    let w_off = -1.0 * inv_sqrt_deg[i] * inv_sqrt_deg[j];
+                    let w_off = -inv_sqrt_deg[i] * inv_sqrt_deg[j];
                     row_entries.push((j, w_off));
                 }
             }
@@ -77,7 +74,7 @@ fn large_epsilon_bridge_laplacian(cluster_size: usize, bridge_weight: f64) -> Cs
             // Second clique: connect to all other second-clique nodes
             for j in cs..n {
                 if j != i {
-                    let w_off = -1.0 * inv_sqrt_deg[i] * inv_sqrt_deg[j];
+                    let w_off = -inv_sqrt_deg[i] * inv_sqrt_deg[j];
                     row_entries.push((j, w_off));
                 }
             }
@@ -95,17 +92,6 @@ fn large_epsilon_bridge_laplacian(cluster_size: usize, bridge_weight: f64) -> Cs
         indptr[i + 1] = indices.len();
     }
     CsMatI::new((n, n), indptr, indices, data)
-}
-
-fn epsilon_bridge_sqrt_deg(cluster_size: usize, bridge_weight: f64) -> Array1<f64> {
-    let cs = cluster_size;
-    let n = 2 * cs;
-    let deg_regular = ((cs - 1) as f64).sqrt();
-    let deg_bridge = ((cs - 1) as f64 + bridge_weight).sqrt();
-    let mut v = vec![deg_regular; n];
-    v[cs - 1] = deg_bridge;
-    v[cs] = deg_bridge;
-    Array1::from_vec(v)
 }
 
 /// Compute the maximum principal angle between two column subspaces.

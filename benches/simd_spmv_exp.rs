@@ -5,7 +5,7 @@
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use ndarray_npy::NpzReader;
 use spectral_init::operator::spmv_csr;
-use spectral_init::solve_eigenproblem_pub;
+use spectral_init::{ComputeMode, solve_eigenproblem_pub};
 use std::hint::black_box;
 
 // ─── Ring Laplacian builder ───────────────────────────────────────────────────
@@ -55,8 +55,7 @@ struct SellCsigma {
     chunk_len: Vec<usize>, // max NNZ per chunk
     col_idx: Vec<usize>,   // padded column indices, interleaved row-major within chunk
     values: Vec<f64>,      // padded values, same layout as col_idx
-    perm: Vec<usize>,      // perm[orig_row] = sorted_pos (σ-sort permutation)
-    inv_perm: Vec<usize>,  // inv_perm[sorted_pos] = orig_row (inverse)
+    inv_perm: Vec<usize>,  // inv_perm[sorted_pos] = orig_row (σ-sort permutation)
 }
 
 impl SellCsigma {
@@ -75,14 +74,8 @@ impl SellCsigma {
         let mut inv_perm: Vec<usize> = (0..n).collect();
         inv_perm.sort_unstable_by(|&a, &b| nnz[b].cmp(&nnz[a]));
 
-        // 3. Compute forward permutation: perm[orig_row] = sorted_pos
-        let mut perm = vec![0usize; n];
-        for (sorted_pos, &orig_row) in inv_perm.iter().enumerate() {
-            perm[orig_row] = sorted_pos;
-        }
-
-        // 4. Partition into chunks of size c.
-        let n_chunks = (n + c - 1) / c;
+        // 3. Partition into chunks of size c.
+        let n_chunks = n.div_ceil(c);
         let mut chunk_len = Vec::with_capacity(n_chunks);
         let mut col_idx_buf = Vec::new();
         let mut values_buf = Vec::new();
@@ -91,14 +84,14 @@ impl SellCsigma {
             let chunk_start = c_idx * c;
             let chunk_end = (chunk_start + c).min(n);
 
-            // 5. Find chunk_max_nnz over actual rows in this chunk.
+            // 4. Find chunk_max_nnz over actual rows in this chunk.
             let chunk_max = (chunk_start..chunk_end)
                 .map(|sorted_pos| nnz[inv_perm[sorted_pos]])
                 .max()
                 .unwrap_or(0);
             chunk_len.push(chunk_max);
 
-            // 6. Pad all c rows to chunk_max, interleaved row-major within chunk.
+            // 5. Pad all c rows to chunk_max, interleaved row-major within chunk.
             //    offset = c_idx * c * chunk_max + r * chunk_max + k
             for r in 0..c {
                 let sorted_pos = chunk_start + r;
@@ -126,13 +119,12 @@ impl SellCsigma {
             chunk_len,
             col_idx: col_idx_buf,
             values: values_buf,
-            perm,
             inv_perm,
         }
     }
 
     fn spmv_scalar(&self, x: &[f64], y: &mut [f64]) {
-        let n_chunks = (self.num_rows + self.c - 1) / self.c;
+        let n_chunks = self.num_rows.div_ceil(self.c);
         let mut y_perm = vec![0.0_f64; self.num_rows];
 
         for c_idx in 0..n_chunks {
@@ -230,6 +222,9 @@ fn spmv_avx2_dispatch(indptr: &[usize], indices: &[usize], data: &[f64], x: &[f6
 
 // ─── AVX-512 gather kernel ───────────────────────────────────────────────────
 
+// The AVX-512 intrinsics are stable from Rust 1.89, one release above the package MSRV;
+// this experimental kernel exists only in this benchmark.
+#[allow(clippy::incompatible_msrv)]
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "avx512f")]
 unsafe fn spmv_avx512_gather(
@@ -313,7 +308,6 @@ fn spmv_avx512_dispatch(
 
 // ─── Correctness verification ─────────────────────────────────────────────────
 
-#[cfg(test)]
 fn verify_sell_c(n: usize, c: usize) {
     let (indptr, indices, data) = make_ring_lap(n, 7);
     // Non-uniform x to catch permutation bugs
@@ -359,7 +353,6 @@ fn verify_avx512(n: usize) {
     }
 }
 
-#[cfg(test)]
 fn verify_avx2(n: usize) {
     let (indptr, indices, data) = make_ring_lap(n, 7);
     let x: Vec<f64> = (0..n).map(|i| i as f64 * 0.001).collect();
@@ -380,27 +373,6 @@ fn verify_avx2(n: usize) {
             y_csr[i],
             y_avx2[i],
         );
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn verify_sell_c_correctness() {
-        verify_sell_c(200, 4);
-        verify_sell_c(2000, 8);
-    }
-
-    #[test]
-    fn verify_avx2_correctness() {
-        verify_avx2(200);
-        verify_avx2(2000);
-    }
-
-    #[test]
-    fn verify_avx512_correctness() {
-        verify_avx512(200);
-        verify_avx512(2000);
     }
 }
 
@@ -428,6 +400,8 @@ fn bench_spmv_csr_scaling(c: &mut Criterion) {
 }
 
 fn bench_spmv_sell_c(c: &mut Criterion) {
+    verify_sell_c(200, 4);
+    verify_sell_c(2000, 8);
     let mut group = c.benchmark_group("spmv_sell_c");
     for &n in &[200_usize, 2000, 5000, 10000, 50000] {
         let (indptr, indices, data) = make_ring_lap(n, 7);
@@ -466,6 +440,7 @@ fn bench_spmv_avx2(c: &mut Criterion) {
     // ISA detection: emits "[isa] avx512f=true/false" so results files can confirm
     // the hardware context that produced the benchmark data.
     eprintln!("[isa] avx512f={}", is_x86_feature_detected!("avx512f"));
+    verify_avx2(200);
     verify_avx512(200);
     let mut group = c.benchmark_group("spmv_avx2");
     for &n in &[200_usize, 2000, 5000, 10000, 50000] {
@@ -561,12 +536,24 @@ fn bench_pipeline_blobs5000(c: &mut Criterion) {
     let seed = 42_u64;
 
     // Warm-up: one call outside iter to prime instruction caches and BLAS state.
-    let _ = solve_eigenproblem_pub(black_box(&laplacian), black_box(2), black_box(seed));
+    let _ = solve_eigenproblem_pub(
+        black_box(&laplacian),
+        black_box(2),
+        black_box(seed),
+        ComputeMode::RustNative,
+    );
 
     let mut group = c.benchmark_group("pipeline_blobs5000");
     group.sample_size(10); // Criterion minimum; eigenproblem is slow so we keep it at the floor
     group.bench_function("blobs5000_solver", |b| {
-        b.iter(|| solve_eigenproblem_pub(black_box(&laplacian), black_box(2), black_box(seed)));
+        b.iter(|| {
+            solve_eigenproblem_pub(
+                black_box(&laplacian),
+                black_box(2),
+                black_box(seed),
+                ComputeMode::RustNative,
+            )
+        });
     });
     group.finish();
 }

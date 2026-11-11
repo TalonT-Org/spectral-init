@@ -47,55 +47,46 @@ fn run_comp_c_test(dataset: &str, expected_n_components: usize) {
 // ── Per-dataset tests ─────────────────────────────────────────────────────────
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
 fn comp_c_components_matches_python_blobs_50() {
     run_comp_c_test("blobs_50", 3);
 }
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
 fn comp_c_components_matches_python_blobs_500() {
     run_comp_c_test("blobs_500", 4);
 }
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
 fn comp_c_components_matches_python_blobs_5000() {
     run_comp_c_test("blobs_5000", 2);
 }
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
 fn comp_c_components_matches_python_blobs_connected_200() {
     run_comp_c_test("blobs_connected_200", 1);
 }
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
 fn comp_c_components_matches_python_blobs_connected_2000() {
     run_comp_c_test("blobs_connected_2000", 1);
 }
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
 fn comp_c_components_matches_python_circles_300() {
     run_comp_c_test("circles_300", 1);
 }
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
 fn comp_c_components_matches_python_moons_200() {
     run_comp_c_test("moons_200", 1);
 }
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
 fn comp_c_components_matches_python_near_dupes_100() {
     run_comp_c_test("near_dupes_100", 1);
 }
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
 fn comp_c_components_matches_python_disconnected_200() {
     run_comp_c_test("disconnected_200", 4);
 }
@@ -103,7 +94,6 @@ fn comp_c_components_matches_python_disconnected_200() {
 // ── All-datasets sweep ────────────────────────────────────────────────────────
 
 #[test]
-#[ignore = "requires generated .npz fixtures; run: python tests/generate_fixtures.py"]
 fn comp_c_components_matches_python_all_datasets() {
     let datasets: &[(&str, usize)] = &[
         ("blobs_50", 3),

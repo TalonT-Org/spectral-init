@@ -396,7 +396,7 @@ mod tests {
         // Eigenvalue range: [0, 2] for normalized Laplacian
         for &lambda in eigenvalues.iter() {
             assert!(
-                lambda >= -1e-10 && lambda <= 2.0 + 1e-10,
+                (-1e-10..=2.0 + 1e-10).contains(&lambda),
                 "eigenvalue {lambda:.6} out of [0, 2]"
             );
         }
@@ -444,20 +444,19 @@ mod tests {
         );
 
         // Non-trivial eigenvalues of the 6-ring are 0.5 (indices 1..=n_components)
-        for i in 1..=n_components {
-            let err = (eig_slice[i] - 0.5_f64).abs();
+        for (i, &lambda) in eig_slice.iter().enumerate().skip(1) {
+            let err = (lambda - 0.5_f64).abs();
             assert!(
                 err < 1e-4,
                 "eigenvalue[{i}] = {:.8}, expected 0.5, err = {:.2e} (threshold 1e-4)",
-                eig_slice[i],
+                lambda,
                 err
             );
         }
 
         // Residual checks for non-trivial eigenpairs (index 1..=n_components)
-        for i in 1..=n_components {
+        for (i, &lambda) in eig_slice.iter().enumerate().skip(1) {
             let v = eigenvectors.column(i).to_owned();
-            let lambda = eig_slice[i];
 
             // L·v via SpMV
             let lv = &l * &v;
