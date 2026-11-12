@@ -192,14 +192,12 @@ fn assess_accuracy() {
             let metrics = vec![
                 MetricResult {
                     name: "component_count_match".into(),
-                    dimension: 0,
                     value: count_matches as u8 as f64,
                     threshold: 1.0,
                     passed: count_matches,
                 },
                 MetricResult {
                     name: "separation_ratio".into(),
-                    dimension: 0,
                     value: layout.separation_ratio,
                     threshold: 0.0,
                     passed: true,
@@ -232,56 +230,48 @@ fn assess_accuracy() {
         let metrics = vec![
             MetricResult {
                 name: "max_eigenpair_residual".into(),
-                dimension: 0,
                 value: residual,
                 threshold: resid_thr,
                 passed: residual <= resid_thr,
             },
             MetricResult {
                 name: "orthogonality_error".into(),
-                dimension: 0,
                 value: ortho,
                 threshold: ORTHO_THRESHOLD,
                 passed: ortho <= ORTHO_THRESHOLD,
             },
             MetricResult {
                 name: "eigenvalue_bounds_in_range".into(),
-                dimension: 0,
                 value: in_range as u8 as f64,
                 threshold: 1.0,
                 passed: in_range,
             },
             MetricResult {
                 name: "eigenvalue_bounds_sorted".into(),
-                dimension: 0,
                 value: sorted as u8 as f64,
                 threshold: 1.0,
                 passed: sorted,
             },
             MetricResult {
                 name: "spectral_gap".into(),
-                dimension: 0,
                 value: gap,
                 threshold: 0.0,
                 passed: true,
             },
             MetricResult {
                 name: "condition_number".into(),
-                dimension: 0,
                 value: cond,
                 threshold: 0.0,
                 passed: true,
             },
             MetricResult {
                 name: "residual_margin_factor".into(),
-                dimension: 0,
                 value: resid_margin,
                 threshold: 0.0,
                 passed: true,
             },
             MetricResult {
                 name: "ortho_margin_factor".into(),
-                dimension: 0,
                 value: ortho_margin,
                 threshold: 0.0,
                 passed: true,
@@ -360,14 +350,12 @@ fn assess_parity() {
         let mut metrics = vec![
             MetricResult {
                 name: "max_eigenvalue_abs_error".into(),
-                dimension: 0,
                 value: max_abs_err,
                 threshold: eigenvalue_err_thr,
                 passed: max_abs_err <= eigenvalue_err_thr,
             },
             MetricResult {
                 name: "sign_agnostic_max_error".into(),
-                dimension: 0,
                 value: sign_err,
                 threshold: SIGN_ERROR_THRESHOLD,
                 passed: sign_err <= SIGN_ERROR_THRESHOLD,
@@ -377,7 +365,6 @@ fn assess_parity() {
         if gram.is_finite() {
             metrics.push(MetricResult {
                 name: "subspace_gram_det".into(),
-                dimension: 0,
                 value: gram,
                 threshold: SUBSPACE_GRAM_DET_THRESHOLD,
                 passed: gram >= SUBSPACE_GRAM_DET_THRESHOLD,
@@ -385,7 +372,6 @@ fn assess_parity() {
         } else {
             metrics.push(MetricResult {
                 name: "subspace_gram_det".into(),
-                dimension: 0,
                 value: 1.0,
                 threshold: 0.0,
                 passed: true,

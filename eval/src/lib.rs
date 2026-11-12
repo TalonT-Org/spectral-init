@@ -32,7 +32,6 @@ pub fn results_dir() -> PathBuf {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MetricResult {
     pub name: String,
-    pub dimension: usize,
     pub value: f64,
     pub threshold: f64,
     pub passed: bool,
@@ -61,7 +60,6 @@ mod tests {
     fn t_serde_01_round_trip_metric_result() {
         let m = MetricResult {
             name: "test_metric".to_string(),
-            dimension: 2,
             value: 0.001,
             threshold: 0.01,
             passed: true,
@@ -69,7 +67,6 @@ mod tests {
         let json = serde_json::to_string(&m).expect("serialize MetricResult");
         let m2: MetricResult = serde_json::from_str(&json).expect("deserialize MetricResult");
         assert_eq!(m2.name, m.name);
-        assert_eq!(m2.dimension, m.dimension);
         assert_eq!(m2.value, m.value);
         assert_eq!(m2.threshold, m.threshold);
         assert_eq!(m2.passed, m.passed);
@@ -82,7 +79,6 @@ mod tests {
             n: 100,
             metrics: vec![MetricResult {
                 name: "residual".to_string(),
-                dimension: 2,
                 value: 1e-7,
                 threshold: 1e-6,
                 passed: true,
