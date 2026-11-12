@@ -4,8 +4,29 @@ use spectral_init::{ComputeMode, SpectralInitConfig, spectral_init};
 use spectral_init_eval::WORKSPACE_ROOT;
 use spectral_init_eval::fixtures::load_sparse_csr_f32_u32;
 use spectral_init_eval::internals::solve_with_unit_hint;
+use sprs::CsMatI;
 use std::path::Path;
 use std::time::Instant;
+
+/// Prints `SOLVER_LEVEL=<level>` for the Python sweep harness to parse. The level comes
+/// from the internal seam, on a Laplacian built independently of spectral_init(); the
+/// exported embedding still comes from spectral_init(), the authoritative pipeline path.
+fn print_solver_level(graph: &CsMatI<f32, u32, usize>) {
+    let (_degrees, sqrt_deg) = compute_degrees(graph.view(), ComputeMode::PythonCompat);
+    let inv_sqrt_deg: Vec<f64> = sqrt_deg
+        .iter()
+        .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
+        .collect();
+    let lap = build_normalized_laplacian(graph.view(), &inv_sqrt_deg);
+    let (_, report) = solve_with_unit_hint(
+        &lap,
+        2,
+        42,
+        ComputeMode::PythonCompat,
+        &SolverParams::default(),
+    );
+    println!("SOLVER_LEVEL={}", report.level as u8);
+}
 
 #[test]
 #[ignore = "requires MERFISH 10K subset data"]
@@ -34,23 +55,7 @@ fn export_merfish_init_10k() {
     println!("=====================================");
     println!("Graph: {} nodes", n);
 
-    // Emit solver level via the internal seam so the Python sweep harness can parse it.
-    // Builds the Laplacian independently of spectral_init(); the actual embedding below
-    // still uses spectral_init() as the authoritative pipeline path.
-    let (_degrees, sqrt_deg) = compute_degrees(graph.view(), ComputeMode::PythonCompat);
-    let inv_sqrt_deg: Vec<f64> = sqrt_deg
-        .iter()
-        .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
-        .collect();
-    let lap = build_normalized_laplacian(graph.view(), &inv_sqrt_deg);
-    let (_, report) = solve_with_unit_hint(
-        &lap,
-        2,
-        42,
-        ComputeMode::PythonCompat,
-        &SolverParams::default(),
-    );
-    println!("SOLVER_LEVEL={}", report.level as u8);
+    print_solver_level(&graph);
 
     let start = Instant::now();
     let coords = spectral_init(
@@ -115,20 +120,7 @@ fn export_merfish_init_20k() {
     println!("=====================================");
     println!("Graph: {} nodes", n);
 
-    let (_degrees, sqrt_deg) = compute_degrees(graph.view(), ComputeMode::PythonCompat);
-    let inv_sqrt_deg: Vec<f64> = sqrt_deg
-        .iter()
-        .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
-        .collect();
-    let lap = build_normalized_laplacian(graph.view(), &inv_sqrt_deg);
-    let (_, report) = solve_with_unit_hint(
-        &lap,
-        2,
-        42,
-        ComputeMode::PythonCompat,
-        &SolverParams::default(),
-    );
-    println!("SOLVER_LEVEL={}", report.level as u8);
+    print_solver_level(&graph);
 
     let start = Instant::now();
     let coords = spectral_init(
@@ -213,23 +205,7 @@ fn export_merfish_init_100k() {
     println!("======================================");
     println!("Graph: {} nodes", n);
 
-    // Emit solver level via the internal seam so the Python sweep harness can parse it.
-    // Builds the Laplacian independently of spectral_init(); the actual embedding below
-    // still uses spectral_init() as the authoritative pipeline path.
-    let (_degrees, sqrt_deg) = compute_degrees(graph.view(), ComputeMode::PythonCompat);
-    let inv_sqrt_deg: Vec<f64> = sqrt_deg
-        .iter()
-        .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
-        .collect();
-    let lap = build_normalized_laplacian(graph.view(), &inv_sqrt_deg);
-    let (_, report) = solve_with_unit_hint(
-        &lap,
-        2,
-        42,
-        ComputeMode::PythonCompat,
-        &SolverParams::default(),
-    );
-    println!("SOLVER_LEVEL={}", report.level as u8);
+    print_solver_level(&graph);
 
     let start = Instant::now();
     let coords = spectral_init(
@@ -312,20 +288,7 @@ fn export_merfish_init_250k() {
     println!("======================================");
     println!("Graph: {} nodes", n);
 
-    let (_degrees, sqrt_deg) = compute_degrees(graph.view(), ComputeMode::PythonCompat);
-    let inv_sqrt_deg: Vec<f64> = sqrt_deg
-        .iter()
-        .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
-        .collect();
-    let lap = build_normalized_laplacian(graph.view(), &inv_sqrt_deg);
-    let (_, report) = solve_with_unit_hint(
-        &lap,
-        2,
-        42,
-        ComputeMode::PythonCompat,
-        &SolverParams::default(),
-    );
-    println!("SOLVER_LEVEL={}", report.level as u8);
+    print_solver_level(&graph);
 
     let start = Instant::now();
     let coords = spectral_init(
