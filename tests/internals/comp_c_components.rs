@@ -78,23 +78,3 @@ fn comp_c_components_matches_python_near_dupes_100() {
 fn comp_c_components_matches_python_disconnected_200() {
     run_comp_c_test("disconnected_200", 4);
 }
-
-// ── All-datasets sweep ────────────────────────────────────────────────────────
-
-#[test]
-fn comp_c_components_matches_python_all_datasets() {
-    let datasets: &[(&str, usize)] = &[
-        ("blobs_50", 3),
-        ("blobs_500", 4),
-        ("blobs_5000", 2),
-        ("blobs_connected_200", 1),
-        ("blobs_connected_2000", 1),
-        ("circles_300", 1),
-        ("moons_200", 1),
-        ("near_dupes_100", 1),
-        ("disconnected_200", 4),
-    ];
-    for &(dataset, expected) in datasets {
-        run_comp_c_test(dataset, expected);
-    }
-}
