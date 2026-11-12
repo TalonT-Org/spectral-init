@@ -79,11 +79,8 @@ fn forced_dense_answers_when_every_other_level_fails() {
     assert_eq!(report.level, SolverLevel::ForcedDense);
     assert!(report.residual < params.gates.dense);
     assert!(report.level_elapsed[SolverLevel::DenseEvd as usize].is_none());
-    for level in 1..=5 {
-        assert!(
-            report.level_elapsed[level].is_some(),
-            "level {level} must have run"
-        );
+    for (level, elapsed) in report.level_elapsed.iter().enumerate().skip(1) {
+        assert!(elapsed.is_some(), "level {level} must have run");
     }
 }
 
