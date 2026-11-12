@@ -1,8 +1,8 @@
 //! Thread configuration: a sequential and a four-thread dense solve agree within a stated
 //! tolerance.
 //!
-//! The test changes faer's process-wide parallelism setting, so this binary holds exactly
-//! one test.
+//! The test changes faer's process-wide parallelism setting and leaves it changed, so
+//! this binary holds exactly one test.
 
 #[path = "common/fixtures.rs"]
 mod fixtures;
@@ -14,16 +14,6 @@ use spectral_init::{SpectralInitConfig, spectral_init};
 /// Largest coordinate difference accepted between two thread configurations, on
 /// coordinates scaled to a maximum magnitude of 10.
 const THREAD_TOLERANCE: f32 = 1e-5;
-
-/// Restores faer's global parallelism when dropped, so the setting is put back even if
-/// an assertion fails.
-struct RestoreParallelism(Par);
-
-impl Drop for RestoreParallelism {
-    fn drop(&mut self) {
-        faer::set_global_parallelism(self.0);
-    }
-}
 
 /// A connected 1500-node graph: a ring with chords of uneven weight. Large enough for
 /// faer's dense eigensolver to split its work across threads, small enough to stay on
@@ -43,8 +33,6 @@ fn chorded_ring(n: usize) -> CsMatI<f32, u32, usize> {
 
 #[test]
 fn sequential_and_parallel_dense_solves_agree() {
-    let _restore = RestoreParallelism(faer::get_global_parallelism());
-
     let graphs = [
         (
             "blobs_500",
