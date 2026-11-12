@@ -61,6 +61,13 @@ struct AccuracyReport {
     tolerance_margins: Vec<ToleranceMarginEntry>,
 }
 
+/// `worst.max(value)`, except that a NaN `value` panics: `f64::max` would drop it and let
+/// a failed computation reach the report as a perfect score.
+fn checked_max(worst: f64, value: f64, what: impl std::fmt::Display) -> f64 {
+    assert!(!value.is_nan(), "{what} is NaN");
+    worst.max(value)
+}
+
 fn extract_subgraph_local(
     graph: &sprs::CsMatI<f32, u32, usize>,
     node_indices: &[usize],
@@ -146,7 +153,9 @@ fn process_disconnected_path(dataset: &str, n_embedding_dims: usize) -> Disconne
             );
             (0..evecs.ncols())
                 .map(|d| internals::residual_spmv(&lap_c, evecs.column(d), evals[d]))
-                .fold(0.0f64, f64::max)
+                .fold(0.0f64, |worst, r| {
+                    checked_max(worst, r, format_args!("{dataset}: per-component residual"))
+                })
         })
         .collect();
 
@@ -238,10 +247,9 @@ fn process_dataset(
     let per_eigenvec_residuals: Vec<f64> = (0..eigenvectors.ncols())
         .map(|j| internals::residual_spmv(&laplacian, eigenvectors.column(j), eigenvalues[j]))
         .collect();
-    let max_residual = per_eigenvec_residuals
-        .iter()
-        .cloned()
-        .fold(0.0f64, f64::max);
+    let max_residual = per_eigenvec_residuals.iter().fold(0.0f64, |worst, &r| {
+        checked_max(worst, r, format_args!("{dataset}: eigenpair residual"))
+    });
 
     let subspace_gram_det = if k >= 3 && ref_eigenvectors.ncols() >= 3 {
         Some(diagnostics::subspace_gram_det(
@@ -282,7 +290,9 @@ fn process_dataset(
         .map(|col| {
             internals::residual_spmv(&laplacian, descaled.column(col), ref_eigenvalues[col + 1])
         })
-        .fold(0.0f64, f64::max);
+        .fold(0.0f64, |worst, r| {
+            checked_max(worst, r, format_args!("{dataset}: end-to-end residual"))
+        });
 
     let (_, rust_n_components) = find_components(graph.view());
     let component_count_matches = rust_n_components == expected_n_components;
@@ -326,7 +336,11 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
         );
         for (&got, &want) in degrees.iter().zip(ref_deg.iter()) {
             let rel_err = (got - want).abs() / want.abs().max(1.0);
-            worst_deg_rel = worst_deg_rel.max(rel_err);
+            worst_deg_rel = checked_max(
+                worst_deg_rel,
+                rel_err,
+                format_args!("{}: degree relative error", metric.dataset),
+            );
         }
     }
     margins.push(ToleranceMarginEntry {
@@ -357,7 +371,11 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
         let ref_lap = fixtures::load_sparse_csr(&base.join("comp_b_laplacian.npz"));
         for (val, (row, col)) in ref_lap.iter() {
             let rust_val = rust_lap.get(row, col).copied().unwrap_or(0.0);
-            worst_lap_iso = worst_lap_iso.max((rust_val - val).abs());
+            worst_lap_iso = checked_max(
+                worst_lap_iso,
+                (rust_val - val).abs(),
+                format_args!("{}: Laplacian error (Python degrees)", metric.dataset),
+            );
         }
     }
     margins.push(ToleranceMarginEntry {
@@ -387,7 +405,11 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
         let ref_lap = fixtures::load_sparse_csr(&base.join("comp_b_laplacian.npz"));
         for (val, (row, col)) in ref_lap.iter() {
             let rust_val = rust_lap.get(row, col).copied().unwrap_or(0.0);
-            worst_lap_chain = worst_lap_chain.max((rust_val - val).abs());
+            worst_lap_chain = checked_max(
+                worst_lap_chain,
+                (rust_val - val).abs(),
+                format_args!("{}: Laplacian error (Rust degrees)", metric.dataset),
+            );
         }
     }
     margins.push(ToleranceMarginEntry {
@@ -408,8 +430,9 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
         .filter(|m| m.is_connected)
         .filter(|m| m.n < 2000)
         .flat_map(|m| m.eigenvalue_abs_errors.iter())
-        .cloned()
-        .fold(0.0f64, f64::max);
+        .fold(0.0f64, |worst, &e| {
+            checked_max(worst, e, "dense EVD eigenvalue error")
+        });
     margins.push(ToleranceMarginEntry {
         component: "comp_d eigenvalues, Dense EVD (n<2000)".to_string(),
         tolerance: 1e-9,
@@ -427,8 +450,9 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
         .filter(|m| m.is_connected)
         .filter(|m| m.n >= 2000)
         .flat_map(|m| m.eigenvalue_abs_errors.iter())
-        .cloned()
-        .fold(0.0f64, f64::max);
+        .fold(0.0f64, |worst, &e| {
+            checked_max(worst, e, "LOBPCG eigenvalue error")
+        });
     margins.push(ToleranceMarginEntry {
         component: "comp_d eigenvalues, LOBPCG (n>=2000)".to_string(),
         tolerance: 1e-6,
@@ -447,7 +471,9 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
         .filter(|m| m.is_connected)
         .filter(|m| m.n < 2000)
         .map(|m| m.max_residual)
-        .fold(0.0f64, f64::max);
+        .fold(0.0f64, |worst, r| {
+            checked_max(worst, r, "dense EVD residual")
+        });
     margins.push(ToleranceMarginEntry {
         component: "comp_d residuals, Dense EVD (n<2000)".to_string(),
         tolerance: 1e-10,
@@ -465,7 +491,9 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
         .filter(|m| m.is_connected)
         .filter(|m| m.n >= 2000)
         .map(|m| m.max_residual)
-        .fold(0.0f64, f64::max);
+        .fold(0.0f64, |worst, r| {
+            checked_max(worst, r, "LOBPCG/rSVD residual")
+        });
     margins.push(ToleranceMarginEntry {
         component: "comp_d residuals, LOBPCG/rSVD (n>=2000)".to_string(),
         tolerance: 1e-4,
@@ -482,7 +510,9 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
     let worst_e2e = all_metrics
         .iter()
         .filter_map(|m| m.e2e_max_residual)
-        .fold(0.0f64, f64::max);
+        .fold(0.0f64, |worst, r| {
+            checked_max(worst, r, "end-to-end residual")
+        });
     margins.push(ToleranceMarginEntry {
         component: "E2E residuals (connected, post-noise)".to_string(),
         tolerance: 5e-3,
@@ -499,7 +529,9 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
     let worst_pn_isolated = all_metrics
         .iter()
         .map(|m| m.pre_noise_isolated_err)
-        .fold(0.0f64, f64::max);
+        .fold(0.0f64, |worst, e| {
+            checked_max(worst, e, "pre-noise error (Python eigenvectors)")
+        });
     let f32_eps = f32::EPSILON as f64;
     margins.push(ToleranceMarginEntry {
         component: "comp_f pre_noise scaling (isolated: Python eigvecs)".to_string(),
@@ -518,7 +550,9 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
     let worst_pn_chained = all_metrics
         .iter()
         .map(|m| m.pre_noise_max_err)
-        .fold(0.0f64, f64::max);
+        .fold(0.0f64, |worst, e| {
+            checked_max(worst, e, "pre-noise error (Rust eigenvectors)")
+        });
     margins.push(ToleranceMarginEntry {
         component: "comp_f pre_noise scaling (chained: Rust eigvecs)".to_string(),
         tolerance: 5e-3,
@@ -544,7 +578,9 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
                 .filter(|&(_, &sz)| sz < 2000)
                 .map(|(&r, _)| r)
         })
-        .fold(0.0f64, f64::max);
+        .fold(0.0f64, |worst, r| {
+            checked_max(worst, r, "per-component dense EVD residual")
+        });
     margins.push(ToleranceMarginEntry {
         component: "per-comp residuals, Dense EVD (comp size < 2000)".to_string(),
         tolerance: 1e-6,
@@ -568,7 +604,9 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
                 .filter(|&(_, &sz)| sz >= 2000)
                 .map(|(&r, _)| r)
         })
-        .fold(0.0f64, f64::max);
+        .fold(0.0f64, |worst, r| {
+            checked_max(worst, r, "per-component LOBPCG residual")
+        });
     margins.push(ToleranceMarginEntry {
         component: "per-comp residuals, LOBPCG (comp size >= 2000)".to_string(),
         tolerance: 1e-4,
@@ -720,11 +758,13 @@ fn to_markdown(report: &AccuracyReport) -> String {
     out.push_str("|---------|------------|-------------------|------------------|------------|\n");
     for m in report.datasets.iter().filter(|m| !m.is_connected) {
         let dp = m.disconnected_path.as_ref().unwrap();
-        let max_comp_res = dp
-            .per_comp_max_residual
-            .iter()
-            .cloned()
-            .fold(0.0f64, f64::max);
+        let max_comp_res = dp.per_comp_max_residual.iter().fold(0.0f64, |worst, &r| {
+            checked_max(
+                worst,
+                r,
+                format_args!("{}: per-component residual", m.dataset),
+            )
+        });
         out.push_str(&format!(
             "| {} | {} | {:.2e} | {:.4} | {} |\n",
             m.dataset, dp.n_components, max_comp_res, dp.separation_ratio, dp.e2e_output_is_finite,
