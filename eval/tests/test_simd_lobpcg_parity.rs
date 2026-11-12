@@ -5,6 +5,7 @@ use spectral_init::ComputeMode;
 use spectral_init_eval::diagnostics::{
     DEGENERATE_GAP_THRESHOLD, sign_agnostic_max_error, subspace_gram_det_kd,
 };
+use spectral_init_eval::fixtures::epsilon_bridge_laplacian;
 use spectral_init_eval::internals::solve_with_unit_hint;
 use sprs::CsMatI;
 
@@ -27,64 +28,6 @@ fn results_dir() -> std::path::PathBuf {
     let p = spectral_init_eval::results_dir();
     std::fs::create_dir_all(&p).expect("results dir");
     p
-}
-
-fn large_epsilon_bridge_laplacian(cluster_size: usize, bridge_weight: f64) -> CsMatI<f64, usize> {
-    let cs = cluster_size;
-    let n = 2 * cs;
-    let deg_regular = (cs - 1) as f64;
-    let deg_bridge = deg_regular + bridge_weight;
-
-    // inv_sqrt_deg[i] = 1 / sqrt(degree[i])
-    let mut inv_sqrt_deg = vec![1.0 / deg_regular.sqrt(); n];
-    inv_sqrt_deg[cs - 1] = 1.0 / deg_bridge.sqrt();
-    inv_sqrt_deg[cs] = 1.0 / deg_bridge.sqrt();
-
-    let mut indptr = vec![0usize; n + 1];
-    let mut indices: Vec<usize> = Vec::new();
-    let mut data: Vec<f64> = Vec::new();
-
-    for i in 0..n {
-        // Collect all (col, weight) pairs for this row, then sort by column.
-        let mut row_entries: Vec<(usize, f64)> = Vec::new();
-        // Diagonal
-        row_entries.push((i, 1.0));
-        // Off-diagonal clique/bridge edges
-        if i < cs {
-            // First clique: connect to all other first-clique nodes
-            for j in 0..cs {
-                if j != i {
-                    let w_off = -inv_sqrt_deg[i] * inv_sqrt_deg[j];
-                    row_entries.push((j, w_off));
-                }
-            }
-            // Bridge edge: node cs-1 connects to node cs
-            if i == cs - 1 {
-                let w_bridge = -bridge_weight * inv_sqrt_deg[i] * inv_sqrt_deg[cs];
-                row_entries.push((cs, w_bridge));
-            }
-        } else {
-            // Second clique: connect to all other second-clique nodes
-            for j in cs..n {
-                if j != i {
-                    let w_off = -inv_sqrt_deg[i] * inv_sqrt_deg[j];
-                    row_entries.push((j, w_off));
-                }
-            }
-            // Bridge edge: node cs connects to node cs-1
-            if i == cs {
-                let w_bridge = -bridge_weight * inv_sqrt_deg[i] * inv_sqrt_deg[cs - 1];
-                row_entries.push((cs - 1, w_bridge));
-            }
-        }
-        row_entries.sort_unstable_by_key(|&(col, _)| col);
-        for (col, val) in row_entries {
-            indices.push(col);
-            data.push(val);
-        }
-        indptr[i + 1] = indices.len();
-    }
-    CsMatI::new((n, n), indptr, indices, data)
 }
 
 /// Compute the maximum principal angle between two column subspaces.
@@ -209,7 +152,7 @@ fn test_gap_sweep() {
     let mut records: Vec<serde_json::Value> = Vec::with_capacity(BRIDGE_WEIGHTS.len());
 
     for &w in BRIDGE_WEIGHTS.iter() {
-        let laplacian = large_epsilon_bridge_laplacian(n, w);
+        let laplacian = epsilon_bridge_laplacian(n, w);
         let rec = measure_solver_pair(&laplacian, n, w, 42);
 
         // Stdout annotation for noteworthy entries
@@ -250,7 +193,7 @@ fn test_discrete_multi_seed() {
 
     for &w in DISCRETE_WEIGHTS.iter() {
         for &seed in SEEDS.iter() {
-            let laplacian = large_epsilon_bridge_laplacian(n, w);
+            let laplacian = epsilon_bridge_laplacian(n, w);
             let mut rec = measure_solver_pair(&laplacian, n, w, seed);
             // Add the seed field required by REQ-P3-005
             rec["seed"] = serde_json::json!(seed);
@@ -276,7 +219,7 @@ fn test_solver_level_parity() {
     }
     let n = cluster_size();
     for &w in BRIDGE_WEIGHTS.iter() {
-        let laplacian = large_epsilon_bridge_laplacian(n, w);
+        let laplacian = epsilon_bridge_laplacian(n, w);
         let params = SolverParams::default();
         let ((eigenvalues_s, _), report_s) =
             solve_with_unit_hint(&laplacian, 2, 42, ComputeMode::PythonCompat, &params);

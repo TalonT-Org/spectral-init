@@ -14,9 +14,11 @@ use rand::SeedableRng;
 use rand::rngs::StdRng;
 use rand_distr::{Distribution, StandardNormal};
 use spectral_init::__internal::{CsrOperator, LinearOperator, lobpcg_solve};
-use spectral_init_eval::fixtures::{path_laplacian, path_sqrt_deg, ring_laplacian, ring_sqrt_deg};
+use spectral_init_eval::fixtures::{
+    epsilon_bridge_laplacian, epsilon_bridge_sqrt_deg, path_laplacian, path_sqrt_deg,
+    ring_laplacian, ring_sqrt_deg,
+};
 use spectral_init_eval::internals::max_operator_residual;
-use sprs::CsMatI;
 
 // ─── ndarray 0.16 ↔ 0.17 conversion helpers ──────────────────────────────────
 
@@ -40,66 +42,6 @@ fn from_nd16_array2(a: nd16::Array2<f64>) -> Array2<f64> {
     let (rows, cols) = (a.nrows(), a.ncols());
     let raw: Vec<f64> = a.iter().copied().collect();
     Array2::from_shape_vec((rows, cols), raw).expect("nd16→nd17 Array2 conversion")
-}
-
-// ─── Graph builder helpers ────────────────────────────────────────────────────
-
-/// Normalized Laplacian of epsilon-bridge graph (two K_{cs} cliques with bridge weight bw).
-fn epsilon_bridge_laplacian(cluster_size: usize, bridge_weight: f64) -> CsMatI<f64, usize> {
-    let cs = cluster_size;
-    let n = 2 * cs;
-    let deg_regular = (cs - 1) as f64;
-    let deg_bridge = deg_regular + bridge_weight;
-    let mut inv_sqrt_deg = vec![1.0 / deg_regular.sqrt(); n];
-    inv_sqrt_deg[cs - 1] = 1.0 / deg_bridge.sqrt();
-    inv_sqrt_deg[cs] = 1.0 / deg_bridge.sqrt();
-    let mut indptr = vec![0usize; n + 1];
-    let mut indices: Vec<usize> = Vec::new();
-    let mut data: Vec<f64> = Vec::new();
-    for i in 0..n {
-        let mut row_entries: Vec<(usize, f64)> = vec![(i, 1.0)];
-        if i < cs {
-            for j in 0..cs {
-                if j != i {
-                    row_entries.push((j, -inv_sqrt_deg[i] * inv_sqrt_deg[j]));
-                }
-            }
-            if i == cs - 1 {
-                row_entries.push((cs, -bridge_weight * inv_sqrt_deg[i] * inv_sqrt_deg[cs]));
-            }
-        } else {
-            for j in cs..n {
-                if j != i {
-                    row_entries.push((j, -inv_sqrt_deg[i] * inv_sqrt_deg[j]));
-                }
-            }
-            if i == cs {
-                row_entries.push((
-                    cs - 1,
-                    -bridge_weight * inv_sqrt_deg[i] * inv_sqrt_deg[cs - 1],
-                ));
-            }
-        }
-        row_entries.sort_unstable_by_key(|&(col, _)| col);
-        for (col, val) in row_entries {
-            indices.push(col);
-            data.push(val);
-        }
-        indptr[i + 1] = indices.len();
-    }
-    CsMatI::new((n, n), indptr, indices, data)
-}
-
-/// sqrt_deg for epsilon-bridge graph.
-fn epsilon_bridge_sqrt_deg(cluster_size: usize, bridge_weight: f64) -> Array1<f64> {
-    let cs = cluster_size;
-    let n = 2 * cs;
-    let deg_regular = ((cs - 1) as f64).sqrt();
-    let deg_bridge = ((cs - 1) as f64 + bridge_weight).sqrt();
-    let mut v = vec![deg_regular; n];
-    v[cs - 1] = deg_bridge;
-    v[cs] = deg_bridge;
-    Array1::from_vec(v)
 }
 
 // ─── Chebyshev filter (replicated from lobpcg.rs for single-pass baseline) ────

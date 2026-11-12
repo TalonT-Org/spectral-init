@@ -258,73 +258,6 @@ fn large_ring_laplacian(n: usize) -> CsMatI<f64, usize> {
     CsMatI::new((n, n), indptr, indices, data)
 }
 
-/// Normalized Laplacian of the epsilon-bridge graph in f64.
-/// Two complete subgraphs of size `cluster_size` connected by a single edge
-/// of weight `bridge_weight`. Total n = 2 * cluster_size.
-///
-/// Degrees:
-///   - Nodes 0..cluster_size-2: degree = cluster_size - 1
-///   - Node cluster_size-1 (first bridge node): degree = (cluster_size - 1) + bridge_weight
-///   - Node cluster_size (second bridge node):  degree = bridge_weight + (cluster_size - 1)
-///   - Nodes cluster_size+1..2*cluster_size: degree = cluster_size - 1
-fn large_epsilon_bridge_laplacian(cluster_size: usize, bridge_weight: f64) -> CsMatI<f64, usize> {
-    let cs = cluster_size;
-    let n = 2 * cs;
-    let deg_regular = (cs - 1) as f64;
-    let deg_bridge = deg_regular + bridge_weight;
-
-    // inv_sqrt_deg[i] = 1 / sqrt(degree[i])
-    let mut inv_sqrt_deg = vec![1.0 / deg_regular.sqrt(); n];
-    inv_sqrt_deg[cs - 1] = 1.0 / deg_bridge.sqrt();
-    inv_sqrt_deg[cs] = 1.0 / deg_bridge.sqrt();
-
-    let mut indptr = vec![0usize; n + 1];
-    let mut indices: Vec<usize> = Vec::new();
-    let mut data: Vec<f64> = Vec::new();
-
-    for i in 0..n {
-        // Collect all (col, weight) pairs for this row, then sort by column.
-        let mut row_entries: Vec<(usize, f64)> = Vec::new();
-        // Diagonal
-        row_entries.push((i, 1.0));
-        // Off-diagonal clique/bridge edges
-        if i < cs {
-            // First clique: connect to all other first-clique nodes
-            for j in 0..cs {
-                if j != i {
-                    let w_off = -inv_sqrt_deg[i] * inv_sqrt_deg[j];
-                    row_entries.push((j, w_off));
-                }
-            }
-            // Bridge edge: node cs-1 connects to node cs
-            if i == cs - 1 {
-                let w_bridge = -bridge_weight * inv_sqrt_deg[i] * inv_sqrt_deg[cs];
-                row_entries.push((cs, w_bridge));
-            }
-        } else {
-            // Second clique: connect to all other second-clique nodes
-            for j in cs..n {
-                if j != i {
-                    let w_off = -inv_sqrt_deg[i] * inv_sqrt_deg[j];
-                    row_entries.push((j, w_off));
-                }
-            }
-            // Bridge edge: node cs connects to node cs-1
-            if i == cs {
-                let w_bridge = -bridge_weight * inv_sqrt_deg[i] * inv_sqrt_deg[cs - 1];
-                row_entries.push((cs - 1, w_bridge));
-            }
-        }
-        row_entries.sort_unstable_by_key(|&(col, _)| col);
-        for (col, val) in row_entries {
-            indices.push(col);
-            data.push(val);
-        }
-        indptr[i + 1] = indices.len();
-    }
-    CsMatI::new((n, n), indptr, indices, data)
-}
-
 /// 6-node unnormalized path-graph Laplacian, mirroring `path_graph_laplacian_6` in
 /// `src/solvers/mod.rs` unit tests.
 ///
@@ -746,10 +679,10 @@ fn large_ring_laplacian_diagonal_is_one() {
 }
 
 #[test]
-fn large_epsilon_bridge_laplacian_shape_and_symmetry() {
+fn epsilon_bridge_laplacian_shape_and_symmetry() {
     let cs = 50;
     let bw = 1e-4_f64;
-    let lap = large_epsilon_bridge_laplacian(cs, bw);
+    let lap = fixtures::epsilon_bridge_laplacian(cs, bw);
     let n = 2 * cs;
     assert_eq!(lap.rows(), n, "epsilon-bridge Laplacian must be n×n");
     assert_eq!(lap.cols(), n, "epsilon-bridge Laplacian must be n×n");
