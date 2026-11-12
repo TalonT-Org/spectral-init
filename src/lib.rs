@@ -148,32 +148,19 @@ pub use {ndarray, sprs};
 #[cfg(feature = "__internal")]
 #[doc(hidden)]
 pub mod __internal {
-    #[doc(hidden)]
     pub use crate::components::find_components;
-    #[doc(hidden)]
     pub use crate::laplacian::{build_normalized_laplacian, compute_degrees};
-    #[doc(hidden)]
     pub use crate::multi_component::embed_disconnected;
-    #[doc(hidden)]
     pub use crate::operator::{CsrOperator, LinearOperator, spmv_csr};
     #[cfg(target_arch = "x86_64")]
-    #[doc(hidden)]
     pub use crate::operator::{CsrOperatorSimd, simd_index_fits, spmv_avx2_gather};
-    #[doc(hidden)]
     pub use crate::scaling::{normalize_signs, scale_and_add_noise, scale_coords};
-    #[doc(hidden)]
     pub use crate::selection::select_eigenvectors;
-    #[doc(hidden)]
     pub use crate::solvers::dense_evd;
-    #[doc(hidden)]
     pub use crate::solvers::lobpcg::lobpcg_solve;
-    #[doc(hidden)]
     pub use crate::solvers::quality::*;
-    #[doc(hidden)]
     pub use crate::solvers::rsvd::{rsvd_solve, rsvd_solve_accurate};
-    #[doc(hidden)]
     pub use crate::solvers::sinv::lobpcg_sinv_solve;
-    #[doc(hidden)]
     pub use crate::solvers::{
         EigenResult, QualityGates, SolveReport, SolverLevel, SolverParams, solve_eigenproblem,
     };
