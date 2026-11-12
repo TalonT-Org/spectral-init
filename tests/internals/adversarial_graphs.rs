@@ -199,7 +199,7 @@ fn make_lollipop(clique_size: u32, path_len: u32) -> CsMatI<f32, u32, usize> {
 // ─── Laplacian builder helpers (for solver-level tests) ───────────────────────
 
 /// Well-conditioned diagonal Laplacian with eigenvalues [0, 1/(n-1), 2/(n-1), ..., 1].
-/// Use for Level 0, Level 1, and Level 2 tests — LOBPCG converges trivially on this
+/// Use for the Level 1 and Level 3 (LOBPCG) tests — LOBPCG converges trivially on this
 /// input (eigengap ≈ 1/(n-1) between consecutive eigenvalues, no clustering).
 fn large_diagonal_laplacian(n: usize) -> CsMatI<f64, usize> {
     let indptr: Vec<usize> = (0..=n).collect();
@@ -540,7 +540,7 @@ fn test_level_1_lobpcg_for_large_well_conditioned_n() {
 }
 
 #[test]
-fn test_level_2_regularized_lobpcg_produces_valid_result() {
+fn test_level_3_regularized_lobpcg_produces_valid_result() {
     let laplacian = large_diagonal_laplacian(2001);
     let op = CsrOperator(&laplacian);
 
@@ -551,28 +551,28 @@ fn test_level_2_regularized_lobpcg_produces_valid_result() {
         "Level 1 (unregularized) must converge on diagonal n=2001"
     );
 
-    let r2 = lobpcg_solve(&op, 2, 42, true, &sqrt_deg);
+    let r3 = lobpcg_solve(&op, 2, 42, true, &sqrt_deg);
     assert!(
-        r2.is_some(),
-        "Level 2 (regularized) must converge on diagonal n=2001"
+        r3.is_some(),
+        "Level 3 (regularized) must converge on diagonal n=2001"
     );
-    let ((eigs, _), _) = r2.unwrap();
+    let ((eigs, _), _) = r3.unwrap();
     assert!(
         eigs.iter().all(|v| v.is_finite()),
-        "Level 2 eigenvalues must be finite"
+        "Level 3 eigenvalues must be finite"
     );
     assert!(
         eigs.iter().all(|&v| v >= -1e-6),
-        "Level 2 eigenvalues must be non-negative"
+        "Level 3 eigenvalues must be non-negative"
     );
 }
 
 #[test]
-fn test_level_3_rsvd_valid_on_large_path() {
+fn test_level_4_rsvd_valid_on_large_path() {
     // Tested directly via rsvd_solve rather than through the escalation chain:
     // in practice LOBPCG (Level 1) converges on P_n with n=2001 in the linfa-linalg
     // implementation, so there is no naturally occurring input that reliably escalates
-    // to Level 3 without constructing a synthetic adversarial operator. Direct testing
+    // to Level 4 without constructing a synthetic adversarial operator. Direct testing
     // of the rSVD solver is therefore the appropriate approach here.
     let laplacian = fixtures::path_laplacian(2001);
     let (eigs, vecs): (ndarray::Array1<f64>, ndarray::Array2<f64>) =
