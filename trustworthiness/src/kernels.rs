@@ -67,7 +67,8 @@ pub(crate) unsafe fn dist_sq_2d_avx2_batch(yi: &[f64], y_flat: &[f64], n: usize,
     );
     debug_assert!(out.len() >= n, "out must have at least n elements");
     unsafe {
-        // Broadcast query: [yi[1], yi[0], yi[1], yi[0]] — _mm256_set_pd args are (e3,e2,e1,e0)
+        // Broadcast query, lane 0 first: [yi[0], yi[1], yi[0], yi[1]] — _mm256_set_pd
+        // takes its arguments highest lane first, (e3, e2, e1, e0)
         let yi_bc = _mm256_set_pd(yi[1], yi[0], yi[1], yi[0]);
         let mut j = 0usize;
         while j + 1 < n {
