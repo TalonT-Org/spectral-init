@@ -132,7 +132,8 @@ RESULTS_DIR="$WORKTREE_PATH/.autoskillit/temp/run-experiment" \
 ```
 
 `RESULTS_DIR` must be an absolute path: the test runs with `eval/` as its working
-directory. This writes two files to `.autoskillit/temp/run-experiment/` (relative to the worktree):
+directory, so a relative path would resolve under `eval/`. The command writes two files
+to `$WORKTREE_PATH/.autoskillit/temp/run-experiment/`:
 - `accuracy_metrics.json` — machine-readable metrics with per-metric pass/fail status
 - `accuracy_metrics.md` — human-readable summary table
 
