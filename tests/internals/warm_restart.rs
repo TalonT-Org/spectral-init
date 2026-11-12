@@ -5,7 +5,9 @@
 //! chain's gates.
 
 use crate::{fixtures, internals};
-use spectral_init::__internal::{CsrOperator, LOBPCG_QUALITY_THRESHOLD, lobpcg_solve};
+use spectral_init::__internal::{
+    CsrOperator, LOBPCG_QUALITY_THRESHOLD, lobpcg_solve, lobpcg_solve_with_restarts,
+};
 
 #[test]
 fn test_path_2000_warm_restart_majority_converged() {
@@ -55,6 +57,29 @@ fn test_ring_2000_warm_restart_meets_the_level_1_gate() {
         max_res < LOBPCG_QUALITY_THRESHOLD,
         "ring_2000 seed=42 must pass the Level 1 gate ({LOBPCG_QUALITY_THRESHOLD:.0e}) after \
          its warm restarts; got max_residual={max_res:.2e}"
+    );
+}
+
+#[test]
+fn test_ring_2000_first_pass_alone_misses_the_level_1_gate() {
+    // The counterpart of the test above: with no warm restarts allowed, the same solve
+    // returns its single unconverged pass (restart_count 1), which the gate rejects.
+    let lap = fixtures::ring_laplacian(2000);
+    let sqrt_deg = fixtures::ring_sqrt_deg(2000);
+    let op = CsrOperator(&lap);
+
+    let ((eigs, vecs), restart_count) = lobpcg_solve_with_restarts(&op, 2, 42, false, &sqrt_deg, 0)
+        .expect("lobpcg_solve_with_restarts returned None for ring_2000 seed=42");
+    assert_eq!(
+        restart_count, 1,
+        "one unconverged pass must be reported as restart_count=1"
+    );
+
+    let max_res = internals::max_operator_residual(&op, &eigs, &vecs);
+    assert!(
+        max_res >= LOBPCG_QUALITY_THRESHOLD,
+        "ring_2000 seed=42 must miss the Level 1 gate ({LOBPCG_QUALITY_THRESHOLD:.0e}) \
+         without warm restarts; got max_residual={max_res:.2e}"
     );
 }
 

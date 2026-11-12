@@ -1850,8 +1850,6 @@ dependencies = [
  "criterion",
  "faer",
  "humantime",
- "linfa-linalg",
- "ndarray 0.16.1",
  "ndarray 0.17.2",
  "ndarray-npy",
  "rand 0.9.5",

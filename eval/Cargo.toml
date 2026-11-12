@@ -23,8 +23,6 @@ humantime = "2"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
-linfa-linalg = "0.2"
-ndarray16 = { package = "ndarray", version = "0.16" }
 rand_distr = "0.5"
 
 # faer is used by tests/common/diagnostics.rs, which the library includes from outside

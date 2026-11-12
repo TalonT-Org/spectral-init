@@ -157,7 +157,7 @@ pub mod __internal {
     pub use crate::scaling::{normalize_signs, scale_and_add_noise, scale_coords};
     pub use crate::selection::select_eigenvectors;
     pub use crate::solvers::dense_evd;
-    pub use crate::solvers::lobpcg::lobpcg_solve;
+    pub use crate::solvers::lobpcg::{lobpcg_solve, lobpcg_solve_with_restarts};
     pub use crate::solvers::quality::{
         DENSE_EVD_QUALITY_THRESHOLD, LOBPCG_QUALITY_THRESHOLD, RSVD_QUALITY_THRESHOLD,
         SINV_LOBPCG_QUALITY_THRESHOLD, eigenpair_residual, max_eigenpair_residual,
