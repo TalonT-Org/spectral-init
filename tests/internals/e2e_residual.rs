@@ -38,7 +38,7 @@ fn run_e2e_residual_check(dataset: &str, n: usize) {
     );
 
     // De-scale to recover approximate eigenvectors
-    let descaled = result.mapv(|v| v as f64 / expansion_val);
+    let descaled = fixtures::descale_embedding(&result, expansion_val);
 
     // Check residual for each of the 2 selected eigenvectors.
     // Output column 0 → eigenvalue[1], column 1 → eigenvalue[2] (skip trivial index 0).

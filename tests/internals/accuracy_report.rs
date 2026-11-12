@@ -285,10 +285,10 @@ fn process_dataset(
         &SpectralInitConfig::new(n_components_dim).with_seed(42),
     )
     .unwrap_or_else(|e| panic!("{dataset}: spectral_init failed: {e}"));
+    let descaled = fixtures::descale_embedding(&result, expansion_val);
     let e2e_max_residual = (0..n_components_dim)
         .map(|col| {
-            let evec: Array1<f64> = result.column(col).mapv(|v| v as f64 / expansion_val);
-            internals::residual_spmv(&laplacian, evec.view(), ref_eigenvalues[col + 1])
+            internals::residual_spmv(&laplacian, descaled.column(col), ref_eigenvalues[col + 1])
         })
         .fold(0.0f64, f64::max);
 

@@ -3,12 +3,6 @@ use spectral_init::{SpectralInitConfig, spectral_init};
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-/// Reverse the scale_and_add_noise scaling step.
-/// Returns an (n, 2) f64 array: output_f32 / expansion.
-fn descale_embedding(output: &ndarray::Array2<f32>, expansion: f64) -> ndarray::Array2<f64> {
-    output.mapv(|v| v as f64 / expansion)
-}
-
 fn vec_norm(v: ndarray::ArrayView1<f64>) -> f64 {
     v.iter().map(|x| x * x).sum::<f64>().sqrt()
 }
@@ -58,7 +52,7 @@ fn test_e2e_subspace_circles_300() {
         expansion_val.is_normal() && expansion_val > 0.0,
         "fixture expansion value must be positive and normal, got {expansion_val}"
     );
-    let descaled = descale_embedding(&result, expansion_val);
+    let descaled = fixtures::descale_embedding(&result, expansion_val);
 
     // Reference eigenvectors: columns 1 and 2 (skip trivial column 0)
     let ref_evecs: ndarray::Array2<f64> = fixtures::load_dense(
@@ -111,7 +105,7 @@ fn test_e2e_subspace_near_dupes_100() {
         expansion_val.is_normal() && expansion_val > 0.0,
         "fixture expansion value must be positive and normal, got {expansion_val}"
     );
-    let descaled = descale_embedding(&result, expansion_val);
+    let descaled = fixtures::descale_embedding(&result, expansion_val);
 
     let ref_evecs: ndarray::Array2<f64> = fixtures::load_dense(
         &fixtures::fixture_path(dataset, "comp_d_eigensolver.npz"),

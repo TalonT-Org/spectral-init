@@ -2,7 +2,7 @@
 
 #![allow(dead_code)]
 
-use ndarray::{Array, Array1, Dimension};
+use ndarray::{Array, Array1, Array2, Dimension};
 use ndarray_npy::{NpzReader, ReadNpyError, ReadNpzError, ReadableElement};
 use sprs::{CsMat, CsMatI};
 use std::path::{Path, PathBuf};
@@ -158,6 +158,12 @@ pub fn load_sparse_csr_f32_u32(path: &Path) -> CsMatI<f32, u32, usize> {
     let (rows, cols) = csr_shape(path, &shape_arr);
     CsMatI::try_new((rows, cols), indptr, indices, data)
         .unwrap_or_else(|e| panic!("fixture CSR structure invalid in {:?}: {:?}", path, e))
+}
+
+/// Reverse the scaling step of `spectral_init` output: `output / expansion` in f64, with
+/// `expansion` taken from a dataset's `comp_f_scaling.npz`.
+pub fn descale_embedding(output: &Array2<f32>, expansion: f64) -> Array2<f64> {
+    output.mapv(|v| v as f64 / expansion)
 }
 
 /// `(rows, cols)` from a scipy CSR archive's `shape` key, which must hold two entries.
