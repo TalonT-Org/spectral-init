@@ -82,6 +82,16 @@ fn t_sep_02_overlapping_clusters() {
     );
 }
 
+#[test]
+#[should_panic(expected = "contiguous")]
+fn t_sep_03_non_contiguous_labels_panic() {
+    // Labels {0, 2} leave component 1 empty.
+    let data = vec![0.0_f64, 0.0, 0.1, 0.0, 10.0, 0.0, 10.1, 0.0];
+    let embedding = Array2::from_shape_vec((4, 2), data).unwrap();
+    let labels = vec![0usize, 0, 2, 2];
+    let _ = separation_ratio(embedding.view(), &labels);
+}
+
 // ── Parity: eigenvalue_abs_errors ────────────────────────────────────────
 
 #[test]

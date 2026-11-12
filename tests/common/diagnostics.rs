@@ -53,6 +53,10 @@ pub fn check_eigenvalue_bounds(eigenvalues: &Array1<f64>, tol: f64) -> (bool, bo
 ///
 /// `labels` assigns each row of `embedding` to a component index in `0..n_components`.
 /// Returns `f64::INFINITY` when `max_intra == 0.0` (all points collapse to centroids).
+///
+/// # Panics
+/// Panics if a label in `0..n_components` has no members: its centroid would be NaN and
+/// silently drop out of the min/max, so the ratio would cover only some components.
 pub fn separation_ratio(embedding: ArrayView2<f64>, labels: &[usize]) -> f64 {
     let n = labels.len();
     assert_eq!(
@@ -70,6 +74,12 @@ pub fn separation_ratio(embedding: ArrayView2<f64>, labels: &[usize]) -> f64 {
     let mut component_members: Vec<Vec<usize>> = vec![Vec::new(); n_components];
     for (i, &label) in labels.iter().enumerate() {
         component_members[label].push(i);
+    }
+    if let Some(empty) = component_members.iter().position(Vec::is_empty) {
+        panic!(
+            "separation_ratio: labels must be contiguous over 0..{n_components}; \
+             component {empty} has no members"
+        );
     }
 
     let centroids: Vec<Vec<f64>> = component_members
