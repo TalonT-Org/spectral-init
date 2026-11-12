@@ -25,9 +25,7 @@ pub fn find_components(graph: CsMatViewI<'_, f32, u32, usize>) -> (Vec<usize>, u
 
         while let Some(node) = queue.pop_front() {
             // `node` is a row index below `n`, so the row always exists.
-            let Some(row) = graph.outer_view(node) else {
-                continue;
-            };
+            let row = graph.outer_view(node).expect("node index in bounds");
             for (neighbor, &weight) in row.iter() {
                 // Column indices of a square matrix are below `n`.
                 if weight != 0.0 && labels[neighbor] == usize::MAX {
