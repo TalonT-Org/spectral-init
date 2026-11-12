@@ -1,26 +1,13 @@
 //! No valid Laplacian makes the solver chain panic: with the dense first level switched
 //! off, every later level runs and the chain still returns `Ok` or `Err`.
 
-use crate::assertions::validate_graph;
+use crate::assertions::{property_config, validate_graph};
 use proptest::prelude::*;
-use proptest::test_runner::FileFailurePersistence;
 use spectral_init::__internal::{
     SolverParams, build_normalized_laplacian, compute_degrees, solve_eigenproblem,
 };
 use spectral_init::sprs::{CsMatI, TriMatI};
 use spectral_init::{ComputeMode, SpectralInitConfig};
-
-/// Failing cases persist to `no_panic.proptest-regressions`, next to this file.
-fn config() -> ProptestConfig {
-    ProptestConfig {
-        cases: 256,
-        max_shrink_iters: 256,
-        failure_persistence: Some(Box::new(FileFailurePersistence::WithSource(
-            "proptest-regressions",
-        ))),
-        ..Default::default()
-    }
-}
 
 /// A symmetric, positively weighted graph (self-loops allowed) and a solve request.
 #[derive(Debug, Clone)]
@@ -82,7 +69,7 @@ fn case() -> impl Strategy<Value = Case> {
 }
 
 proptest! {
-    #![proptest_config(config())]
+    #![proptest_config(property_config(256, 256))]
 
     #[test]
     fn solver_chain_never_panics(case in case()) {

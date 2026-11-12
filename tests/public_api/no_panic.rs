@@ -1,22 +1,10 @@
 //! No input makes `spectral_init` panic: every call returns `Ok` or `Err`.
 
+use crate::assertions::property_config;
 use proptest::prelude::*;
-use proptest::test_runner::FileFailurePersistence;
 use spectral_init::ndarray::Array2;
 use spectral_init::sprs::{CsMatI, TriMatI};
 use spectral_init::{ComputeMode, SpectralInitConfig, spectral_init};
-
-/// Failing cases persist to `no_panic.proptest-regressions`, next to this file.
-fn config() -> ProptestConfig {
-    ProptestConfig {
-        cases: 512,
-        max_shrink_iters: 256,
-        failure_persistence: Some(Box::new(FileFailurePersistence::WithSource(
-            "proptest-regressions",
-        ))),
-        ..Default::default()
-    }
-}
 
 /// An arbitrary input to `spectral_init`.
 #[derive(Debug, Clone)]
@@ -151,7 +139,7 @@ fn case() -> impl Strategy<Value = Case> {
 }
 
 proptest! {
-    #![proptest_config(config())]
+    #![proptest_config(property_config(512, 256))]
 
     #[test]
     fn spectral_init_never_panics(case in case()) {

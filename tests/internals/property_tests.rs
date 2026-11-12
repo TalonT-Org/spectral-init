@@ -2,22 +2,14 @@
 //!
 //! Uses proptest to verify invariants hold across random graph sizes n in [50, 200].
 
+use crate::assertions::property_config;
 use crate::{fixtures, internals};
 use proptest::prelude::*;
-use proptest::test_runner::FileFailurePersistence;
 use spectral_init::__internal::SolverParams;
 use spectral_init::{ComputeMode, SpectralInitConfig, spectral_init};
 
-/// Failing cases persist to `property_tests.proptest-regressions`, next to this file.
 fn config() -> ProptestConfig {
-    ProptestConfig {
-        cases: 256,
-        max_shrink_iters: 64,
-        failure_persistence: Some(Box::new(FileFailurePersistence::WithSource(
-            "proptest-regressions",
-        ))),
-        ..Default::default()
-    }
+    property_config(256, 64)
 }
 
 // ─── Eigenpair invariant tests ──────────────────────────────────────────────

@@ -1,8 +1,23 @@
 //! Assertion macros and helpers shared by the test binaries.
 
+use proptest::prelude::ProptestConfig;
+use proptest::test_runner::FileFailurePersistence;
 use spectral_init::ndarray::Array2;
 use spectral_init::sprs::CsMatI;
 use spectral_init::{SpectralError, SpectralInitConfig, spectral_init};
+
+/// Property-test configuration. Failing cases persist to
+/// `<test file>.proptest-regressions`, next to the file that runs the property.
+pub fn property_config(cases: u32, max_shrink_iters: u32) -> ProptestConfig {
+    ProptestConfig {
+        cases,
+        max_shrink_iters,
+        failure_persistence: Some(Box::new(FileFailurePersistence::WithSource(
+            "proptest-regressions",
+        ))),
+        ..Default::default()
+    }
+}
 
 /// Outcome of validating `graph` alone: a data argument with no rows turns "the graph is
 /// valid" into `DataShapeMismatch`, the last-but-one check, without running a solver.
