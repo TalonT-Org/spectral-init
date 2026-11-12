@@ -95,7 +95,10 @@ fn collect_component_members(labels: &[usize], n_conn_components: usize) -> Vec<
 
 /// Extracts the subgraph induced by `node_indices` from the full graph,
 /// re-indexing nodes to `0..node_indices.len()`.
-fn extract_subgraph(
+///
+/// `graph` must be in CSR storage and `node_indices` distinct, ascending and below
+/// `graph.rows()`; an index at or above it panics.
+pub fn extract_subgraph(
     graph: CsMatViewI<'_, f32, u32, usize>,
     node_indices: &[usize],
 ) -> CsMatI<f32, u32, usize> {

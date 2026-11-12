@@ -150,7 +150,7 @@ pub use {ndarray, sprs};
 pub mod __internal {
     pub use crate::components::find_components;
     pub use crate::laplacian::{build_normalized_laplacian, compute_degrees};
-    pub use crate::multi_component::embed_disconnected;
+    pub use crate::multi_component::{embed_disconnected, extract_subgraph};
     pub use crate::operator::{CsrOperator, LinearOperator, spmv_csr};
     #[cfg(target_arch = "x86_64")]
     pub use crate::operator::{CsrOperatorSimd, simd_index_fits, spmv_avx2_gather};

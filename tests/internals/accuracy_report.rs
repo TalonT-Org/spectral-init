@@ -1,8 +1,8 @@
 use crate::{diagnostics, fixtures, internals};
 use ndarray::{Array1, Array2, s};
 use spectral_init::__internal::{
-    SolverParams, build_normalized_laplacian, compute_degrees, embed_disconnected, find_components,
-    scale_coords, select_eigenvectors,
+    SolverParams, build_normalized_laplacian, compute_degrees, embed_disconnected,
+    extract_subgraph, find_components, scale_coords, select_eigenvectors,
 };
 use spectral_init::{ComputeMode, SpectralInitConfig, spectral_init};
 use std::path::Path;
@@ -68,34 +68,6 @@ fn checked_max(worst: f64, value: f64, what: impl std::fmt::Display) -> f64 {
     worst.max(value)
 }
 
-fn extract_subgraph_local(
-    graph: &sprs::CsMatI<f32, u32, usize>,
-    node_indices: &[usize],
-) -> sprs::CsMatI<f32, u32, usize> {
-    let n_global = graph.rows();
-    let n_comp = node_indices.len();
-    let mut lookup = vec![usize::MAX; n_global];
-    for (local, &orig) in node_indices.iter().enumerate() {
-        lookup[orig] = local;
-    }
-    let mut indptr = vec![0usize; n_comp + 1];
-    let mut indices: Vec<u32> = Vec::new();
-    let mut data: Vec<f32> = Vec::new();
-    for (local_row, &orig_row) in node_indices.iter().enumerate() {
-        if let Some(row_vec) = graph.outer_view(orig_row) {
-            for (orig_col, &weight) in row_vec.iter() {
-                if lookup[orig_col] != usize::MAX {
-                    indices
-                        .push(u32::try_from(lookup[orig_col]).expect("local index overflows u32"));
-                    data.push(weight);
-                }
-            }
-        }
-        indptr[local_row + 1] = indices.len();
-    }
-    sprs::CsMatI::<f32, u32, usize>::new((n_comp, n_comp), indptr, indices, data)
-}
-
 fn process_disconnected_path(dataset: &str, n_embedding_dims: usize) -> DisconnectedPathMetrics {
     let base = fixtures::fixture_path(dataset, "");
 
@@ -136,7 +108,7 @@ fn process_disconnected_path(dataset: &str, n_embedding_dims: usize) -> Disconne
             if n_c < 2 * n_embedding_dims {
                 return 0.0;
             }
-            let sub_graph = extract_subgraph_local(&graph, members);
+            let sub_graph = extract_subgraph(graph.view(), members);
             let (_, sqrt_deg_c) = compute_degrees(sub_graph.view(), ComputeMode::PythonCompat);
             let inv_sqrt_c: Vec<f64> = sqrt_deg_c
                 .iter()
