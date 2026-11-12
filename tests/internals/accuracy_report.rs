@@ -328,6 +328,12 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
         let (degrees, _) = compute_degrees(graph.view(), ComputeMode::PythonCompat);
         let ref_deg: Array1<f64> =
             fixtures::load_dense(&base.join("comp_a_degrees.npz"), "degrees");
+        assert_eq!(
+            degrees.len(),
+            ref_deg.len(),
+            "{}: degree vector length",
+            metric.dataset
+        );
         for (&got, &want) in degrees.iter().zip(ref_deg.iter()) {
             let rel_err = (got - want).abs() / want.abs().max(1.0);
             worst_deg_rel = worst_deg_rel.max(rel_err);
