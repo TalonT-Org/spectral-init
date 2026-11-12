@@ -39,15 +39,6 @@ fn run_sinv_test(dataset: &str) {
     let laplacian = fixtures::load_sparse_csr(&lap_path);
     let n = laplacian.rows();
 
-    // Skip if graph is too small for sinv (k >= n would trigger the None guard).
-    if n <= N_COMPONENTS + 1 {
-        eprintln!(
-            "SKIP: {dataset} n={n} <= N_COMPONENTS+1={}",
-            N_COMPONENTS + 1
-        );
-        return;
-    }
-
     // Load sqrt_deg for trivial eigenvector injection.
     let deg_path = fixture_dir.join("comp_a_degrees.npz");
     let sqrt_deg: Array1<f64> = fixtures::load_dense(&deg_path, "sqrt_deg");
