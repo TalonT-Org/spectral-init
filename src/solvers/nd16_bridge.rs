@@ -89,11 +89,19 @@ where
     );
     match result {
         Ok(r) => LobpcgOutcome::Converged(eigenpairs(r.eigvals, r.eigvecs)),
-        Err((_, Some(r))) => LobpcgOutcome::Partial {
-            eigenpairs: eigenpairs(r.eigvals, r.eigvecs),
-            rnorm: r.rnorm,
-        },
-        Err((_, None)) => LobpcgOutcome::Failed,
+        Err((e, Some(r))) => {
+            log::debug!(
+                "[spectral] LOBPCG stopped on a numerical error ({e}); keeping the best iterate"
+            );
+            LobpcgOutcome::Partial {
+                eigenpairs: eigenpairs(r.eigvals, r.eigvecs),
+                rnorm: r.rnorm,
+            }
+        }
+        Err((e, None)) => {
+            log::debug!("[spectral] LOBPCG failed without an iterate ({e})");
+            LobpcgOutcome::Failed
+        }
     }
 }
 
