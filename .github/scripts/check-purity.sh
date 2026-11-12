@@ -19,14 +19,20 @@ status=0
 forbid() {
     local description="$1" pattern="$2"
     shift 2
-    local path hits file
+    local path hits file grep_status=0
     for path in "$@" ${allowed:-}; do
         if [ ! -e "$path" ]; then
             echo "error: ${path} does not exist" >&2
             exit 2
         fi
     done
-    hits="$(grep -rnHE --include="${include:-*.rs}" -e "$pattern" "$@" || true)"
+    # grep exits 1 for "no match" and 2 for an error (bad pattern, unreadable file),
+    # which must not pass as "no match".
+    hits="$(grep -rnHE --include="${include:-*.rs}" -e "$pattern" "$@")" || grep_status=$?
+    if [ "$grep_status" -gt 1 ]; then
+        echo "error: grep failed with status ${grep_status} while checking: ${description}" >&2
+        exit 2
+    fi
     for file in ${allowed:-}; do
         hits="$(grep -v "^${file}:" <<< "$hits" || true)"
     done
