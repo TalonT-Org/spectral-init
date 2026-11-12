@@ -7,7 +7,7 @@ umap-learn uses by default — the spectral layout of the fuzzy graph — from t
 
 `spectral-init` does not depend on `umap-rs`. This guide is written against `umap-rs`
 0.4.5, and every Rust snippet in it is compiled by this crate's test suite. A runnable
-program is in [`examples/umap_rs.rs`](https://github.com/TalonT-Org/spectral-init/blob/main/examples/umap_rs.rs).
+program is in [`examples/umap_rs.rs`](../examples/umap_rs.rs).
 
 ## Dependencies
 
