@@ -2,7 +2,7 @@ use crate::{diagnostics, fixtures, internals};
 use ndarray::{Array1, Array2, s};
 use spectral_init::__internal::{
     SolverParams, build_normalized_laplacian, compute_degrees, embed_disconnected, find_components,
-    select_eigenvectors,
+    scale_coords, select_eigenvectors,
 };
 use spectral_init::{ComputeMode, SpectralInitConfig, spectral_init};
 use std::path::Path;
@@ -62,15 +62,6 @@ struct AccuracyReport {
     generated_at: String,
     datasets: Vec<DatasetMetrics>,
     tolerance_margins: Vec<ToleranceMarginEntry>,
-}
-
-fn compute_rust_pre_noise(selected: &Array2<f64>) -> Array2<f32> {
-    let max_abs = selected.iter().map(|x| x.abs()).fold(0.0f64, f64::max);
-    if max_abs == 0.0 {
-        return Array2::<f32>::zeros(selected.raw_dim());
-    }
-    let expansion = 10.0 / max_abs;
-    selected.mapv(|v| (v * expansion) as f32)
 }
 
 fn extract_subgraph_local(
@@ -276,13 +267,14 @@ fn process_dataset(
         &eigenvectors,
         n_components_dim,
     );
-    let rust_pre_noise = compute_rust_pre_noise(&selected);
+    let rust_pre_noise = scale_coords(&selected, 10.0).expect("scale_coords failed");
     let pn_max_err = diagnostics::sign_agnostic_max_error(&rust_pre_noise, &ref_pre_noise);
 
     // Isolated scaling test: feed Python's comp_e embedding into Rust's scaler
     let ref_e_embedding: Array2<f64> =
         fixtures::load_dense(&base.join("comp_e_selection.npz"), "embedding");
-    let rust_pre_noise_isolated = compute_rust_pre_noise(&ref_e_embedding);
+    let rust_pre_noise_isolated =
+        scale_coords(&ref_e_embedding, 10.0).expect("scale_coords failed");
     let pn_isolated_err =
         diagnostics::sign_agnostic_max_error(&rust_pre_noise_isolated, &ref_pre_noise);
 
