@@ -2,6 +2,11 @@
 
 Each dated directory holds one experiment: its plan, scripts, data and report.
 
+`reports/` is not an experiment. It holds the documents that belong to no single
+dated directory: the implementation report of the algorithm, the MERFISH
+benchmark plan and report, and the definitions of the benchmark metrics
+(`reports/metrics/`).
+
 ## Reproducing an experiment
 
 The scripts under `research/**/scripts` hard-code the Cargo features, binary
