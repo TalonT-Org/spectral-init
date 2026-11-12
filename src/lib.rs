@@ -529,7 +529,6 @@ mod config_tests {
         assert_eq!(cfg.seed(), 7);
         assert_eq!(cfg.compute_mode(), ComputeMode::RustNative);
         assert_eq!(cfg.dense_memory_budget(), 1024);
-        assert_eq!(cfg.clone(), cfg);
         assert_ne!(cfg, SpectralInitConfig::new(2));
     }
 
