@@ -1,10 +1,11 @@
 //! Warm-restart behaviour of the LOBPCG solver on ill-conditioned Laplacians.
 //!
-//! The restart counts asserted here are floating-point sensitive: the non-ignored tests'
-//! counts hold at the `opt-level = 2` this package's test profile uses.
+//! The restart counts and residuals reached by these chaotic iterations can move at
+//! roundoff level between platforms and builds, so the assertions here pin only the
+//! chain's gates.
 
 use crate::{fixtures, internals};
-use spectral_init::__internal::{CsrOperator, lobpcg_solve};
+use spectral_init::__internal::{CsrOperator, LOBPCG_QUALITY_THRESHOLD, lobpcg_solve};
 
 #[test]
 fn test_path_2000_warm_restart_majority_converged() {
@@ -33,43 +34,37 @@ fn test_path_2000_warm_restart_majority_converged() {
 }
 
 #[test]
-#[ignore = "FP-sensitive research expectation (3 restarts, residual 9.74e-6 against the 1e-5 \
-            gate) that the test profile does not reproduce; run with --release --run-ignored"]
-fn test_ring_2000_warm_restart_converges() {
-    // ring_2000 seed=42: single reproducible case from the research experiment
-    // where warm restart achieves full convergence (residual < 1e-5).
-    // Research evidence: restart_count=3, improvement_ratio=33.4x
-    // (residual drops from 3.25e-4 to 9.74e-6).
+fn test_ring_2000_warm_restart_meets_the_level_1_gate() {
+    // ring_2000 seed=42: the first LOBPCG pass ends at max_residual 3.25e-4, sixteen times
+    // the chain's Level 1 gate. The warm restarts bring it to 1.09e-5 (the four passes end
+    // at 3.25e-4, 1.71e-5, 1.25e-5, 1.09e-5), which the gate accepts; a solver that stopped
+    // after the first pass would be escalated to Level 2.
     let lap = fixtures::ring_laplacian(2000);
     let sqrt_deg = fixtures::ring_sqrt_deg(2000);
     let op = CsrOperator(&lap);
 
-    let result = lobpcg_solve(&op, 2, 42, false, &sqrt_deg);
+    let ((eigs, vecs), restart_count) = lobpcg_solve(&op, 2, 42, false, &sqrt_deg)
+        .expect("lobpcg_solve returned None for ring_2000 seed=42");
     assert!(
-        result.is_some(),
-        "lobpcg_solve returned None for ring_2000 seed=42"
-    );
-
-    let ((eigs, vecs), restart_count) = result.unwrap();
-    assert!(
-        restart_count >= 3,
-        "warm restart should fire 3 times on ring_2000 seed=42 (research: restart_count=3); got restart_count={restart_count}"
+        restart_count > 0,
+        "ring_2000 seed=42 must need a warm restart; got restart_count={restart_count}"
     );
 
     let max_res = internals::max_operator_residual(&op, &eigs, &vecs);
     assert!(
-        max_res < 1e-5,
-        "ring_2000 seed=42 should converge to max_residual < 1e-5; got {max_res:.2e}"
+        max_res < LOBPCG_QUALITY_THRESHOLD,
+        "ring_2000 seed=42 must pass the Level 1 gate ({LOBPCG_QUALITY_THRESHOLD:.0e}) after \
+         its warm restarts; got max_residual={max_res:.2e}"
     );
 }
 
 #[test]
 fn test_path_2000_warm_restart_fires() {
     // path_2000 is a known hard input: high condition number, small spectral gap.
-    // At opt-level=2, at least one of seeds 42/43/44 will trigger warm restart.
-    // If the restart loop were truncated to a single pass, restart_count would be 0
-    // for all seeds. (ring_2000 seed=42 firing is asserted by
-    // solver_invariants::test_inv_lobpcg_convergence_ill_conditioned.)
+    // restart_count counts every unconverged pass, including the last one, so this
+    // shows that a first pass leaves path_2000 unconverged on at least one of seeds
+    // 42/43/44. It does not show that the restarts run; the majority-converged test
+    // above and test_ring_2000_warm_restart_meets_the_level_1_gate fail without them.
     // NOTE: This assertion is FP-sensitive — LLVM FP reassociation at opt-level=2 can
     // change Gram matrix conditioning, affecting whether Cholesky triggers a restart.
     // Uses total_restarts > 0 across 3 seeds to reduce single-seed fragility.
