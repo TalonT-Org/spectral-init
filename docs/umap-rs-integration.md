@@ -182,8 +182,8 @@ As of 2026-11-11:
 Final embeddings from `umap-rs` 0.4.5 therefore say little about any initialization, and
 the evidence below does not involve an optimizer.
 
-A fork of `umap-rs` that carries both optimizer fixes and builds spectral initialization
-in is at <https://github.com/TalonT-Org/umap-rs/tree/spectral-init>.
+A fork of `umap-rs` that carries both optimizer fixes and has spectral initialization
+built in is at <https://github.com/TalonT-Org/umap-rs/tree/spectral-init>.
 
 ## Other UMAP implementations
 

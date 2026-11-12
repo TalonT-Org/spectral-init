@@ -107,7 +107,7 @@ The [integration guide](docs/umap-rs-integration.md) continues from here to the
 optimizer and lists what to know about `umap-rs`. Implementations that keep their graph
 as raw CSR arrays can lend them to `spectral_init` without copying; the guide shows how.
 
-**Built in.** A fork of `umap-rs` that builds spectral initialization in is at
+**Built in.** A fork of `umap-rs` with spectral initialization built in is at
 <https://github.com/TalonT-Org/umap-rs/tree/spectral-init>.
 
 ## Compute modes
