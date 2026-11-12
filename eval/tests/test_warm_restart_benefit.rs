@@ -7,7 +7,10 @@
 //! The no-restart baseline is production's own first pass (`lobpcg_solve_with_restarts`
 //! with no warm restarts, Rayleigh–Ritz refinement included), so `improvement_ratio` is
 //! exactly 1.00 whenever the first pass converges. A first pass that ends in a numerical
-//! error has no baseline (production restarts there) and prints NaN. The values differ
+//! error has no baseline (production restarts there) and prints NaN. When no pass yields
+//! a result, `lobpcg_solve` returns `None` (production escalates to Level 2) and the row
+//! prints `restart_count=none` with NaN residuals; whether that happens on the
+//! near-degenerate epsilon-bridge spectra varies with the platform. The values differ
 //! from `research/2026-03-22-lobpcg-warm-restart-benefit/`, whose baseline was a hand copy
 //! of the start-up code without the refinement.
 //!
@@ -43,9 +46,17 @@ fn run_warm_restart_test<O: LinearOperator>(
     // Run with multiple seeds to mitigate RNG sensitivity
     for seed in [42u64, 43, 44] {
         // ── Production path (with warm restart) ──
-        let ((eigenvalues, eigenvectors), restart_count) =
+        let Some(((eigenvalues, eigenvectors), restart_count)) =
             lobpcg_solve(op, n_components, seed, false, sqrt_deg)
-                .unwrap_or_else(|| panic!("lobpcg_solve returned None for {label} seed={seed}"));
+        else {
+            // No pass produced a result; production escalates to Level 2 here.
+            println!(
+                "METRIC graph={label} seed={seed} restart_count=none \
+                 max_residual_with_restart=NaN max_residual_no_restart=NaN \
+                 converged=false improvement_ratio=NaN"
+            );
+            continue;
+        };
 
         let max_res_wr = max_operator_residual(op, &eigenvalues, &eigenvectors);
 
