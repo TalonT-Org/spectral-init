@@ -53,6 +53,11 @@ RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps -p spectral-init
 
 # The hashes in docs/katex-header.html match the files they refer to.
 .github/scripts/check-sri.sh
+
+# Advisories, licenses and duplicate versions (cargo-deny); unused dependencies
+# (cargo-machete).
+cargo deny --workspace --config .config/deny.toml check
+cargo machete
 ```
 
 `check-package.sh` compares `cargo package --list` with `.github/package-allowlist.txt`.

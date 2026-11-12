@@ -16,6 +16,7 @@ include = [
     "/docs/umap-rs-integration.md",
     "/docs/user-guide.md",
     "/README.md",
+    "/CHANGELOG.md",
     "/LICENSE-APACHE",
     "/LICENSE-MIT",
 ]

@@ -4,7 +4,7 @@
 
 [![crates.io](https://img.shields.io/crates/v/spectral-init)](https://crates.io/crates/spectral-init)
 [![docs.rs](https://img.shields.io/docsrs/spectral-init)](https://docs.rs/spectral-init)
-[![CI](https://github.com/TalonT-Org/spectral-init/actions/workflows/test.yml/badge.svg)](https://github.com/TalonT-Org/spectral-init/actions/workflows/test.yml)
+[![CI](https://github.com/TalonT-Org/spectral-init/actions/workflows/ci.yml/badge.svg)](https://github.com/TalonT-Org/spectral-init/actions/workflows/ci.yml)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 [![MSRV: 1.88](https://img.shields.io/badge/MSRV-1.88-blue)](https://blog.rust-lang.org/2025/06/26/Rust-1.88.0/)
 

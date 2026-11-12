@@ -1,0 +1,62 @@
+# cargo-deny configuration for the workspace.
+#
+# Run with: cargo deny --workspace --config .config/deny.toml check
+
+[graph]
+all-features = true
+
+[advisories]
+ignore = [
+    # zip 6.0.0 reaches the workspace only through ndarray-npy, whose latest release
+    # (0.10.0) requires it. ndarray-npy is a dev-dependency of the library and a
+    # dependency of the unpublished `eval` and `trustworthiness` packages; it is not in
+    # the published crate's dependency tree. All four advisories concern
+    # `ZipArchive::extract` and the stream extraction API, which write archive entries
+    # to the file system. ndarray-npy only reads `.npy` members of `.npz` archives into
+    # memory, and the archives read here are this repository's own fixtures.
+    { id = "RUSTSEC-2026-0367", reason = "zip via ndarray-npy (dev/eval only): extraction to disk is not used" },
+    { id = "RUSTSEC-2026-0368", reason = "zip via ndarray-npy (dev/eval only): extraction to disk is not used" },
+    { id = "RUSTSEC-2026-0369", reason = "zip via ndarray-npy (dev/eval only): extraction to disk is not used" },
+    { id = "RUSTSEC-2026-0429", reason = "zip via ndarray-npy (dev/eval only): extraction to disk is not used" },
+    # `paste` is unmaintained; it has no known vulnerability. It is a procedural macro
+    # used at build time by gemm, which faer 0.24 depends on.
+    { id = "RUSTSEC-2024-0436", reason = "paste (unmaintained) is a build-time macro of faer's gemm dependency" },
+]
+
+[licenses]
+# Dev-dependencies are checked too: they decide what the repository may contain.
+include-dev = true
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    # umap-rs, a dev-dependency of the library.
+    "BSD-3-Clause",
+    "Unicode-3.0",
+    "Zlib",
+]
+confidence-threshold = 0.8
+
+[bans]
+multiple-versions = "deny"
+wildcards = "deny"
+# The unpublished `eval` package depends on its sibling packages by path.
+allow-wildcard-paths = true
+skip-tree = [
+    # linfa-linalg 0.2 is built on ndarray 0.16, rand 0.8 and thiserror 1, while the
+    # rest of the graph uses ndarray 0.17, rand 0.9 and thiserror 2. The library
+    # isolates it in src/solvers/nd16_bridge.rs.
+    { crate = "linfa-linalg@0.2", reason = "pins ndarray 0.16, rand 0.8 and thiserror 1" },
+    # Support crates of faer 0.24 that lag behind faer's own dependencies.
+    { crate = "nano-gemm@0.2", reason = "faer support crate on equator 0.2" },
+    { crate = "spindle@0.2", reason = "faer support crate on equator 0.4 and, through atomic-wait, windows-sys 0.42" },
+    { crate = "interpol@0.2", reason = "build-time macro of faer's private-gemm-x86, on syn 1" },
+    # The `alga` feature of sprs, which the published crate switches off; the
+    # unpublished `eval` package builds sprs with its default features.
+    { crate = "alga@0.9", reason = "optional sprs feature on approx 0.3 and num-complex 0.2" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
