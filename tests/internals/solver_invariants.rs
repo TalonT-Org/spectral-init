@@ -4,7 +4,7 @@
 
 use crate::{fixtures, internals};
 use spectral_init::__internal::{
-    CsrOperator, SolverParams, lobpcg_sinv_solve, lobpcg_solve, rsvd_solve,
+    CsrOperator, SolverLevel, SolverParams, lobpcg_sinv_solve, lobpcg_solve, rsvd_solve,
 };
 use spectral_init::{ComputeMode, SpectralInitConfig, spectral_init};
 
@@ -86,10 +86,10 @@ fn test_inv_escalation_routing_large_n() {
         ComputeMode::PythonCompat,
         &SolverParams::default(),
     );
-    let level = report.level as u8;
     assert_eq!(
-        level, 0,
-        "expected dense EVD (level 0) for n=100, got level={level}"
+        report.level,
+        SolverLevel::DenseEvd,
+        "expected dense EVD (level 0) for n=100"
     );
 
     // Forced path: a zero dense threshold routes every n away from dense → level ≥ 1.
@@ -99,10 +99,10 @@ fn test_inv_escalation_routing_large_n() {
     };
     let (_, report_forced) =
         internals::solve_with_unit_hint(&lap, 2, 42, ComputeMode::PythonCompat, &forced);
-    let level_forced = report_forced.level as u8;
     assert!(
-        level_forced >= 1,
-        "expected level ≥ 1 with dense_n_threshold=0, got {level_forced}"
+        report_forced.level > SolverLevel::DenseEvd,
+        "expected level ≥ 1 with dense_n_threshold=0, got {:?}",
+        report_forced.level
     );
 }
 

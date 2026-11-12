@@ -4,7 +4,7 @@
 
 use crate::{fixtures, internals};
 use ndarray::{Array1, Array2, Axis, s};
-use spectral_init::__internal::{CsrOperator, SolverParams, lobpcg_solve, rsvd_solve};
+use spectral_init::__internal::{CsrOperator, SolverLevel, SolverParams, lobpcg_solve, rsvd_solve};
 use spectral_init::{ComputeMode, SpectralError, SpectralInitConfig, spectral_init};
 use sprs::CsMatI;
 
@@ -518,8 +518,11 @@ fn test_level_0_dense_evd_for_small_n() {
         ComputeMode::PythonCompat,
         &SolverParams::default(),
     );
-    let level = report.level as u8;
-    assert_eq!(level, 0, "n=6 must use Level 0 dense EVD");
+    assert_eq!(
+        report.level,
+        SolverLevel::DenseEvd,
+        "n=6 must use Level 0 dense EVD"
+    );
 }
 
 #[test]
@@ -532,9 +535,9 @@ fn test_level_1_lobpcg_for_large_well_conditioned_n() {
         ComputeMode::PythonCompat,
         &SolverParams::default(),
     );
-    let level = report.level as u8;
     assert_eq!(
-        level, 1,
+        report.level,
+        SolverLevel::Lobpcg,
         "n=2001 well-conditioned diagonal must use Level 1 LOBPCG"
     );
 }
