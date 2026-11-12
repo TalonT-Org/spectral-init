@@ -1,5 +1,4 @@
 use crate::fixtures;
-use ndarray_npy::NpzReader;
 use spectral_init::__internal::find_components;
 
 /// Load comp_c_components.npz and compare Rust output against Python reference.
@@ -13,18 +12,9 @@ fn run_comp_c_test(dataset: &str, expected_n_components: usize) {
 
     // Load Python reference
     let ref_path = base.join("comp_c_components.npz");
-    let file = std::fs::File::open(&ref_path)
-        .unwrap_or_else(|e| panic!("dataset {dataset}: cannot open {ref_path:?}: {e}"));
-    let mut npz = NpzReader::new(file)
-        .unwrap_or_else(|e| panic!("dataset {dataset}: NpzReader failed for {ref_path:?}: {e}"));
-
-    let py_n: i32 = npz
-        .by_name::<ndarray::OwnedRepr<i32>, ndarray::Ix0>("n_components")
-        .unwrap_or_else(|e| panic!("dataset {dataset}: n_components key missing: {e}"))
-        .into_scalar();
-    let py_labels_arr: ndarray::Array1<i32> = npz
-        .by_name("labels")
-        .unwrap_or_else(|e| panic!("dataset {dataset}: labels key missing: {e}"));
+    let py_n: i32 =
+        fixtures::load_dense::<i32, ndarray::Ix0>(&ref_path, "n_components").into_scalar();
+    let py_labels_arr: ndarray::Array1<i32> = fixtures::load_dense(&ref_path, "labels");
     let py_labels: Vec<usize> = py_labels_arr.iter().map(|&x| x as usize).collect();
 
     assert_eq!(

@@ -1,6 +1,5 @@
 use crate::{fixtures, internals};
 use ndarray::Array1;
-use ndarray_npy::NpzReader;
 use spectral_init::__internal::lobpcg_sinv_solve;
 
 const N_COMPONENTS: usize = 2;
@@ -8,13 +7,7 @@ const N_COMPONENTS: usize = 2;
 /// Return the number of connected components stored in comp_c_components.npz.
 fn load_n_conn_components(dataset: &str) -> usize {
     let path = fixtures::fixture_path(dataset, "comp_c_components.npz");
-    let file = std::fs::File::open(&path)
-        .unwrap_or_else(|e| panic!("dataset {dataset}: cannot open {path:?}: {e}"));
-    let mut npz =
-        NpzReader::new(file).unwrap_or_else(|e| panic!("dataset {dataset}: NpzReader failed: {e}"));
-    npz.by_name::<ndarray::OwnedRepr<i32>, ndarray::Ix0>("n_components")
-        .unwrap_or_else(|e| panic!("dataset {dataset}: n_components key missing: {e}"))
-        .into_scalar() as usize
+    fixtures::load_dense::<i32, ndarray::Ix0>(&path, "n_components").into_scalar() as usize
 }
 
 /// Compute max ||L·v − λ·v|| / ||v|| over all eigenpairs.

@@ -10,15 +10,11 @@ macro_rules! rsvd_test {
             let laplacian = crate::fixtures::load_sparse_csr(&fixture_base.join("comp_b_laplacian.npz"));
 
             // Load reference eigenpairs from comp_d
-            let mut d = ndarray_npy::NpzReader::new(
-                std::fs::File::open(fixture_base.join("comp_d_eigensolver.npz")).unwrap(),
-            )
-            .unwrap();
-            let ref_eigenvalues: ndarray::Array1<f64> = d.by_name("eigenvalues").unwrap();
-            let k: i32 = d
-                .by_name::<ndarray::OwnedRepr<i32>, ndarray::Ix0>("k")
-                .unwrap()
-                .into_scalar();
+            let ref_path = fixture_base.join("comp_d_eigensolver.npz");
+            let ref_eigenvalues: ndarray::Array1<f64> =
+                crate::fixtures::load_dense(&ref_path, "eigenvalues");
+            let k: i32 =
+                crate::fixtures::load_dense::<i32, ndarray::Ix0>(&ref_path, "k").into_scalar();
             let n_components = (k as usize) - 1;
 
             // Run rSVD solver
