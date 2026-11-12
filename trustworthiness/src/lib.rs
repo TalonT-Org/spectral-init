@@ -9,7 +9,7 @@
 //! | Flag | Purpose |
 //! |------|---------|
 //! | `cli` | Builds the `trustworthiness` and `tw_profiler` binaries, which read `.npy` files. |
-//! | `profiling` | Prints per-step `[timing:<step>] <nanoseconds>` lines to stderr. |
+//! | `profiling` | Prints per-step `[timing:<step>] <nanoseconds>` lines to stderr; `tw_profiler` reports them when built with `cli` and `profiling`. |
 
 use ndarray::{ArrayView1, ArrayView2};
 use rayon::prelude::*;

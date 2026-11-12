@@ -4,7 +4,8 @@
 //!   tw_profiler --x X.npy --y Y.npy --output results.json [--k 15] [--iters 5] [--warmup 2] [--stderr-capture path]
 //!
 //! Runs the trustworthiness function multiple times (after warmup iterations) and
-//! writes structured JSON with timing statistics.
+//! writes structured JSON with timing statistics. Per-step timings (`step_timing`)
+//! need the library's `[timing:<step>]` lines: build with `--features cli,profiling`.
 
 fn main() {
     if let Err(e) = run() {

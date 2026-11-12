@@ -9,7 +9,8 @@ rust-version = "1.88"
 publish = false
 
 [features]
-# Per-step timing lines on stderr (parsed by the `tw_profiler` binary).
+# Per-step timing lines on stderr. `tw_profiler --stderr-capture` reports them as
+# `step_timing` only when built with both `cli` and `profiling`.
 profiling = []
 # Command-line binaries and `.npy` input.
 cli = ["dep:ndarray-npy", "dep:pico-args", "dep:serde_json", "dep:libc"]
