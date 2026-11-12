@@ -2,15 +2,12 @@
 //!
 //! Run with: cargo bench -p spectral-init-eval --bench simd_spmv_exp
 
-#[path = "../../tests/common/internals.rs"]
-mod internals;
-
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
-use internals::solve_with_unit_hint;
 use ndarray_npy::NpzReader;
 use spectral_init::__internal::{SolverParams, spmv_csr};
 use spectral_init::ComputeMode;
 use spectral_init_eval::WORKSPACE_ROOT;
+use spectral_init_eval::internals::solve_with_unit_hint;
 use std::hint::black_box;
 
 // ─── Ring Laplacian builder ───────────────────────────────────────────────────

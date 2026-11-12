@@ -1,14 +1,9 @@
-#[path = "../../tests/common/fixtures.rs"]
-mod fixtures;
-#[path = "../../tests/common/internals.rs"]
-mod internals;
-
-use fixtures::load_sparse_csr_f32_u32;
-use internals::solve_with_unit_hint;
 use ndarray_npy::write_npy;
 use spectral_init::__internal::{SolverParams, build_normalized_laplacian, compute_degrees};
 use spectral_init::{ComputeMode, SpectralInitConfig, spectral_init};
 use spectral_init_eval::WORKSPACE_ROOT;
+use spectral_init_eval::fixtures::load_sparse_csr_f32_u32;
+use spectral_init_eval::internals::solve_with_unit_hint;
 use std::path::Path;
 use std::time::Instant;
 

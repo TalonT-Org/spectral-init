@@ -1,14 +1,10 @@
 //! RQ3: Threshold override validation — dense EVD vs LOBPCG subspace agreement.
 
-#[path = "../../tests/common/fixtures.rs"]
-mod fixtures;
-#[path = "../../tests/common/internals.rs"]
-mod internals;
-
 use ndarray::Array2;
 use ndarray_npy::write_npy;
 use spectral_init::__internal::SolverParams;
 use spectral_init::ComputeMode;
+use spectral_init_eval::{fixtures, internals};
 
 /// Compute the maximum principal angle between two column subspaces.
 /// Returns arccos(min singular value of A^T * B) in radians.

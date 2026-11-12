@@ -1,9 +1,6 @@
-#[path = "../../tests/common/fixtures.rs"]
-mod fixtures;
-
-use fixtures::load_sparse_csr_f32_u32;
 use ndarray_npy::write_npy;
 use spectral_init::{SpectralInitConfig, spectral_init};
+use spectral_init_eval::fixtures::load_sparse_csr_f32_u32;
 use std::path::Path;
 use std::time::Instant;
 

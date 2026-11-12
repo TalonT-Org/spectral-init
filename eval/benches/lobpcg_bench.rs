@@ -25,15 +25,12 @@
 //! If absent, those groups emit `[lobpcg_bench] SKIP ...` to stderr and return
 //! immediately; the run still exits 0.
 
-#[path = "../../tests/common/internals.rs"]
-mod internals;
-
 use criterion::{Criterion, criterion_group, criterion_main};
-use internals::solve_with_unit_hint;
 use ndarray_npy::{NpzReader, ReadNpyError, ReadNpzError};
 use spectral_init::__internal::SolverParams;
 use spectral_init::ComputeMode;
 use spectral_init_eval::WORKSPACE_ROOT;
+use spectral_init_eval::internals::solve_with_unit_hint;
 use std::hint::black_box;
 use std::path::Path;
 use std::time::Duration;

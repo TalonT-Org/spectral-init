@@ -1,14 +1,11 @@
-#[path = "../../tests/common/diagnostics.rs"]
-mod diagnostics;
-#[path = "../../tests/common/internals.rs"]
-mod internals;
-
-use diagnostics::{DEGENERATE_GAP_THRESHOLD, sign_agnostic_max_error, subspace_gram_det_kd};
-use internals::solve_with_unit_hint;
 use ndarray::Array2;
 use serde_json::json;
 use spectral_init::__internal::{SolverParams, max_eigenpair_residual, normalize_signs};
 use spectral_init::ComputeMode;
+use spectral_init_eval::diagnostics::{
+    DEGENERATE_GAP_THRESHOLD, sign_agnostic_max_error, subspace_gram_det_kd,
+};
+use spectral_init_eval::internals::solve_with_unit_hint;
 use sprs::CsMatI;
 
 const SUBSPACE_ANGLE_SENSITIVITY_RAD: f64 = 1e-6;

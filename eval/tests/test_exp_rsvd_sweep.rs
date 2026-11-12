@@ -7,12 +7,8 @@
 //! Both tests emit `SWEEP_ROW,<fixture>,<n>,<p>,<k>,<residual>,<wall_time_s>,<passes>`
 //! lines to stdout for collection by the outer shell scripts.
 
-#[path = "../../tests/common/fixtures.rs"]
-mod fixtures;
-#[path = "../../tests/common/internals.rs"]
-mod internals;
-
 use spectral_init::__internal::{SolverParams, rsvd_solve, rsvd_solve_accurate};
+use spectral_init_eval::{fixtures, internals};
 
 const FIXTURES: &[&str] = &[
     "near_dupes_100",

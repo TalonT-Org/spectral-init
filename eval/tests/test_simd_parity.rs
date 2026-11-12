@@ -1,9 +1,3 @@
-#[path = "../../tests/common/fixtures.rs"]
-mod fixtures;
-#[path = "../../tests/common/internals.rs"]
-mod internals;
-
-use internals::solve_with_unit_hint;
 use ndarray::Ix1;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
@@ -15,7 +9,8 @@ use spectral_init::__internal::{SolverParams, spmv_csr};
 #[cfg(target_arch = "x86_64")]
 use spectral_init::__internal::{normalize_signs, scale_and_add_noise};
 use spectral_init::ComputeMode;
-use spectral_init_eval::results_dir;
+use spectral_init_eval::internals::solve_with_unit_hint;
+use spectral_init_eval::{fixtures, results_dir};
 
 const FIXTURES: &[&str] = &[
     "blobs_50",

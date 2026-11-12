@@ -14,18 +14,14 @@
 //!
 //! Run with --test-threads=1 for reproducible wall-time measurements.
 
-#[path = "../../tests/common/diagnostics.rs"]
-mod diagnostics;
-#[path = "../../tests/common/fixtures.rs"]
-mod fixtures;
-
-use diagnostics::{
-    orthogonality_error, sign_agnostic_max_error, spectral_gap, subspace_gram_det_kd,
-};
 use ndarray::s;
 use spectral_init::__internal::{
     RSVD_QUALITY_THRESHOLD, SolverParams, max_eigenpair_residual, rsvd_solve, rsvd_solve_accurate,
 };
+use spectral_init_eval::diagnostics::{
+    orthogonality_error, sign_agnostic_max_error, spectral_gap, subspace_gram_det_kd,
+};
+use spectral_init_eval::fixtures;
 
 const SEED: u64 = 42;
 const FIXTURES_AB: &[&str] = &["blobs_connected_2000", "blobs_5000"];

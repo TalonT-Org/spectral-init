@@ -5,22 +5,17 @@
 // graph types to determine whether the warm-restart loop in lobpcg_solve is reachable
 // and beneficial for UMAP-style Laplacians.
 
-#[path = "../../tests/common/fixtures.rs"]
-mod fixtures;
-#[path = "../../tests/common/internals.rs"]
-mod internals;
-
 extern crate ndarray16;
 use ndarray16 as nd16;
 
-use fixtures::{path_laplacian, path_sqrt_deg, ring_laplacian, ring_sqrt_deg};
-use internals::max_operator_residual;
 use linfa_linalg::lobpcg::{Order, lobpcg};
 use ndarray::{Array1, Array2};
 use rand::SeedableRng;
 use rand::rngs::StdRng;
 use rand_distr::{Distribution, StandardNormal};
 use spectral_init::__internal::{CsrOperator, LinearOperator, lobpcg_solve};
+use spectral_init_eval::fixtures::{path_laplacian, path_sqrt_deg, ring_laplacian, ring_sqrt_deg};
+use spectral_init_eval::internals::max_operator_residual;
 use sprs::CsMatI;
 
 // ─── ndarray 0.16 ↔ 0.17 conversion helpers ──────────────────────────────────
