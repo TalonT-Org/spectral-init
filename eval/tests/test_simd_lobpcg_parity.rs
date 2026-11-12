@@ -1,9 +1,8 @@
-use ndarray::Array2;
 use serde_json::json;
 use spectral_init::__internal::{SolverParams, max_eigenpair_residual, normalize_signs};
 use spectral_init::ComputeMode;
 use spectral_init_eval::diagnostics::{
-    DEGENERATE_GAP_THRESHOLD, sign_agnostic_max_error, subspace_gram_det_kd,
+    DEGENERATE_GAP_THRESHOLD, max_subspace_angle, sign_agnostic_max_error, subspace_gram_det_kd,
 };
 use spectral_init_eval::fixtures::epsilon_bridge_laplacian;
 use spectral_init_eval::internals::solve_with_unit_hint;
@@ -28,34 +27,6 @@ fn results_dir() -> std::path::PathBuf {
     let p = spectral_init_eval::results_dir();
     std::fs::create_dir_all(&p).expect("results dir");
     p
-}
-
-/// Compute the maximum principal angle between two column subspaces.
-/// Returns arccos(min singular value of A^T * B) in radians.
-fn max_subspace_angle(a: &Array2<f64>, b: &Array2<f64>) -> f64 {
-    // M = A^T * B  (k x k matrix, k=3 in our case)
-    let m = a.t().dot(b);
-    // Compute singular values via eigenvalues of M^T * M
-    let mtm = m.t().dot(&m);
-    let k = mtm.nrows();
-    let faer_mat = faer::Mat::<f64>::from_fn(k, k, |i, j| mtm[[i, j]]);
-    let evd = faer_mat
-        .self_adjoint_eigen(faer::Side::Lower)
-        .expect("eigendecomposition of small k×k matrix");
-    let s = evd.S();
-    // Singular values of M are sqrt of eigenvalues of M^T*M
-    let min_sv_sq = (0..k)
-        .map(|i| {
-            s.column_vector()
-                .iter()
-                .nth(i)
-                .copied()
-                .unwrap_or(0.0)
-                .max(0.0)
-        })
-        .fold(f64::INFINITY, f64::min);
-    let min_sv = min_sv_sq.sqrt().min(1.0); // clamp to [0, 1] for arccos
-    min_sv.acos()
 }
 
 fn dk_bound_predicted(gap: f64, n_iterations: u32, avg_nnz_per_row: usize) -> f64 {

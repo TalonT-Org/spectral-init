@@ -167,6 +167,32 @@ fn t_gramkd_02_orthogonal_subspaces_near_zero() {
     );
 }
 
+// ── Parity: max_subspace_angle ───────────────────────────────────────────
+
+#[test]
+fn t_angle_01_same_subspace_near_zero() {
+    let eye = Array2::<f64>::eye(3);
+    let angle = max_subspace_angle(&eye, &eye);
+    assert!(
+        angle < 1e-6,
+        "same subspace: angle={angle:.6e}, expected ≈ 0"
+    );
+}
+
+#[test]
+fn t_angle_02_orthogonal_subspaces_near_half_pi() {
+    // a spans {e1, e2}, b spans {e3, e4} in R^4
+    let a_data = vec![1.0_f64, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0];
+    let b_data = vec![0.0_f64, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0];
+    let a = Array2::from_shape_vec((4, 2), a_data).unwrap();
+    let b = Array2::from_shape_vec((4, 2), b_data).unwrap();
+    let angle = max_subspace_angle(&a, &b);
+    assert!(
+        (angle - std::f64::consts::FRAC_PI_2).abs() < 1e-9,
+        "orthogonal subspaces: angle={angle:.6e}, expected π/2"
+    );
+}
+
 // ── Parity: sign_agnostic_max_error ──────────────────────────────────────
 
 #[test]

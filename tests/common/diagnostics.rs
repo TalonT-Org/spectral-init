@@ -242,6 +242,24 @@ pub fn subspace_gram_det_kd(computed: ArrayView2<f64>, reference: ArrayView2<f64
     det_sq.sqrt()
 }
 
+/// Maximum principal angle between the column subspaces of `a` and `b`, in radians:
+/// `arccos(σ_min(Aᵀ·B))`. Both inputs are expected to have orthonormal columns.
+pub fn max_subspace_angle(a: &Array2<f64>, b: &Array2<f64>) -> f64 {
+    let m = a.t().dot(b);
+    // MᵀM is symmetric PSD; its eigenvalues are the squares of the singular values of M.
+    let mtm = m.t().dot(&m);
+    let k = mtm.nrows();
+    let mtm_faer = FaerMat::from_fn(k, k, |i, j| mtm[[i, j]]);
+    let eigen = SelfAdjointEigen::new(mtm_faer.as_ref(), Side::Lower)
+        .expect("max_subspace_angle: SelfAdjointEigen failed on M^T M");
+    let mut min_sv_sq = f64::INFINITY;
+    eigen
+        .S()
+        .for_each(|&x| min_sv_sq = min_sv_sq.min(x.max(0.0)));
+    // Clamp to [0, 1] for arccos.
+    min_sv_sq.sqrt().min(1.0).acos()
+}
+
 /// Sign-agnostic maximum column-wise error between `computed` and `reference`.
 ///
 /// For each column, computes `min(‖col_rust − col_ref‖∞, ‖col_rust + col_ref‖∞)`.

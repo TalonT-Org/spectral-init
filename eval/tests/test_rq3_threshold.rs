@@ -1,38 +1,10 @@
 //! RQ3: Threshold override validation — dense EVD vs LOBPCG subspace agreement.
 
-use ndarray::Array2;
 use ndarray_npy::write_npy;
 use spectral_init::__internal::SolverParams;
 use spectral_init::ComputeMode;
+use spectral_init_eval::diagnostics::max_subspace_angle;
 use spectral_init_eval::{fixtures, internals};
-
-/// Compute the maximum principal angle between two column subspaces.
-/// Returns arccos(min singular value of A^T * B) in radians.
-fn max_subspace_angle(a: &Array2<f64>, b: &Array2<f64>) -> f64 {
-    // M = A^T * B  (k x k matrix, k=3 in our case)
-    let m = a.t().dot(b);
-    // Compute singular values via eigenvalues of M^T * M
-    let mtm = m.t().dot(&m);
-    let k = mtm.nrows();
-    let faer_mat = faer::Mat::<f64>::from_fn(k, k, |i, j| mtm[[i, j]]);
-    let evd = faer_mat
-        .self_adjoint_eigen(faer::Side::Lower)
-        .expect("eigendecomposition of small k×k matrix");
-    let s = evd.S();
-    // Singular values of M are sqrt of eigenvalues of M^T*M
-    let min_sv_sq = (0..k)
-        .map(|i| {
-            s.column_vector()
-                .iter()
-                .nth(i)
-                .copied()
-                .unwrap_or(0.0)
-                .max(0.0)
-        })
-        .fold(f64::INFINITY, f64::min);
-    let min_sv = min_sv_sq.sqrt().min(1.0); // clamp to [0, 1] for arccos
-    min_sv.acos()
-}
 
 #[test]
 fn rq3_threshold_override_subspace_agreement() {
