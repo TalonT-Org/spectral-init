@@ -4,7 +4,7 @@
 # Checks that
 #   1. `cargo package --list` equals the committed allow-list,
 #   2. the .crate file is smaller than 1 MiB,
-#   3. the unpacked .crate passes its own lib, example and doc tests, and
+#   3. the unpacked .crate passes its own lib and doc tests and runs every example, and
 #   4. `cargo publish --dry-run` succeeds.
 #
 # Usage: .github/scripts/check-package.sh [extra flags for cargo package/publish]
@@ -40,7 +40,7 @@ if [ "$size" -ge "$max_bytes" ]; then
     exit 1
 fi
 
-echo "==> the unpacked .crate passes its own tests"
+echo "==> the unpacked .crate passes its own tests and runs its examples"
 # Unpack outside the repository: inside it, Cargo's workspace discovery would
 # attach the unpacked crate to the root workspace.
 workdir="$(mktemp -d)"
@@ -48,8 +48,12 @@ trap 'rm -rf "$workdir"' EXIT
 tar -xzf "$crate_file" -C "$workdir"
 (
     cd "${workdir}/${package}-${version}"
-    cargo test --locked --lib --examples
+    cargo test --locked --lib
     cargo test --locked --doc
+    # `cargo test --examples` only builds examples; running them executes their checks.
+    for example in examples/*.rs; do
+        cargo run --locked --example "$(basename "$example" .rs)"
+    done
 )
 
 echo "==> publish dry run"
