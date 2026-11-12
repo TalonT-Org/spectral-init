@@ -522,13 +522,14 @@ mod tests {
     #[test]
     fn rsvd_solve_returns_none_over_the_dense_memory_budget() {
         let l = ring_6_laplacian();
-        // n = 6, rank = 3, default oversampling 3 → a 6 × 6 sketch of 288 bytes.
+        // The dense n × k sketch of the default subspace size for rank = n_components + 1.
+        let sketch_bytes = crate::solvers::dense_bytes(l.rows(), rsvd_k_sub(l.rows(), 3, None));
         let within = SolverParams {
-            dense_memory_budget: 288,
+            dense_memory_budget: sketch_bytes,
             ..SolverParams::default()
         };
         let over = SolverParams {
-            dense_memory_budget: 287,
+            dense_memory_budget: sketch_bytes - 1,
             ..SolverParams::default()
         };
         assert!(rsvd_solve(&l, 2, 42, &within).is_some());
