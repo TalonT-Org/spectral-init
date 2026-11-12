@@ -143,8 +143,8 @@ must contain these sections:
 {What would constitute a conclusive answer to the research question}
 
 ## Metric Context
-{Which canonical metrics (from `src/solvers/quality.rs`, `tests/common/diagnostics.rs`
-and `trustworthiness/src/`) apply to this research question.
+{Which canonical metrics (from `src/solvers/quality.rs`, `tests/common/diagnostics.rs`,
+`eval/src/` and `trustworthiness/src/`) apply to this research question.
 List each metric name, quality dimension (Accuracy/Parity/Performance), and
 current threshold value. Note any gaps where no canonical metric exists.}
 ```

@@ -146,7 +146,7 @@ measurable outcome}
 | {metric1} | {unit} | {how collected} | {name in the metric sources, or "NEW"} |
 
 Canonical names must match entries in `src/solvers/quality.rs`,
-`tests/common/diagnostics.rs` or `trustworthiness/src/`. For any metric marked
+`tests/common/diagnostics.rs`, `eval/src/` or `trustworthiness/src/`. For any metric marked
 "NEW", include: formula, unit, threshold value, and a note that it must be added
 to the catalog before the experiment is finalized.
 
