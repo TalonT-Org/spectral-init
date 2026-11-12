@@ -52,10 +52,11 @@ fn run_e2e_residual_check(dataset: &str, n: usize) {
     }
 }
 
-// ── residual quality tests (7 connected datasets) ────────────────────────────
-// blobs_500 and blobs_5000 are excluded: fixture generation confirms they are
-// disconnected (4 and 2 components respectively). Their embeddings are produced
-// by embed_disconnected() and are not Laplacian eigenvectors of the full graph.
+// ── residual quality tests (the 5 connected datasets) ────────────────────────
+// blobs_50, blobs_500, blobs_5000 and disconnected_200 are excluded: fixture
+// generation confirms they are disconnected (3, 4, 2 and 4 components). Their
+// embeddings are produced by embed_disconnected() and are not Laplacian eigenvectors
+// of the full graph.
 
 #[test]
 fn test_e2e_residual_quality_blobs_connected_200() {
