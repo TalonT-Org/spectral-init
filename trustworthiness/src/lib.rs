@@ -11,7 +11,7 @@
 //! | `cli` | Builds the `trustworthiness` and `tw_profiler` binaries, which read `.npy` files. |
 //! | `profiling` | Prints per-step `[timing:<step>] <nanoseconds>` lines to stderr. |
 
-use ndarray::ArrayView2;
+use ndarray::{ArrayView1, ArrayView2};
 use rayon::prelude::*;
 use std::collections::HashSet;
 
@@ -23,6 +23,15 @@ use kernels::dist_sq_2d_avx2_batch;
 #[cfg(target_arch = "x86_64")]
 #[doc(hidden)]
 pub use kernels::dist_sq_avx2_looped;
+
+/// Squared Euclidean distance between two rows, summed in index order: the scalar
+/// path of both distance steps.
+fn dist_sq_scalar(a: ArrayView1<f64>, b: ArrayView1<f64>) -> f64 {
+    a.iter()
+        .zip(b.iter())
+        .map(|(&p, &q)| (p - q) * (p - q))
+        .sum()
+}
 
 /// Shared inner kernel for [`trustworthiness`] and [`trustworthiness_subsampled`].
 ///
@@ -69,10 +78,14 @@ pub(crate) fn trustworthiness_inner(
         && x.is_standard_layout()
         && is_x86_feature_detected!("avx2")
         && is_x86_feature_detected!("fma");
+    #[cfg(not(target_arch = "x86_64"))]
+    let use_avx2_x = false;
 
     #[cfg(target_arch = "x86_64")]
     let use_avx2_y =
         { y.ncols() == 2 && y.is_standard_layout() && is_x86_feature_detected!("avx2") };
+    #[cfg(not(target_arch = "x86_64"))]
+    let use_avx2_y = false;
 
     thread_local! {
         static COMB_DIST_X:  RefCell<Vec<f64>>   = const { RefCell::new(Vec::new()) };
@@ -110,30 +123,18 @@ pub(crate) fn trustworthiness_inner(
                 dist_x.resize(n, 0.0f64);
                 for j in 0..n {
                     let xj = x.row(j);
-                    dist_x[j] = {
+                    if use_avx2_x {
                         #[cfg(target_arch = "x86_64")]
                         {
-                            if use_avx2_x {
-                                let si = xi.as_slice().expect("x row must be contiguous");
-                                let sj = xj.as_slice().expect("x row must be contiguous");
-                                // SAFETY: use_avx2_x guarantees AVX2+FMA at run time; both
-                                // rows are slices of equal length d_x >= 10.
-                                unsafe { dist_sq_avx2_looped(si, sj) }
-                            } else {
-                                xi.iter()
-                                    .zip(xj.iter())
-                                    .map(|(&a, &b)| (a - b) * (a - b))
-                                    .sum()
-                            }
+                            let si = xi.as_slice().expect("x row must be contiguous");
+                            let sj = xj.as_slice().expect("x row must be contiguous");
+                            // SAFETY: use_avx2_x guarantees AVX2+FMA at run time; both
+                            // rows are slices of equal length d_x >= 10.
+                            dist_x[j] = unsafe { dist_sq_avx2_looped(si, sj) };
                         }
-                        #[cfg(not(target_arch = "x86_64"))]
-                        {
-                            xi.iter()
-                                .zip(xj.iter())
-                                .map(|(&a, &b)| (a - b) * (a - b))
-                                .sum()
-                        }
-                    };
+                    } else {
+                        dist_x[j] = dist_sq_scalar(xi, xj);
+                    }
                 }
 
                 #[cfg(feature = "profiling")]
@@ -174,37 +175,23 @@ pub(crate) fn trustworthiness_inner(
                         dist_y.resize(n, 0.0f64);
 
                         // Fill Y distances: AVX2 2D batch or scalar fallback.
-                        #[cfg(target_arch = "x86_64")]
                         if use_avx2_y {
-                            let y_flat = y
-                                .as_slice()
-                                .expect("y must be standard layout for AVX2 dispatch");
-                            let yi_slice = &y_flat[i * 2..(i + 1) * 2];
-                            // SAFETY: y_flat has n*d_y elements; yi_slice has 2 elements;
-                            // dist_y has n elements; use_avx2_y guarantees d_y==2,
-                            // standard_layout, and runtime AVX2.
-                            unsafe {
-                                dist_sq_2d_avx2_batch(yi_slice, y_flat, n, &mut dist_y);
+                            #[cfg(target_arch = "x86_64")]
+                            {
+                                let y_flat = y
+                                    .as_slice()
+                                    .expect("y must be standard layout for AVX2 dispatch");
+                                let yi_slice = &y_flat[i * 2..(i + 1) * 2];
+                                // SAFETY: y_flat has n*d_y elements; yi_slice has 2 elements;
+                                // dist_y has n elements; use_avx2_y guarantees d_y==2,
+                                // standard_layout, and runtime AVX2.
+                                unsafe {
+                                    dist_sq_2d_avx2_batch(yi_slice, y_flat, n, &mut dist_y);
+                                }
                             }
                         } else {
                             for j in 0..n {
-                                let yj = y.row(j);
-                                dist_y[j] = yi
-                                    .iter()
-                                    .zip(yj.iter())
-                                    .map(|(&a, &b)| (a - b) * (a - b))
-                                    .sum();
-                            }
-                        }
-                        #[cfg(not(target_arch = "x86_64"))]
-                        {
-                            for j in 0..n {
-                                let yj = y.row(j);
-                                dist_y[j] = yi
-                                    .iter()
-                                    .zip(yj.iter())
-                                    .map(|(&a, &b)| (a - b) * (a - b))
-                                    .sum();
+                                dist_y[j] = dist_sq_scalar(yi, y.row(j));
                             }
                         }
 
