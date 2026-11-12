@@ -107,27 +107,30 @@ mod tests {
         let laplacian = path_laplacian_3();
         let v = Array1::from_vec(vec![1.0_f64, 0.0, 0.0]);
         let residual = eigenpair_residual(&laplacian, &v, 0.0);
+        // L·e0 = [1, -1, 0], so the residual is exactly √2.
         assert!(
-            residual >= RSVD_QUALITY_THRESHOLD,
-            "non-eigenvector residual={residual:.2e}, expected >= RSVD_QUALITY_THRESHOLD={RSVD_QUALITY_THRESHOLD:.2e}"
+            (residual - 2.0_f64.sqrt()).abs() < 1e-12,
+            "non-eigenvector residual={residual:.6e}, expected √2"
         );
     }
 
     #[test]
     fn t_maxresid_01_returns_worst_across_two_eigenpairs() {
         let laplacian = path_laplacian_3();
-        // Trivial eigenvector at λ=0: small residual
-        let s = 1.0_f64 / 3.0_f64.sqrt();
-        // Non-eigenvector at λ=0: large residual
+        // At λ=0, e0 = [1,0,0] has residual ‖L·e0‖ = √2 and e1 = [0,1,0] has residual
+        // ‖[-1, 2, -1]‖ = √6. The worst pair goes first in one order and last in the
+        // other, so only the maximum (not the first, last, sum or mean) yields √6 in both.
         let eigenvalues = Array1::from_vec(vec![0.0_f64, 0.0_f64]);
-        let eigenvectors =
-            Array2::from_shape_vec((3, 2), vec![s, 1.0_f64, s, 0.0_f64, s, 0.0_f64]).unwrap();
-        let max_res = max_eigenpair_residual(&laplacian, &eigenvalues, &eigenvectors);
-        // The second column [1,0,0] has a large residual; max must reflect that.
-        assert!(
-            max_res >= RSVD_QUALITY_THRESHOLD,
-            "max_residual={max_res:.2e}, expected >= RSVD_QUALITY_THRESHOLD"
-        );
+        for worst_col in 0..2 {
+            let mut eigenvectors = Array2::<f64>::zeros((3, 2));
+            eigenvectors[[1, worst_col]] = 1.0;
+            eigenvectors[[0, 1 - worst_col]] = 1.0;
+            let max_res = max_eigenpair_residual(&laplacian, &eigenvalues, &eigenvectors);
+            assert!(
+                (max_res - 6.0_f64.sqrt()).abs() < 1e-12,
+                "worst pair in column {worst_col}: max_residual={max_res:.6e}, expected √6"
+            );
+        }
     }
 
     #[test]
