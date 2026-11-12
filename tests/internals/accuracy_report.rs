@@ -20,7 +20,6 @@ const DATASETS: &[(&str, usize, bool, usize)] = &[
     ("near_dupes_100", 100, true, 1),
 ];
 
-#[allow(dead_code)]
 struct DatasetMetrics {
     dataset: String,
     n: usize,
@@ -28,8 +27,6 @@ struct DatasetMetrics {
     is_connected: bool,
     solver_level: Option<u8>,
     solver_name: &'static str,
-    eigenvalues_rust: Vec<f64>,
-    eigenvalues_ref: Vec<f64>,
     eigenvalue_abs_errors: Vec<f64>,
     eigenvalue_rel_errors: Vec<f64>,
     per_eigenvec_residuals: Vec<f64>,
@@ -205,8 +202,6 @@ fn process_dataset(
             is_connected,
             solver_level: None,
             solver_name: "N/A (disconnected — use disconnected_path metrics)",
-            eigenvalues_rust: vec![],
-            eigenvalues_ref: ref_eigenvalues.to_vec(),
             eigenvalue_abs_errors: vec![],
             eigenvalue_rel_errors: vec![],
             per_eigenvec_residuals: vec![],
@@ -299,8 +294,6 @@ fn process_dataset(
         is_connected,
         solver_level: Some(solve_report.level as u8),
         solver_name: solve_report.level.name(),
-        eigenvalues_rust: eigenvalues.to_vec(),
-        eigenvalues_ref: ref_eigenvalues.to_vec(),
         eigenvalue_abs_errors,
         eigenvalue_rel_errors,
         per_eigenvec_residuals,
