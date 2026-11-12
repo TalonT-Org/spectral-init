@@ -321,10 +321,15 @@ pub fn trustworthiness_subsampled(
         return trustworthiness_inner(x, y, k, None);
     }
 
+    let query_indices = sample_query_indices(n, m, seed);
+    trustworthiness_inner(x, y, k, Some(&query_indices))
+}
+
+/// `m` distinct row indices in `[0, n)`, sampled uniformly without replacement from `seed`.
+fn sample_query_indices(n: usize, m: usize, seed: u64) -> Vec<usize> {
     use rand::SeedableRng;
     let mut rng = rand::rngs::SmallRng::seed_from_u64(seed);
-    let query_indices = rand::seq::index::sample(&mut rng, n, m).into_vec();
-    trustworthiness_inner(x, y, k, Some(&query_indices))
+    rand::seq::index::sample(&mut rng, n, m).into_vec()
 }
 
 #[cfg(test)]
@@ -716,30 +721,14 @@ mod tests {
     }
 
     #[test]
-    fn t_tws_04_different_seeds_produce_different_results() {
-        use rand::{Rng, SeedableRng};
-        let mut rng = rand::rngs::SmallRng::seed_from_u64(99);
-        let n = 100;
-        let k = 4;
-        let m = 20;
-        let x = ndarray::Array2::from_shape_fn((n, 6), |_| rng.random::<f64>());
-        let y = ndarray::Array2::from_shape_fn((n, 2), |_| rng.random::<f64>());
-
-        // First verify the sampling layer is seed-dependent, independent of
-        // the metric computation.
-        let mut rng_a = rand::rngs::SmallRng::seed_from_u64(1);
-        let indices_a = rand::seq::index::sample(&mut rng_a, n, m).into_vec();
-        let mut rng_b = rand::rngs::SmallRng::seed_from_u64(2);
-        let indices_b = rand::seq::index::sample(&mut rng_b, n, m).into_vec();
+    fn t_tws_04_different_seeds_sample_different_query_rows() {
+        // The metric value of two samples can coincide (penalty sums are integers), so
+        // the seed contract is checked on the sampled rows themselves.
         assert_ne!(
-            indices_a, indices_b,
+            sample_query_indices(100, 20, 1),
+            sample_query_indices(100, 20, 2),
             "different seeds must produce different sampled index sets"
         );
-
-        // Then verify that the metric values computed on different samples differ.
-        let a = trustworthiness_subsampled(x.view(), y.view(), k, m, 1);
-        let b = trustworthiness_subsampled(x.view(), y.view(), k, m, 2);
-        assert_ne!(a, b, "different seeds must produce different metric values");
     }
 
     #[test]
