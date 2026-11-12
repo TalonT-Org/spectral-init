@@ -293,10 +293,6 @@ pub fn lobpcg_solve<O: LinearOperator>(
 
         // Extract x_init for this iteration (moved into lobpcg; repopulated on warm restart).
         // Every path that reaches the next iteration stores a new starting block first.
-        debug_assert!(
-            x_init_opt.is_some(),
-            "x_init_opt must be set at every loop entry"
-        );
         let x_init = x_init_opt
             .take()
             .expect("x_init_opt is always set at loop entry");
