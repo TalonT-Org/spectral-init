@@ -98,6 +98,34 @@ fn sym_eig(b: &Array2<f64>) -> Option<(Vec<f64>, Array2<f64>)> {
     Some((eigenvalues, eigenvectors))
 }
 
+/// Orthonormal basis `Q` [n, k] for the dominant range of the symmetric matrix `m`.
+///
+/// Draws a seeded Gaussian sketch Ω ∈ ℝ^{n × k}, runs `nbiter` QR-stabilized power
+/// iterations (Halko-Tropp Algorithm 4.4), and returns the thin Q factor of the final
+/// sketch M Ω.
+fn power_iteration_basis(
+    m: &CsMatI<f64, usize>,
+    k: usize,
+    seed: u64,
+    nbiter: usize,
+) -> Array2<f64> {
+    let mut rng = ChaCha12Rng::seed_from_u64(seed);
+    let normal = StandardNormal;
+    let mut omega: Array2<f64> = Array2::from_shape_fn((m.rows(), k), |_| normal.sample(&mut rng));
+
+    // Each iteration squares the effective singular value decay of M,
+    // improving accuracy for clustered eigenvalues.
+    for _ in 0..nbiter {
+        let y = sparse_dense_mult(m, &omega); // Y = M Ω [n, k]
+        omega = qr_thin_q(&y); // Ω ← QR(Y).Q [n, k]
+        let z = sparse_dense_mult(m, &omega); // Z = M Ω [n, k]
+        omega = qr_thin_q(&z); // Ω ← QR(Z).Q [n, k]
+    }
+
+    let y = sparse_dense_mult(m, &omega); // Y = M Ω [n, k]
+    qr_thin_q(&y) // Q = QR(Y).Q [n, k]
+}
+
 /// Default number of QR-stabilized power-iteration passes.
 pub(crate) const DEFAULT_NBITER: usize = 2;
 
@@ -142,29 +170,11 @@ pub fn rsvd_solve(
         log::debug!("[spectral] rSVD sketch skipped ({e})");
         return None;
     }
-    let nbiter = params.rsvd_nbiter; // QR-stabilized subspace iterations (Halko-Tropp Algorithm 4.4)
-
     // ── Step A: Form M = 2I - L ──────────────────────────────────────────────
     let m = two_i_minus_laplacian(laplacian);
 
-    // ── Step B: Generate random Gaussian sketch matrix Ω ∈ ℝ^{n × k} ────────
-    let mut rng = ChaCha12Rng::seed_from_u64(seed);
-    let normal = StandardNormal;
-    let mut omega = Array2::from_shape_fn((n, k), |_| normal.sample(&mut rng));
-
-    // ── Step C: Power iteration (Algorithm 4.4) to amplify signal ────────────
-    // Each iteration squares the effective singular value decay of M,
-    // improving accuracy for clustered eigenvalues.
-    for _ in 0..nbiter {
-        let y = sparse_dense_mult(&m, &omega); // Y = M Ω [n, k]
-        omega = qr_thin_q(&y); // Ω ← QR(Y).Q [n, k]
-        let z = sparse_dense_mult(&m, &omega); // Z = M Ω [n, k]
-        omega = qr_thin_q(&z); // Ω ← QR(Z).Q [n, k]
-    }
-
-    // ── Step D: Final sketch and orthonormal basis ────────────────────────────
-    let y = sparse_dense_mult(&m, &omega); // Y = M Ω [n, k]
-    let q = qr_thin_q(&y); // Q = QR(Y).Q [n, k]
+    // ── Steps B–D: Gaussian sketch, power iteration, orthonormal basis ───────
+    let q = power_iteration_basis(&m, k, seed, params.rsvd_nbiter); // [n, k]
 
     // ── Step E: Form small projected matrix B = Q^T M Q ──────────────────────
     let mq = sparse_dense_mult(&m, &q); // M Q [n, k]
@@ -241,18 +251,7 @@ pub fn rsvd_solve_accurate(
 
     // ── Step A: Build power-iteration subspace using M = 2I − L ─────────────
     let m = two_i_minus_laplacian(laplacian);
-    let mut rng = ChaCha12Rng::seed_from_u64(seed);
-    let normal = StandardNormal;
-    let mut omega = Array2::from_shape_fn((n, k), |_| normal.sample(&mut rng));
-
-    for _ in 0..nbiter {
-        let y = sparse_dense_mult(&m, &omega);
-        omega = qr_thin_q(&y);
-        let z = sparse_dense_mult(&m, &omega);
-        omega = qr_thin_q(&z);
-    }
-    let y = sparse_dense_mult(&m, &omega);
-    let q = qr_thin_q(&y); // [n, k] orthonormal subspace basis
+    let q = power_iteration_basis(&m, k, seed, nbiter); // [n, k] orthonormal subspace basis
 
     // ── Step B: Project L directly onto subspace: B_L = Q^T L Q ─────────────
     // This avoids the λ_L = 2 − λ_M cancellation for near-zero eigenvalues.
