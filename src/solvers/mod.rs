@@ -71,6 +71,9 @@ pub enum SolverLevel {
 }
 
 impl SolverLevel {
+    /// Number of levels in the chain. `ForcedDense` must stay the last variant.
+    pub const COUNT: usize = SolverLevel::ForcedDense as usize + 1;
+
     /// Human-readable solver name.
     pub fn name(self) -> &'static str {
         match self {
@@ -179,7 +182,7 @@ pub struct SolveReport {
     /// Max eigenpair residual of the returned result.
     pub residual: f64,
     /// Wall-clock time spent in each level that ran, indexed by level number.
-    pub level_elapsed: [Option<Duration>; 6],
+    pub level_elapsed: [Option<Duration>; SolverLevel::COUNT],
 }
 
 impl SolveReport {
@@ -217,7 +220,7 @@ fn accepted(
     result: EigenResult,
     level: SolverLevel,
     residual: f64,
-    level_elapsed: [Option<Duration>; 6],
+    level_elapsed: [Option<Duration>; SolverLevel::COUNT],
 ) -> (EigenResult, SolveReport) {
     (
         enforce_psd_contract(result),
@@ -254,7 +257,7 @@ fn solve_eigenproblem_with_op<O: crate::operator::LinearOperator>(
 ) -> Result<(EigenResult, SolveReport), SpectralError> {
     let n = laplacian.rows();
     let gates = &params.gates;
-    let mut level_elapsed: [Option<Duration>; 6] = [None; 6];
+    let mut level_elapsed = [None; SolverLevel::COUNT];
 
     // Level 0: Dense EVD — exact, used for small n where O(n³) is acceptable.
     if n < params.dense_n_threshold {
@@ -786,6 +789,7 @@ mod tests {
             SolverLevel::Rsvd,
             SolverLevel::ForcedDense,
         ];
+        assert_eq!(levels.len(), SolverLevel::COUNT);
         for (expected, level) in levels.iter().enumerate() {
             assert_eq!(*level as usize, expected);
             assert!(!level.name().is_empty());
