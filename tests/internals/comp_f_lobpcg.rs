@@ -1,11 +1,12 @@
 use crate::{fixtures, internals};
 use spectral_init::__internal::{CsrOperator, lobpcg_solve};
 
-fn run_lobpcg_test(dataset: &str, _expected_n: usize, regularized: bool) {
+fn run_lobpcg_test(dataset: &str, expected_n: usize, regularized: bool) {
     let fixture_dir = fixtures::fixture_path(dataset, "");
     let lap_path = fixture_dir.join("comp_b_laplacian.npz");
 
     let laplacian = fixtures::load_sparse_csr(&lap_path);
+    assert_eq!(laplacian.rows(), expected_n, "Laplacian rows");
     let op = CsrOperator(&laplacian);
 
     let deg_path = fixture_dir.join("comp_a_degrees.npz");
