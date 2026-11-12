@@ -44,7 +44,7 @@ forbid() {
 }
 
 forbid "the library must not print or read the environment (src/)" \
-    'println!|eprintln!|dbg!|env::var|SPECTRAL_' \
+    'print(ln)?!|dbg!|env::(var|args)|io::(stdout|stderr)|SPECTRAL_' \
     src
 
 forbid "random numbers come from the named generator ChaCha12Rng, not StdRng (src/)" \
