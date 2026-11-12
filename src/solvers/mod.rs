@@ -310,12 +310,14 @@ fn solve_eigenproblem_with_op<O: crate::operator::LinearOperator>(
             "[spectral] Level 1 (LOBPCG) poor quality \
              (max_residual={quality:.2e}), escalating to Level 2"
         );
+    } else {
+        log::debug!("[spectral] Level 1 (LOBPCG) produced no result, escalating to Level 2");
     }
 
     // Level 2: Shift-and-invert LOBPCG — near-exact, handles small eigengap.
     // sprs_csc_to_faer converts the Laplacian to faer CSC and adds SINV_SHIFT to the
     // diagonal, producing M = L + εI. sp_cholesky factorizes M; if it fails (e.g. M
-    // is not SPD due to numerical degenerate edges) we skip silently to Level 3.
+    // is not SPD due to numerical degenerate edges) we escalate to Level 3.
     let started = Instant::now();
     let l2 = sinv::lobpcg_sinv_solve(laplacian, n_components, seed, sqrt_deg);
     level_elapsed[SolverLevel::SinvLobpcg as usize] = Some(started.elapsed());
@@ -336,6 +338,8 @@ fn solve_eigenproblem_with_op<O: crate::operator::LinearOperator>(
             "[spectral] Level 2 (sinv LOBPCG) poor quality \
              (max_residual={quality:.2e}), escalating to Level 3"
         );
+    } else {
+        log::debug!("[spectral] Level 2 (sinv LOBPCG) produced no result, escalating to Level 3");
     }
 
     // Level 3: LOBPCG with ε·I regularization — widens eigengap.
@@ -362,6 +366,8 @@ fn solve_eigenproblem_with_op<O: crate::operator::LinearOperator>(
             "[spectral] Level 3 (LOBPCG+reg) poor quality \
              (max_residual={quality:.2e}), escalating to Level 4"
         );
+    } else {
+        log::debug!("[spectral] Level 3 (LOBPCG+reg) produced no result, escalating to Level 4");
     }
 
     // Level 4: Randomized SVD via 2I-L trick. Produces no result when its dense sketch

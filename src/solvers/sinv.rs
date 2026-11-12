@@ -11,8 +11,7 @@
 //!
 //! **Failure mode:** Returns `None` if the sparse Cholesky factorization fails
 //! (e.g., numerically degenerate edges prevent M from being SPD despite the shift).
-//! In that case, execution falls through silently to Level 3 (LOBPCG + ε·I
-//! regularization).
+//! In that case, the chain escalates to Level 3 (LOBPCG + ε·I regularization).
 
 use faer::prelude::Solve;
 use ndarray::{Array1, Array2, ArrayView2};
