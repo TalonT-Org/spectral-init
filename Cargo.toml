@@ -9,7 +9,14 @@ readme = "README.md"
 rust-version = "1.88"
 keywords = ["umap", "spectral", "laplacian", "eigenvectors", "embedding"]
 categories = ["science", "mathematics", "algorithms"]
-include = ["/src/**", "/examples/**", "/docs/katex-header.html", "/README.md", "/LICENSE"]
+include = [
+    "/src/**",
+    "/examples/**",
+    "/docs/katex-header.html",
+    "/docs/umap-rs-integration.md",
+    "/README.md",
+    "/LICENSE",
+]
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--html-in-header", "docs/katex-header.html"]
@@ -51,6 +58,7 @@ approx = "0.5"
 serde_json = "1"
 humantime = "2"
 proptest = "1"
+umap-rs = "0.4.5"           # the integration the `umap_rs` example and test compile against
 
 [profile.dev.package."*"]
 opt-level = 2
@@ -83,3 +91,7 @@ path = "examples/compute_modes.rs"
 [[example]]
 name = "from_adjacency_list"
 path = "examples/from_adjacency_list.rs"
+
+[[example]]
+name = "umap_rs"
+path = "examples/umap_rs.rs"

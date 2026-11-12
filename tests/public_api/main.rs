@@ -13,4 +13,5 @@ mod no_panic;
 mod npz_loading;
 mod pipeline;
 mod traits;
+mod umap_rs;
 mod validation;

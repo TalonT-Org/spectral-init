@@ -494,6 +494,22 @@ fn every_fixture_graph_passes_validation() {
     assert_eq!(count, 18);
 }
 
+/// `umap-rs` symmetrizes its graph in single precision; for mix ratios other than 0, 0.5
+/// and 1 the two halves of an edge can differ by a rounding error.
+#[test]
+fn umap_rs_graphs_pass_validation_for_every_mix_ratio() {
+    for dataset in DATASETS {
+        for set_op_mix_ratio in [0.3, 0.5, 0.7, 1.0] {
+            let graph = crate::umap_rs::fuzzy_graph(dataset, set_op_mix_ratio);
+            assert_eq!(
+                validate_graph(&graph),
+                Ok(()),
+                "{dataset}, set_op_mix_ratio = {set_op_mix_ratio}"
+            );
+        }
+    }
+}
+
 #[test]
 fn a_one_part_in_a_thousand_asymmetry_fails_validation() {
     for (name, graph) in fixture_graphs() {

@@ -6,7 +6,9 @@ use ndarray::ArrayView2;
 use sprs::CsMatViewI;
 
 /// Largest relative difference between `W[i,j]` and `W[j,i]` that still counts as
-/// symmetric. Single-precision graphs built as `A + Aᵀ − A∘Aᵀ` agree to a few ULPs.
+/// symmetric. A fuzzy union `A + Aᵀ − A∘Aᵀ` evaluated in single precision can leave the
+/// two halves of an edge one rounding error apart (1.2e-7 relative); the tolerance
+/// admits a few of those.
 const SYMMETRY_REL_TOL: f64 = 1e-6;
 
 /// Validates the inputs of `spectral_init` and returns the graph as a CSR view.

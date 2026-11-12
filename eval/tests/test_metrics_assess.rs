@@ -1,39 +1,11 @@
-#[path = "../../tests/common/diagnostics.rs"]
-mod diagnostics;
-#[path = "../../tests/common/fixtures.rs"]
-mod fixtures;
-#[path = "../../tests/common/internals.rs"]
-mod internals;
-
-use diagnostics::{
-    DEGENERATE_GAP_THRESHOLD, SUBSPACE_GRAM_DET_THRESHOLD, check_eigenvalue_bounds,
-    eigenvalue_abs_errors, eigenvalue_condition_number, orthogonality_error, separation_ratio,
-    sign_agnostic_max_error, spectral_gap, subspace_gram_det_kd, tolerance_margin,
-};
-use internals::solve_with_unit_hint;
-use ndarray::s;
-use ndarray::{Array1, Array2};
 use serde_json::json;
-use spectral_init::__internal::{
-    DENSE_EVD_QUALITY_THRESHOLD, LOBPCG_QUALITY_THRESHOLD, RSVD_QUALITY_THRESHOLD,
-    SINV_LOBPCG_QUALITY_THRESHOLD, SolverLevel, SolverParams, embed_disconnected, find_components,
-    max_eigenpair_residual, select_eigenvectors,
+use spectral_init::__internal::SolverLevel;
+use spectral_init_eval::assess::{
+    DATASETS, Dataset, measure_accuracy, measure_disconnected, measure_parity, residual_threshold,
+    solve_reference_laplacian,
 };
-use spectral_init::ComputeMode;
+use spectral_init_eval::diagnostics::{SUBSPACE_GRAM_DET_THRESHOLD, tolerance_margin};
 use spectral_init_eval::{AssessmentReport, ExperimentMetrics, MetricResult, results_dir};
-
-/// (name, n, is_connected, expected_n_components)
-const DATASETS: &[(&str, usize, bool, usize)] = &[
-    ("blobs_50", 50, false, 3),
-    ("blobs_500", 500, false, 4),
-    ("blobs_5000", 5000, false, 2),
-    ("blobs_connected_200", 200, true, 1),
-    ("blobs_connected_2000", 2000, true, 1),
-    ("circles_300", 300, true, 1),
-    ("disconnected_200", 200, false, 4),
-    ("moons_200", 200, true, 1),
-    ("near_dupes_100", 100, true, 1),
-];
 
 /// Orthogonality threshold: V^T V - I must be smaller than this.
 const ORTHO_THRESHOLD: f64 = 1e-8;
@@ -46,33 +18,13 @@ const BOUNDS_TOL: f64 = f64::EPSILON * 4.0; // ~8.88e-16
 const SIGN_ERROR_THRESHOLD: f64 = 5e-3;
 
 /// Dataset filter: SPECTRAL_DATASET env var narrows to a single fixture.
-fn datasets_to_run() -> Vec<(&'static str, usize, bool, usize)> {
+fn datasets_to_run() -> Vec<Dataset> {
     let filter = std::env::var("SPECTRAL_DATASET").ok();
     DATASETS
         .iter()
-        .filter(|(name, ..)| filter.as_deref().is_none_or(|f| *name == f))
+        .filter(|dataset| filter.as_deref().is_none_or(|f| dataset.name == f))
         .copied()
         .collect()
-}
-
-/// Per-solver residual threshold.
-fn residual_threshold(level: SolverLevel) -> f64 {
-    match level {
-        SolverLevel::DenseEvd | SolverLevel::ForcedDense => DENSE_EVD_QUALITY_THRESHOLD,
-        SolverLevel::Lobpcg | SolverLevel::LobpcgRegularized => LOBPCG_QUALITY_THRESHOLD,
-        SolverLevel::SinvLobpcg => SINV_LOBPCG_QUALITY_THRESHOLD,
-        SolverLevel::Rsvd => RSVD_QUALITY_THRESHOLD,
-    }
-}
-
-/// Scale eigenvectors to pre-noise f32 (matching Python's 10/max_abs expansion).
-fn compute_pre_noise(selected: &Array2<f64>) -> Array2<f32> {
-    let max_abs = selected.iter().map(|x| x.abs()).fold(0.0f64, f64::max);
-    if max_abs == 0.0 {
-        return Array2::<f32>::zeros(selected.raw_dim());
-    }
-    let expansion = 10.0 / max_abs;
-    selected.mapv(|v| (v * expansion) as f32)
 }
 
 /// Section 4.5 metric entry with threshold gate.
@@ -232,59 +184,31 @@ fn assess_accuracy() {
     let mut all_reports: Vec<AssessmentReport> = Vec::new();
     let mut solver_levels: Vec<Option<SolverLevel>> = Vec::new();
 
-    for (dataset, n, is_connected, expected_n_components) in &run_set {
-        let base = fixtures::fixture_path(dataset, "");
-
-        let ref_eigenvalues: Array1<f64> =
-            fixtures::load_dense(&base.join("comp_d_eigensolver.npz"), "eigenvalues");
-        assert!(
-            !ref_eigenvalues.is_empty(),
-            "{dataset}: ref eigenvalues array is empty — fixture may be corrupt"
-        );
-        let n_components_dim = ref_eigenvalues.len() - 1;
-
-        if !is_connected {
-            let graph = fixtures::load_sparse_csr_f32_u32(&base.join("step5a_pruned.npz"));
-            let (rust_labels, rust_n_components) = find_components(graph.view());
-
-            let embedding = embed_disconnected(
-                graph.view(),
-                &rust_labels,
-                rust_n_components,
-                n_components_dim,
-                42,
-                None,
-                ComputeMode::PythonCompat,
-                &SolverParams::default(),
-            )
-            .unwrap_or_else(|e| panic!("{dataset}: embed_disconnected failed: {e}"));
-
-            let py_labels_i32: Array1<i32> =
-                fixtures::load_dense(&base.join("comp_c_components.npz"), "labels");
-            let labels: Vec<usize> = py_labels_i32.iter().map(|&x| x as usize).collect();
-
-            let sep = separation_ratio(embedding.view(), &labels);
+    for dataset in &run_set {
+        if !dataset.connected {
+            let layout = measure_disconnected(dataset);
+            let count_matches = layout.n_graph_components == dataset.n_graph_components;
 
             let metrics = vec![
                 MetricResult {
                     name: "component_count_match".into(),
                     dimension: 0,
-                    value: (rust_n_components == *expected_n_components) as u8 as f64,
+                    value: count_matches as u8 as f64,
                     threshold: 1.0,
-                    passed: rust_n_components == *expected_n_components,
+                    passed: count_matches,
                 },
                 MetricResult {
                     name: "separation_ratio".into(),
                     dimension: 0,
-                    value: sep,
+                    value: layout.separation_ratio,
                     threshold: 0.0,
                     passed: true,
                 },
             ];
 
             all_reports.push(AssessmentReport {
-                dataset: dataset.to_string(),
-                n: *n,
+                dataset: dataset.name.to_string(),
+                n: dataset.n,
                 metrics,
             });
             solver_levels.push(None);
@@ -292,25 +216,15 @@ fn assess_accuracy() {
         }
 
         // Connected dataset path
-        let laplacian = fixtures::load_sparse_csr(&base.join("comp_b_laplacian.npz"));
-        let ((eigenvalues, eigenvectors), solve_report) = solve_with_unit_hint(
-            &laplacian,
-            n_components_dim,
-            42,
-            ComputeMode::PythonCompat,
-            &SolverParams::default(),
-        );
-        let solver_level = solve_report.level;
+        let solve = solve_reference_laplacian(dataset);
+        let solver_level = solve.level;
+        let accuracy = measure_accuracy(&solve, BOUNDS_TOL);
 
-        let residual = max_eigenpair_residual(&laplacian, &eigenvalues, &eigenvectors);
-        let ortho = orthogonality_error(&eigenvectors);
-        let (in_range, sorted) = check_eigenvalue_bounds(&eigenvalues, BOUNDS_TOL);
-        let gap = spectral_gap(&eigenvalues);
-        let cond = if eigenvalues.len() > 1 && eigenvalues[1] > 0.0 {
-            eigenvalue_condition_number(&eigenvalues)
-        } else {
-            f64::NAN
-        };
+        let residual = accuracy.max_residual;
+        let ortho = accuracy.orthogonality_error;
+        let (in_range, sorted) = (accuracy.eigenvalues_in_range, accuracy.eigenvalues_sorted);
+        let gap = accuracy.spectral_gap;
+        let cond = accuracy.condition_number;
         let resid_thr = residual_threshold(solver_level);
         let resid_margin = tolerance_margin(resid_thr, residual);
         let ortho_margin = tolerance_margin(ORTHO_THRESHOLD, ortho);
@@ -375,8 +289,8 @@ fn assess_accuracy() {
         ];
 
         all_reports.push(AssessmentReport {
-            dataset: dataset.to_string(),
-            n: *n,
+            dataset: dataset.name.to_string(),
+            n: dataset.n,
             metrics,
         });
         solver_levels.push(Some(solver_level));
@@ -427,57 +341,16 @@ fn assess_parity() {
     let mut all_reports: Vec<AssessmentReport> = Vec::new();
     let mut solver_levels: Vec<Option<SolverLevel>> = Vec::new();
 
-    for (dataset, n, _, _) in run_set.iter().filter(|(_, _, is_conn, _)| *is_conn) {
-        let base = fixtures::fixture_path(dataset, "");
+    for dataset in run_set.iter().filter(|dataset| dataset.connected) {
+        let solve = solve_reference_laplacian(dataset);
+        let solver_level = solve.level;
+        let parity = measure_parity(dataset, &solve);
 
-        let laplacian = fixtures::load_sparse_csr(&base.join("comp_b_laplacian.npz"));
-        let ref_eigenvalues: Array1<f64> =
-            fixtures::load_dense(&base.join("comp_d_eigensolver.npz"), "eigenvalues");
-        let ref_eigenvectors: Array2<f64> =
-            fixtures::load_dense(&base.join("comp_d_eigensolver.npz"), "eigenvectors");
-        let ref_pre_noise: Array2<f32> =
-            fixtures::load_dense(&base.join("comp_f_scaling.npz"), "pre_noise");
-
-        assert!(
-            !ref_eigenvalues.is_empty(),
-            "{dataset}: ref eigenvalues array is empty — fixture may be corrupt"
-        );
-        let n_components_dim = ref_eigenvalues.len() - 1;
-
-        let ((eigenvalues, eigenvectors), solve_report) = solve_with_unit_hint(
-            &laplacian,
-            n_components_dim,
-            42,
-            ComputeMode::PythonCompat,
-            &SolverParams::default(),
-        );
-        let solver_level = solve_report.level;
-
-        let abs_errors: Array1<f64> = eigenvalue_abs_errors(&eigenvalues, &ref_eigenvalues);
-        let max_abs_err = abs_errors.iter().cloned().fold(0.0f64, f64::max);
-
-        let selected = select_eigenvectors(
-            eigenvalues
-                .as_slice_memory_order()
-                .expect("eigenvalues contiguous"),
-            &eigenvectors,
-            n_components_dim,
-        );
-        let rust_pre_noise = compute_pre_noise(&selected);
-        let sign_err = sign_agnostic_max_error(&rust_pre_noise, &ref_pre_noise);
-
-        let evals_slice = ref_eigenvalues
-            .as_slice_memory_order()
-            .expect("ref eigenvalues contiguous");
-        let has_degenerate = n_components_dim >= 2
-            && evals_slice[1..]
-                .windows(2)
-                .any(|w| w[1] - w[0] < DEGENERATE_GAP_THRESHOLD);
-        let gram = if has_degenerate {
-            subspace_gram_det_kd(
-                eigenvectors.slice(s![.., 1..]),
-                ref_eigenvectors.slice(s![.., 1..]),
-            )
+        let max_abs_err = parity.max_eigenvalue_abs_error;
+        let sign_err = parity.sign_agnostic_max_error;
+        // The subspace is compared only where individual eigenvectors are not determined.
+        let gram = if parity.degenerate {
+            parity.subspace_gram_det
         } else {
             f64::NAN
         };
@@ -520,8 +393,8 @@ fn assess_parity() {
         }
 
         all_reports.push(AssessmentReport {
-            dataset: dataset.to_string(),
-            n: *n,
+            dataset: dataset.name.to_string(),
+            n: dataset.n,
             metrics,
         });
         solver_levels.push(Some(solver_level));
@@ -558,7 +431,7 @@ fn assess_parity() {
     let json_parsed: serde_json::Value = serde_json::from_str(&json_str).expect("json not valid");
     let connected_count = datasets_to_run()
         .iter()
-        .filter(|(_, _, is_conn, _)| *is_conn)
+        .filter(|dataset| dataset.connected)
         .count();
     assert_eq!(
         json_parsed["datasets"]

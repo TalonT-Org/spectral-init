@@ -5,9 +5,11 @@ Cargo.toml.orig
 LICENSE
 README.md
 docs/katex-header.html
+docs/umap-rs-integration.md
 examples/basic.rs
 examples/compute_modes.rs
 examples/from_adjacency_list.rs
+examples/umap_rs.rs
 src/components.rs
 src/config.rs
 src/error.rs

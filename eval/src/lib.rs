@@ -1,8 +1,16 @@
 //! Research harness for `spectral-init`.
 //!
-//! Holds the report structures shared by the assessment tests in `tests/` and by
-//! the tooling that reads their JSON output, and the locations the harness reads
-//! from and writes to.
+//! Holds the measurements and report structures shared by the assessment tests in
+//! `tests/`, the `init_evidence` binary and the tooling that reads their JSON output,
+//! and the locations the harness reads from and writes to.
+
+pub mod assess;
+#[path = "../../tests/common/diagnostics.rs"]
+pub mod diagnostics;
+#[path = "../../tests/common/fixtures.rs"]
+pub mod fixtures;
+#[path = "../../tests/common/internals.rs"]
+pub mod internals;
 
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};

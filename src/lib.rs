@@ -152,6 +152,14 @@ pub mod __internal {
     };
 }
 
+/// The guides shipped with the crate, attached as documentation so that their Rust
+/// snippets are compiled and run as doctests.
+#[cfg(doctest)]
+mod guides {
+    #[doc = include_str!("../docs/umap-rs-integration.md")]
+    struct UmapRsIntegration;
+}
+
 use ndarray::{Array2, ArrayView2};
 use sprs::CsMatViewI;
 
