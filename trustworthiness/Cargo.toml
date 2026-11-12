@@ -14,6 +14,9 @@ publish = false
 profiling = []
 # Command-line binaries and `.npy` input.
 cli = ["dep:ndarray-npy", "dep:pico-args", "dep:serde_json", "dep:libc"]
+# Exposes the AVX2 distance kernel to `benches/dist_sq_bench.rs`. Exempt from semver;
+# not for downstream use.
+__bench = []
 
 [dependencies]
 ndarray = "0.17"
@@ -46,6 +49,7 @@ harness = false
 [[bench]]
 name = "dist_sq_bench"
 harness = false
+required-features = ["__bench"]
 
 [[test]]
 name = "test_tw_profiler"

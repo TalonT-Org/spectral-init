@@ -1,6 +1,6 @@
 //! Criterion microbenchmark for `dist_sq_avx2_looped` vs scalar at d_x=10 and d_x=50.
 //!
-//! Run with: cargo bench -p trustworthiness --bench dist_sq_bench
+//! Run with: cargo bench -p trustworthiness --features __bench --bench dist_sq_bench
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use std::hint::black_box;

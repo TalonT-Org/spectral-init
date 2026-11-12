@@ -20,7 +20,7 @@ mod kernels;
 
 #[cfg(target_arch = "x86_64")]
 use kernels::dist_sq_2d_avx2_batch;
-#[cfg(target_arch = "x86_64")]
+#[cfg(all(target_arch = "x86_64", feature = "__bench"))]
 #[doc(hidden)]
 pub use kernels::dist_sq_avx2_looped;
 
@@ -130,7 +130,7 @@ pub(crate) fn trustworthiness_inner(
                             let sj = xj.as_slice().expect("x row must be contiguous");
                             // SAFETY: use_avx2_x guarantees AVX2+FMA at run time; both
                             // rows are slices of equal length d_x >= 10.
-                            dist_x[j] = unsafe { dist_sq_avx2_looped(si, sj) };
+                            dist_x[j] = unsafe { kernels::dist_sq_avx2_looped(si, sj) };
                         }
                     } else {
                         dist_x[j] = dist_sq_scalar(xi, xj);
