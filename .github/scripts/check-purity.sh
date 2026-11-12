@@ -13,8 +13,9 @@ cd "$repo_root"
 status=0
 
 # forbid <description> <extended regex> <path>...
-# Fails the gate when the pattern occurs in any Rust source under the given paths.
-# Files named in the space-separated variable `allowed` are exempt.
+# Fails the gate when the pattern occurs in any file under the given paths whose name
+# matches the glob in the variable `include` (default: Rust sources, '*.rs'). Files named
+# in the space-separated variable `allowed` are exempt. Both variables are set per call.
 forbid() {
     local description="$1" pattern="$2"
     shift 2
@@ -25,7 +26,7 @@ forbid() {
             exit 2
         fi
     done
-    hits="$(grep -rnE --include='*.rs' -e "$pattern" "$@" || true)"
+    hits="$(grep -rnHE --include="${include:-*.rs}" -e "$pattern" "$@" || true)"
     for file in ${allowed:-}; do
         hits="$(grep -v "^${file}:" <<< "$hits" || true)"
     done
@@ -56,6 +57,16 @@ forbid "no package has a 'testing' feature" \
 forbid "the 'cli' and 'profiling' features belong to the trustworthiness package" \
     'feature *= *"(cli|profiling)"' \
     src tests examples
+
+include='Cargo.toml' \
+forbid "no package declares a 'testing' feature" \
+    '^testing[[:space:]]*=' \
+    Cargo.toml eval trustworthiness
+
+include='Cargo.toml' \
+forbid "only the trustworthiness package declares the 'cli' and 'profiling' features" \
+    '^(cli|profiling)[[:space:]]*=' \
+    Cargo.toml eval
 
 if [ "$status" -eq 0 ]; then
     echo "purity gate passed"
