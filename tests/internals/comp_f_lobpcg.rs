@@ -57,13 +57,13 @@ fn run_lobpcg_test(dataset: &str, _expected_n: usize, regularized: bool) {
 }
 
 macro_rules! make_lobpcg_tests {
-    ($name_l1:ident, $name_l2:ident, $dataset:literal, $n:expr) => {
+    ($name_l1:ident, $name_l3:ident, $dataset:literal, $n:expr) => {
         #[test]
         fn $name_l1() {
             run_lobpcg_test($dataset, $n, false);
         }
         #[test]
-        fn $name_l2() {
+        fn $name_l3() {
             run_lobpcg_test($dataset, $n, true);
         }
     };
@@ -71,31 +71,31 @@ macro_rules! make_lobpcg_tests {
 
 make_lobpcg_tests!(
     lobpcg_blobs_connected_2000_eigenvalues,
-    lobpcg_blobs_connected_2000_level2,
+    lobpcg_blobs_connected_2000_level3,
     "blobs_connected_2000",
     2000
 );
 make_lobpcg_tests!(
     lobpcg_blobs_connected_200_eigenvalues,
-    lobpcg_blobs_connected_200_level2,
+    lobpcg_blobs_connected_200_level3,
     "blobs_connected_200",
     200
 );
 make_lobpcg_tests!(
     lobpcg_moons_200_eigenvalues,
-    lobpcg_moons_200_level2,
+    lobpcg_moons_200_level3,
     "moons_200",
     200
 );
 make_lobpcg_tests!(
     lobpcg_circles_300_eigenvalues,
-    lobpcg_circles_300_level2,
+    lobpcg_circles_300_level3,
     "circles_300",
     300
 );
 make_lobpcg_tests!(
     lobpcg_near_dupes_100_eigenvalues,
-    lobpcg_near_dupes_100_level2,
+    lobpcg_near_dupes_100_level3,
     "near_dupes_100",
     100
 );
