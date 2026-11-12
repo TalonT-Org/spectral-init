@@ -108,9 +108,8 @@ pub(crate) const DEFAULT_NBITER: usize = 2;
 /// fallthrough to the O(n³) Level 5 dense EVD. An explicit oversampling count is used
 /// as given. The result never exceeds `n`.
 fn rsvd_k_sub(n: usize, rank: usize, oversampling: Option<usize>) -> usize {
-    let oversampling =
-        oversampling.unwrap_or_else(|| (n / 10).max(rank.max(5)).min(n.saturating_sub(rank)));
-    (rank + oversampling).min(n)
+    let oversampling = oversampling.unwrap_or_else(|| (n / 10).max(rank.max(5)));
+    rank.saturating_add(oversampling).min(n)
 }
 
 /// Randomized SVD eigensolver via the 2I − L trick (Level 4).
@@ -471,8 +470,9 @@ mod tests {
     fn rsvd_k_sub_uses_explicit_oversampling() {
         assert_eq!(rsvd_k_sub(200, 3, Some(10)), 13);
         assert_eq!(rsvd_k_sub(200, 3, Some(0)), 3);
-        // Clamped to n.
+        // Clamped to n, even when rank + oversampling overflows usize.
         assert_eq!(rsvd_k_sub(8, 3, Some(100)), 8);
+        assert_eq!(rsvd_k_sub(200, 3, Some(usize::MAX)), 200);
     }
 
     #[test]
