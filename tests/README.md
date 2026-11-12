@@ -164,8 +164,9 @@ with `scipy.sparse.load_npz`. The Rust loaders read the CSR arrays inside (`data
 
 ## How Rust Tests Consume Fixtures
 
-The loaders live in `tests/common/fixtures.rs`, which the test binaries of the root
-package and of `eval/` include by path:
+The loaders live in `tests/common/fixtures.rs`. The root package's test binaries include
+it by path; so does the `eval/` library, which exposes it to eval's tests and benches as
+`spectral_init_eval::fixtures`:
 
 - `fixture_path(dataset, file)` finds `tests/fixtures/` by walking up from the including
   package's `CARGO_MANIFEST_DIR`, so every workspace member reads the same files.
