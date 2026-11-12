@@ -208,56 +208,6 @@ fn large_diagonal_laplacian(n: usize) -> CsMatI<f64, usize> {
     CsMatI::new((n, n), indptr, indices, data)
 }
 
-/// Normalized Laplacian of P_n (path graph) in f64.
-/// L = D^{-1/2}(D - A)D^{-1/2}. Tridiagonal with known closed-form entries:
-///   diagonal = 1.0, endpoint off-diagonals = -1/sqrt(2), interior off-diagonals = -0.5.
-/// Use ONLY for Level 3 (rSVD) tests — P_n is the worst-case LOBPCG input.
-fn large_path_laplacian(n: usize) -> CsMatI<f64, usize> {
-    let inv_sqrt2 = 1.0_f64 / 2.0_f64.sqrt(); // ≈ 0.7071
-    let mut indptr = vec![0usize; n + 1];
-    let mut indices: Vec<usize> = Vec::new();
-    let mut data: Vec<f64> = Vec::new();
-    for i in 0..n {
-        if i > 0 {
-            let w = if i == n - 1 { -inv_sqrt2 } else { -0.5 };
-            indices.push(i - 1);
-            data.push(w);
-        }
-        indices.push(i);
-        data.push(1.0);
-        if i + 1 < n {
-            let w = if i == 0 { -inv_sqrt2 } else { -0.5 };
-            indices.push(i + 1);
-            data.push(w);
-        }
-        indptr[i + 1] = indices.len();
-    }
-    CsMatI::new((n, n), indptr, indices, data)
-}
-
-/// Normalized Laplacian of C_n (ring graph) in f64.
-/// Every node has degree 2. L = D^{-1/2}(D - A)D^{-1/2}:
-///   diagonal = 1.0, off-diagonals = -0.5 (= -1/(sqrt(2)*sqrt(2))).
-/// sqrt_deg[i] = sqrt(2) for all i.
-fn large_ring_laplacian(n: usize) -> CsMatI<f64, usize> {
-    let mut indptr = vec![0usize; n + 1];
-    let mut indices: Vec<usize> = Vec::new();
-    let mut data: Vec<f64> = Vec::new();
-    for i in 0..n {
-        let left = if i == 0 { n - 1 } else { i - 1 };
-        let right = if i + 1 == n { 0 } else { i + 1 };
-        // Collect all three entries and sort by column for CSR validity.
-        let mut entries = [(left, -0.5_f64), (i, 1.0_f64), (right, -0.5_f64)];
-        entries.sort_unstable_by_key(|&(col, _)| col);
-        for (col, val) in entries {
-            indices.push(col);
-            data.push(val);
-        }
-        indptr[i + 1] = indices.len();
-    }
-    CsMatI::new((n, n), indptr, indices, data)
-}
-
 /// 6-node unnormalized path-graph Laplacian, mirroring `path_graph_laplacian_6` in
 /// `src/solvers/mod.rs` unit tests.
 ///
@@ -624,7 +574,7 @@ fn test_level_3_rsvd_valid_on_large_path() {
     // implementation, so there is no naturally occurring input that reliably escalates
     // to Level 3 without constructing a synthetic adversarial operator. Direct testing
     // of the rSVD solver is therefore the appropriate approach here.
-    let laplacian = large_path_laplacian(2001);
+    let laplacian = fixtures::path_laplacian(2001);
     let (eigs, vecs): (ndarray::Array1<f64>, ndarray::Array2<f64>) =
         rsvd_solve(&laplacian, 2, 42, &SolverParams::default()).expect("rsvd_solve failed");
     assert_eq!(
@@ -650,9 +600,9 @@ fn test_level_3_rsvd_valid_on_large_path() {
 // ─── Phase 2: Adversarial Laplacian builder sanity tests ──────────────────────
 
 #[test]
-fn large_ring_laplacian_shape_and_nnz() {
+fn ring_laplacian_shape_and_nnz() {
     let n = 100;
-    let lap = large_ring_laplacian(n);
+    let lap = fixtures::ring_laplacian(n);
     assert_eq!(lap.rows(), n, "ring Laplacian must be n×n");
     assert_eq!(lap.cols(), n, "ring Laplacian must be n×n");
     // Each row: 1 diagonal + 2 off-diagonal = 3 non-zeros
@@ -660,9 +610,9 @@ fn large_ring_laplacian_shape_and_nnz() {
 }
 
 #[test]
-fn large_ring_laplacian_diagonal_is_one() {
+fn ring_laplacian_diagonal_is_one() {
     let n = 50;
-    let lap = large_ring_laplacian(n);
+    let lap = fixtures::ring_laplacian(n);
     for i in 0..n {
         let row = lap.outer_view(i).expect("row exists");
         // sprs row iterator yields (col: usize, val: &T)
