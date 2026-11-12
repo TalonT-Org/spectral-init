@@ -1,6 +1,7 @@
 //! Boundary validation: every defect maps to its own error variant, in a fixed order of
 //! precedence, and equivalent encodings of a valid graph give the same result.
 
+use crate::assertions::validate_graph;
 use crate::fixtures;
 use spectral_init::ndarray::Array2;
 use spectral_init::sprs::{CsMatI, TriMatI};
@@ -39,21 +40,6 @@ fn path_5() -> Vec<(usize, usize, f32)> {
 
 fn run(graph: &Graph, n_components: usize) -> Result<Array2<f32>, SpectralError> {
     spectral_init(graph.view(), None, &SpectralInitConfig::new(n_components))
-}
-
-/// Outcome of validating `graph` alone: a data argument with no rows turns "the graph is
-/// valid" into `DataShapeMismatch`, the last-but-one check, without running a solver.
-fn validate_graph(graph: &Graph) -> Result<(), SpectralError> {
-    let no_rows = Array2::<f32>::zeros((0, 1));
-    match spectral_init(
-        graph.view(),
-        Some(no_rows.view()),
-        &SpectralInitConfig::new(1),
-    ) {
-        Err(SpectralError::DataShapeMismatch { .. }) => Ok(()),
-        Err(other) => Err(other),
-        Ok(_) => panic!("a data argument without rows must be rejected"),
-    }
 }
 
 // ── one defect, one variant ──────────────────────────────────────────────────

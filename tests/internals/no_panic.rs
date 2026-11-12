@@ -1,14 +1,14 @@
 //! No valid Laplacian makes the solver chain panic: with the dense first level switched
 //! off, every later level runs and the chain still returns `Ok` or `Err`.
 
-use ndarray::Array2;
+use crate::assertions::validate_graph;
 use proptest::prelude::*;
 use proptest::test_runner::FileFailurePersistence;
 use spectral_init::__internal::{
     SolverParams, build_normalized_laplacian, compute_degrees, solve_eigenproblem,
 };
 use spectral_init::sprs::{CsMatI, TriMatI};
-use spectral_init::{ComputeMode, SpectralError, SpectralInitConfig, spectral_init};
+use spectral_init::{ComputeMode, SpectralInitConfig};
 
 /// Failing cases persist to `no_panic.proptest-regressions`, next to this file.
 fn config() -> ProptestConfig {
@@ -81,27 +81,13 @@ fn case() -> impl Strategy<Value = Case> {
     })
 }
 
-/// Whether `graph` passes the boundary validation of `spectral_init`. A data argument
-/// without rows is rejected last-but-one, after every check on the graph.
-fn passes_validation(graph: &CsMatI<f32, u32, usize>) -> bool {
-    let no_rows = Array2::<f32>::zeros((0, 1));
-    matches!(
-        spectral_init(
-            graph.view(),
-            Some(no_rows.view()),
-            &SpectralInitConfig::new(1)
-        ),
-        Err(SpectralError::DataShapeMismatch { .. })
-    )
-}
-
 proptest! {
     #![proptest_config(config())]
 
     #[test]
     fn solver_chain_never_panics(case in case()) {
         let graph = case.graph();
-        prop_assert!(passes_validation(&graph));
+        prop_assert_eq!(validate_graph(&graph), Ok(()));
 
         let mode = case.compute_mode();
         let (_degrees, sqrt_deg) = compute_degrees(graph.view(), mode);
