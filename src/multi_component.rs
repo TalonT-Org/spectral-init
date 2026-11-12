@@ -117,16 +117,19 @@ fn extract_subgraph(
             orig_row < n_global,
             "node index {orig_row} out of bounds (graph has {n_global} rows)"
         );
-        if let Some(row_vec) = graph.outer_view(orig_row) {
-            for (orig_col, &weight) in row_vec.iter() {
-                if lookup[orig_col] != usize::MAX {
-                    // A member's local index never exceeds its original index, and
-                    // original column indices are stored as u32.
-                    let local_col = u32::try_from(lookup[orig_col])
-                        .expect("local index overflows u32; component size exceeds u32::MAX");
-                    indices.push(local_col);
-                    data.push(weight);
-                }
+        // Every member is below the node count: `lookup[orig] = local` above would
+        // already have panicked otherwise.
+        let row_vec = graph
+            .outer_view(orig_row)
+            .expect("member index is below the node count");
+        for (orig_col, &weight) in row_vec.iter() {
+            if lookup[orig_col] != usize::MAX {
+                // A member's local index never exceeds its original index, and
+                // original column indices are stored as u32.
+                let local_col = u32::try_from(lookup[orig_col])
+                    .expect("local index overflows u32; component size exceeds u32::MAX");
+                indices.push(local_col);
+                data.push(weight);
             }
         }
         indptr[local_row + 1] = indices.len();
