@@ -2,7 +2,7 @@
 
 #![allow(dead_code)]
 
-use ndarray::{Array, Array1, Array2, Dimension};
+use ndarray::{Array, Array0, Array1, Array2, Dimension};
 use ndarray_npy::{NpzReader, ReadNpyError, ReadNpzError, ReadableElement};
 use sprs::{CsMat, CsMatI};
 use std::path::{Path, PathBuf};
@@ -173,8 +173,21 @@ pub fn load_sparse_csr_f32_u32(path: &Path) -> CsMatI<f32, u32, usize> {
         .unwrap_or_else(|e| panic!("fixture CSR structure invalid in {:?}: {:?}", path, e))
 }
 
+/// The factor the scaling step multiplied a dataset's coordinates by, from its
+/// `comp_f_scaling.npz`. Panics unless the stored value is positive and normal.
+pub fn load_expansion(dataset: &str) -> f64 {
+    let expansion: Array0<f64> =
+        load_dense(&fixture_path(dataset, "comp_f_scaling.npz"), "expansion");
+    let expansion = expansion.into_scalar();
+    assert!(
+        expansion.is_normal() && expansion > 0.0,
+        "{dataset}: fixture expansion value must be positive and normal, got {expansion}"
+    );
+    expansion
+}
+
 /// Reverse the scaling step of `spectral_init` output: `output / expansion` in f64, with
-/// `expansion` taken from a dataset's `comp_f_scaling.npz`.
+/// `expansion` from [`load_expansion`].
 pub fn descale_embedding(output: &Array2<f32>, expansion: f64) -> Array2<f64> {
     output.mapv(|v| v as f64 / expansion)
 }

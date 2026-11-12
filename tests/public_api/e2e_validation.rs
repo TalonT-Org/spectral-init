@@ -45,14 +45,7 @@ fn test_e2e_subspace_circles_300() {
     )
     .unwrap_or_else(|e| panic!("spectral_init failed for {dataset}: {e}"));
 
-    let scaling_path = fixtures::fixture_path(dataset, "comp_f_scaling.npz");
-    let expansion: ndarray::Array0<f64> = fixtures::load_dense(&scaling_path, "expansion");
-    let expansion_val = expansion.into_scalar();
-    assert!(
-        expansion_val.is_normal() && expansion_val > 0.0,
-        "fixture expansion value must be positive and normal, got {expansion_val}"
-    );
-    let descaled = fixtures::descale_embedding(&result, expansion_val);
+    let descaled = fixtures::descale_embedding(&result, fixtures::load_expansion(dataset));
 
     // Reference eigenvectors: columns 1 and 2 (skip trivial column 0)
     let ref_evecs: ndarray::Array2<f64> = fixtures::load_dense(
@@ -98,14 +91,7 @@ fn test_e2e_subspace_near_dupes_100() {
     )
     .unwrap_or_else(|e| panic!("spectral_init failed for {dataset}: {e}"));
 
-    let scaling_path = fixtures::fixture_path(dataset, "comp_f_scaling.npz");
-    let expansion: ndarray::Array0<f64> = fixtures::load_dense(&scaling_path, "expansion");
-    let expansion_val = expansion.into_scalar();
-    assert!(
-        expansion_val.is_normal() && expansion_val > 0.0,
-        "fixture expansion value must be positive and normal, got {expansion_val}"
-    );
-    let descaled = fixtures::descale_embedding(&result, expansion_val);
+    let descaled = fixtures::descale_embedding(&result, fixtures::load_expansion(dataset));
 
     let ref_evecs: ndarray::Array2<f64> = fixtures::load_dense(
         &fixtures::fixture_path(dataset, "comp_d_eigensolver.npz"),

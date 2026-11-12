@@ -190,9 +190,6 @@ fn process_dataset(
 
     let ref_pre_noise: Array2<f32> =
         fixtures::load_dense(&base.join("comp_f_scaling.npz"), "pre_noise");
-    let expansion_arr: ndarray::Array0<f64> =
-        fixtures::load_dense(&base.join("comp_f_scaling.npz"), "expansion");
-    let expansion_val = expansion_arr.into_scalar();
 
     let k = ref_eigenvalues.len();
     let n_components_dim = k - 1;
@@ -285,7 +282,7 @@ fn process_dataset(
         &SpectralInitConfig::new(n_components_dim).with_seed(42),
     )
     .unwrap_or_else(|e| panic!("{dataset}: spectral_init failed: {e}"));
-    let descaled = fixtures::descale_embedding(&result, expansion_val);
+    let descaled = fixtures::descale_embedding(&result, fixtures::load_expansion(dataset));
     let e2e_max_residual = (0..n_components_dim)
         .map(|col| {
             internals::residual_spmv(&laplacian, descaled.column(col), ref_eigenvalues[col + 1])

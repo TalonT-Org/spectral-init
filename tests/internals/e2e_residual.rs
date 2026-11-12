@@ -20,15 +20,6 @@ fn run_e2e_residual_check(dataset: &str, n: usize) {
         assert!(v.is_finite(), "non-finite in {dataset}: {v}");
     }
 
-    // Load expansion factor (stored as 0-D scalar in the fixture)
-    let scaling_path = fixtures::fixture_path(dataset, "comp_f_scaling.npz");
-    let expansion: ndarray::Array0<f64> = fixtures::load_dense(&scaling_path, "expansion");
-    let expansion_val = expansion.into_scalar();
-    assert!(
-        expansion_val.is_normal() && expansion_val > 0.0,
-        "fixture expansion value must be positive and normal, got {expansion_val}"
-    );
-
     // Load Laplacian and reference eigenvalues
     let laplacian =
         fixtures::load_sparse_csr(&fixtures::fixture_path(dataset, "comp_b_laplacian.npz"));
@@ -38,7 +29,7 @@ fn run_e2e_residual_check(dataset: &str, n: usize) {
     );
 
     // De-scale to recover approximate eigenvectors
-    let descaled = fixtures::descale_embedding(&result, expansion_val);
+    let descaled = fixtures::descale_embedding(&result, fixtures::load_expansion(dataset));
 
     // Check residual for each of the 2 selected eigenvectors.
     // Output column 0 → eigenvalue[1], column 1 → eigenvalue[2] (skip trivial index 0).
