@@ -107,6 +107,29 @@ fn load_laplacian(path: &Path) -> Option<sprs::CsMatI<f64, usize>> {
     )
 }
 
+/// One call outside the timed loop: primes instruction caches and reports which
+/// solver level the chain settles on.
+fn warm_up_and_report(
+    label: &str,
+    laplacian: &sprs::CsMatI<f64, usize>,
+    seed: u64,
+    params: &SolverParams,
+) {
+    let (_, report) = solve_with_unit_hint(
+        black_box(laplacian),
+        black_box(2),
+        black_box(seed),
+        ComputeMode::RustNative,
+        params,
+    );
+    eprintln!(
+        "[lobpcg_bench] {label} ready: n={}, solver level {} ({})",
+        laplacian.rows(),
+        report.level as u8,
+        report.level.name()
+    );
+}
+
 // ─── blobs_5000 — 5,000 nodes, mandatory ─────────────────────────────────────
 
 fn bench_lobpcg_blobs5000(c: &mut Criterion) {
@@ -115,24 +138,9 @@ fn bench_lobpcg_blobs5000(c: &mut Criterion) {
     let laplacian = load_laplacian(&path)
         .unwrap_or_else(|| panic!("mandatory fixture not found: {}", path.display()));
 
-    let n = laplacian.rows();
     let seed = 42_u64;
     let params = SolverParams::default();
-
-    // One call outside the timed loop: primes instruction caches and reports
-    // which solver level the chain settles on.
-    let (_, report) = solve_with_unit_hint(
-        black_box(&laplacian),
-        black_box(2),
-        black_box(seed),
-        ComputeMode::RustNative,
-        &params,
-    );
-    eprintln!(
-        "[lobpcg_bench] blobs_5000 ready: n={n}, solver level {} ({})",
-        report.level as u8,
-        report.level.name()
-    );
+    warm_up_and_report("blobs_5000", &laplacian, seed, &params);
 
     let mut group = c.benchmark_group("lobpcg_blobs5000");
     group.sample_size(10); // Criterion minimum; solver takes ~300 ms
@@ -166,24 +174,9 @@ fn bench_lobpcg_merfish_10k(c: &mut Criterion) {
         return;
     };
 
-    let n = laplacian.rows();
     let seed = 42_u64;
     let params = SolverParams::default();
-
-    // One call outside the timed loop: primes instruction caches and reports
-    // which solver level the chain settles on.
-    let (_, report) = solve_with_unit_hint(
-        black_box(&laplacian),
-        black_box(2),
-        black_box(seed),
-        ComputeMode::RustNative,
-        &params,
-    );
-    eprintln!(
-        "[lobpcg_bench] merfish_10k ready: n={n}, solver level {} ({})",
-        report.level as u8,
-        report.level.name()
-    );
+    warm_up_and_report("merfish_10k", &laplacian, seed, &params);
 
     let mut group = c.benchmark_group("lobpcg_merfish_10k");
     group.sample_size(10);
@@ -217,24 +210,9 @@ fn bench_lobpcg_merfish_100k(c: &mut Criterion) {
         return;
     };
 
-    let n = laplacian.rows();
     let seed = 42_u64;
     let params = SolverParams::default();
-
-    // One call outside the timed loop: primes instruction caches and reports
-    // which solver level the chain settles on.
-    let (_, report) = solve_with_unit_hint(
-        black_box(&laplacian),
-        black_box(2),
-        black_box(seed),
-        ComputeMode::RustNative,
-        &params,
-    );
-    eprintln!(
-        "[lobpcg_bench] merfish_100k ready: n={n}, solver level {} ({})",
-        report.level as u8,
-        report.level.name()
-    );
+    warm_up_and_report("merfish_100k", &laplacian, seed, &params);
 
     let mut group = c.benchmark_group("lobpcg_merfish_100k");
     group.sample_size(10);
