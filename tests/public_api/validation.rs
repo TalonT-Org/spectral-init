@@ -441,15 +441,16 @@ fn fixture_graphs() -> impl Iterator<Item = (String, Graph)> {
     })
 }
 
-/// Scales the first off-diagonal weight of `graph` by `factor`, leaving its mirror alone.
-fn perturb_one_weight(graph: &Graph, factor: f32) -> Graph {
+/// Replaces the first off-diagonal weight `w` of `graph` by `change(w)`, leaving its
+/// mirror alone.
+fn with_first_edge_changed(graph: &Graph, change: impl FnOnce(f32) -> f32) -> Graph {
     let (position, _) = graph
         .iter()
         .enumerate()
         .find(|(_, (weight, (row, col)))| row != col && **weight != 0.0)
         .expect("graph has an off-diagonal edge");
     let mut data = graph.data().to_vec();
-    data[position] *= factor;
+    data[position] = change(data[position]);
     CsMatI::new(
         graph.shape(),
         graph.indptr().to_owned().into_raw_storage(),
@@ -487,7 +488,7 @@ fn umap_rs_graphs_pass_validation_for_every_mix_ratio() {
 #[test]
 fn a_one_part_in_a_thousand_asymmetry_fails_validation() {
     for (name, graph) in fixture_graphs() {
-        let perturbed = perturb_one_weight(&graph, 1.0 + 1e-3);
+        let perturbed = with_first_edge_changed(&graph, |w| w * (1.0 + 1e-3));
         assert!(
             matches!(
                 validate_graph(&perturbed),
@@ -501,19 +502,7 @@ fn a_one_part_in_a_thousand_asymmetry_fails_validation() {
 #[test]
 fn a_one_ulp_asymmetry_passes_validation() {
     for (name, graph) in fixture_graphs() {
-        let (position, _) = graph
-            .iter()
-            .enumerate()
-            .find(|(_, (weight, (row, col)))| row != col && **weight != 0.0)
-            .expect("graph has an off-diagonal edge");
-        let mut data = graph.data().to_vec();
-        data[position] = f32::from_bits(data[position].to_bits() + 1);
-        let nudged: Graph = CsMatI::new(
-            graph.shape(),
-            graph.indptr().to_owned().into_raw_storage(),
-            graph.indices().to_vec(),
-            data,
-        );
+        let nudged = with_first_edge_changed(&graph, |w| f32::from_bits(w.to_bits() + 1));
         assert_eq!(validate_graph(&nudged), Ok(()), "{name}");
     }
 }
