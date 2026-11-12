@@ -113,10 +113,6 @@ fn extract_subgraph(
     let mut data: Vec<f32> = Vec::new();
 
     for (local_row, &orig_row) in node_indices.iter().enumerate() {
-        debug_assert!(
-            orig_row < n_global,
-            "node index {orig_row} out of bounds (graph has {n_global} rows)"
-        );
         // Every member is below the node count: `lookup[orig] = local` above would
         // already have panicked otherwise.
         let row_vec = graph
