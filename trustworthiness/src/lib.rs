@@ -469,61 +469,14 @@ mod tests {
         }
     }
 
-    /// Brute-force O(n²) reference: full-sort X distances, sort-based Y-kNN.
+    /// Brute-force O(n²) reference over every row.
     fn trustworthiness_brute_force(
         x: ndarray::ArrayView2<f64>,
         y: ndarray::ArrayView2<f64>,
         k: usize,
     ) -> f64 {
-        use std::collections::HashSet;
-        let n = x.nrows();
-        let penalty_sum: f64 = (0..n)
-            .map(|i| {
-                let xi = x.row(i);
-                let yi = y.row(i);
-
-                let mut dist_x: Vec<(f64, usize)> = (0..n)
-                    .map(|j| {
-                        let d: f64 = xi
-                            .iter()
-                            .zip(x.row(j).iter())
-                            .map(|(&a, &b)| (a - b) * (a - b))
-                            .sum();
-                        (d, j)
-                    })
-                    .collect();
-                dist_x.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
-                let knn_x: HashSet<usize> = dist_x[1..=k].iter().map(|&(_, j)| j).collect();
-                let mut rank_x = vec![0usize; n];
-                for (rank, &(_, j)) in dist_x.iter().enumerate() {
-                    rank_x[j] = rank;
-                }
-
-                let mut dist_y: Vec<(f64, usize)> = (0..n)
-                    .filter(|&j| j != i)
-                    .map(|j| {
-                        let d: f64 = yi
-                            .iter()
-                            .zip(y.row(j).iter())
-                            .map(|(&a, &b)| (a - b) * (a - b))
-                            .sum();
-                        (d, j)
-                    })
-                    .collect();
-                dist_y.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
-                let knn_y: HashSet<usize> = dist_y[..k].iter().map(|&(_, j)| j).collect();
-
-                let mut row_penalty = 0u64;
-                for j in &knn_y {
-                    if !knn_x.contains(j) {
-                        row_penalty += (rank_x[*j] - k) as u64;
-                    }
-                }
-                row_penalty as f64
-            })
-            .sum();
-        let denom = n as f64 * k as f64 * (2 * n).saturating_sub(3 * k + 1) as f64;
-        1.0 - penalty_sum * 2.0 / denom
+        let all_rows: Vec<usize> = (0..x.nrows()).collect();
+        trustworthiness_brute_force_subsampled(x, y, k, &all_rows)
     }
 
     #[test]
@@ -611,6 +564,8 @@ mod tests {
         );
     }
 
+    /// Brute-force O(n²) reference over the given query rows: full-sort X distances,
+    /// sort-based Y-kNN.
     fn trustworthiness_brute_force_subsampled(
         x: ndarray::ArrayView2<f64>,
         y: ndarray::ArrayView2<f64>,
