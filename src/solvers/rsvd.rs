@@ -475,27 +475,45 @@ mod tests {
     }
 
     #[test]
-    fn rsvd_solve_honours_params() {
-        // A larger explicit subspace and more power iterations must still produce the
-        // analytical 6-ring eigenvalues (0, 0.5, 0.5).
-        let n = 6;
-        let edges: Vec<(usize, usize, f32)> = (0..n).map(|i| (i, (i + 1) % n, 1.0f32)).collect();
-        let graph = make_graph(n, &edges);
-        let (_, sqrt_deg) =
-            crate::laplacian::compute_degrees(graph.view(), ComputeMode::PythonCompat);
-        let inv_sqrt_deg = sqrt_deg.mapv(|x| if x == 0.0 { 0.0 } else { 1.0 / x });
-        let l = build_normalized_laplacian(graph.view(), inv_sqrt_deg.as_slice().unwrap());
-
-        let params = SolverParams {
-            rsvd_oversampling: Some(2),
-            rsvd_nbiter: 4,
+    fn rsvd_solve_applies_the_oversampling_param() {
+        // Oversampling 0 sketches k = rank = 3 columns; the default sketches k = n = 6.
+        // A budget that fits only the smaller sketch tells the two apart.
+        let l = ring_6_laplacian();
+        let budget = crate::solvers::dense_bytes(l.rows(), rsvd_k_sub(l.rows(), 3, Some(0)));
+        let explicit = SolverParams {
+            rsvd_oversampling: Some(0),
+            dense_memory_budget: budget,
             ..SolverParams::default()
         };
-        let (eigenvalues, eigenvectors) = rsvd_solve(&l, 2, 0, &params).expect("rsvd_solve failed");
-        assert_eq!(eigenvectors.shape(), &[n, 3]);
-        assert!(eigenvalues[0].abs() < 1e-3);
-        assert!((eigenvalues[1] - 0.5).abs() < 1e-4);
-        assert!((eigenvalues[2] - 0.5).abs() < 1e-4);
+        let default = SolverParams {
+            dense_memory_budget: budget,
+            ..SolverParams::default()
+        };
+        assert!(rsvd_solve(&l, 2, 42, &explicit).is_some());
+        assert!(rsvd_solve(&l, 2, 42, &default).is_none());
+    }
+
+    #[test]
+    fn rsvd_solve_applies_the_nbiter_param() {
+        // With a rank-sized sketch (k = 3) only power iteration separates the wanted
+        // eigenvectors of M = 2I − L (eigenvalues 2, 1.5, 1.5 | 0.5, 0.5, 0): each pass
+        // shrinks the unwanted components by (0.5 / 1.5)² = 1/9.
+        let l = ring_6_laplacian();
+        let residual = |nbiter| {
+            let params = SolverParams {
+                rsvd_oversampling: Some(0),
+                rsvd_nbiter: nbiter,
+                ..SolverParams::default()
+            };
+            let (vals, vecs) = rsvd_solve(&l, 2, 42, &params).expect("rsvd_solve failed");
+            crate::solvers::quality::max_eigenpair_residual(&l, &vals, &vecs)
+        };
+        // Measured: 5.0e-1 without passes, 1.1e-4 after four (theory: 9⁴ ≈ 6561×).
+        let (no_passes, four_passes) = (residual(0), residual(4));
+        assert!(
+            four_passes < no_passes * 1e-3,
+            "four passes: residual {four_passes:.3e}, no passes: {no_passes:.3e}"
+        );
     }
 
     /// 6-node ring Laplacian, as in the residual test above.
