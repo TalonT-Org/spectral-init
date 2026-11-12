@@ -782,17 +782,17 @@ mod tests {
     #[test]
     fn solver_level_discriminants_and_names() {
         let levels = [
-            SolverLevel::DenseEvd,
-            SolverLevel::Lobpcg,
-            SolverLevel::SinvLobpcg,
-            SolverLevel::LobpcgRegularized,
-            SolverLevel::Rsvd,
-            SolverLevel::ForcedDense,
+            (SolverLevel::DenseEvd, "Dense EVD"),
+            (SolverLevel::Lobpcg, "LOBPCG"),
+            (SolverLevel::SinvLobpcg, "SINV LOBPCG"),
+            (SolverLevel::LobpcgRegularized, "LOBPCG+reg"),
+            (SolverLevel::Rsvd, "rSVD"),
+            (SolverLevel::ForcedDense, "Forced Dense EVD"),
         ];
         assert_eq!(levels.len(), SolverLevel::COUNT);
-        for (expected, level) in levels.iter().enumerate() {
+        for (expected, (level, name)) in levels.iter().enumerate() {
             assert_eq!(*level as usize, expected);
-            assert!(!level.name().is_empty());
+            assert_eq!(level.name(), *name);
         }
         assert!(SolverLevel::DenseEvd < SolverLevel::ForcedDense);
     }
