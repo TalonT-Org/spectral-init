@@ -65,33 +65,14 @@ fn test_ring_2000_warm_restart_converges() {
 }
 
 #[test]
-fn test_ring_2000_warm_restart_fires() {
-    // ring_2000 seed=42: research shows restart_count=3 at opt-level=2.
-    // At opt-level=2 the solver completes 300 iters/pass quickly; warm restart fires
-    // because 300 iters yields residual 3.25e-4 >> 1e-5 threshold.
-    // If the restart loop were truncated to a single pass, restart_count would be 0.
-    // NOTE: This assertion is FP-sensitive — LLVM FP reassociation at opt-level=2 can
-    // change Gram matrix conditioning, affecting whether Cholesky triggers a restart.
-    // Uses restart_count > 0 (weaker than >= 3) to reduce toolchain-version fragility.
-    let lap = fixtures::ring_laplacian(2000);
-    let sqrt_deg = fixtures::ring_sqrt_deg(2000);
-    let op = CsrOperator(&lap);
-    let result = lobpcg_solve(&op, 2, 42, false, &sqrt_deg);
-    let (_, restart_count) = result.expect("lobpcg_solve returned None for ring_2000 seed=42");
-    assert!(
-        restart_count > 0,
-        "ring_2000 seed=42 must trigger at least one warm restart at opt-level=2; \
-         got restart_count={restart_count}"
-    );
-}
-
-#[test]
 fn test_path_2000_warm_restart_fires() {
     // path_2000 is a known hard input: high condition number, small spectral gap.
     // At opt-level=2, at least one of seeds 42/43/44 will trigger warm restart.
     // If the restart loop were truncated to a single pass, restart_count would be 0
-    // for all seeds.
-    // NOTE: This assertion is FP-sensitive — same LLVM reassociation concern as above.
+    // for all seeds. (ring_2000 seed=42 firing is asserted by
+    // solver_invariants::test_inv_lobpcg_convergence_ill_conditioned.)
+    // NOTE: This assertion is FP-sensitive — LLVM FP reassociation at opt-level=2 can
+    // change Gram matrix conditioning, affecting whether Cholesky triggers a restart.
     // Uses total_restarts > 0 across 3 seeds to reduce single-seed fragility.
     let lap = fixtures::path_laplacian(2000);
     let sqrt_deg = fixtures::path_sqrt_deg(2000);
