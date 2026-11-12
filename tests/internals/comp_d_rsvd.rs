@@ -1,30 +1,28 @@
 //! Integration tests for the randomized SVD solver (Component D).
 
+use crate::{fixtures, internals};
+use ndarray::{Array1, Ix0};
+use spectral_init::__internal::{SolverParams, rsvd_solve};
+
 macro_rules! rsvd_test {
     ($name:ident, $dataset:expr) => {
         #[test]
         fn $name() {
-            let fixture_base = crate::fixtures::fixture_path($dataset, "");
+            let fixture_base = fixtures::fixture_path($dataset, "");
 
             // Load Laplacian
-            let laplacian = crate::fixtures::load_sparse_csr(&fixture_base.join("comp_b_laplacian.npz"));
+            let laplacian = fixtures::load_sparse_csr(&fixture_base.join("comp_b_laplacian.npz"));
 
             // Load reference eigenpairs from comp_d
             let ref_path = fixture_base.join("comp_d_eigensolver.npz");
-            let ref_eigenvalues: ndarray::Array1<f64> =
-                crate::fixtures::load_dense(&ref_path, "eigenvalues");
-            let k: i32 =
-                crate::fixtures::load_dense::<i32, ndarray::Ix0>(&ref_path, "k").into_scalar();
+            let ref_eigenvalues: Array1<f64> = fixtures::load_dense(&ref_path, "eigenvalues");
+            let k: i32 = fixtures::load_dense::<i32, Ix0>(&ref_path, "k").into_scalar();
             let n_components = (k as usize) - 1;
 
             // Run rSVD solver
-            let (eigenvalues, eigenvectors) = spectral_init::__internal::rsvd_solve(
-                &laplacian,
-                n_components,
-                42,
-                &spectral_init::__internal::SolverParams::default(),
-            )
-            .expect("rsvd_solve failed");
+            let (eigenvalues, eigenvectors) =
+                rsvd_solve(&laplacian, n_components, 42, &SolverParams::default())
+                    .expect("rsvd_solve failed");
 
             // Check eigenvalue accuracy. The production rsvd_solve uses nbiter=2
             // and n/10 oversampling, trading precision for speed. On graphs with tiny
@@ -46,7 +44,7 @@ macro_rules! rsvd_test {
             for i in 0..n_components {
                 let v = eigenvectors.column(i + 1);
                 let lambda = eig_slice[i + 1];
-                let r = crate::internals::residual_spmv(&laplacian, v, lambda);
+                let r = internals::residual_spmv(&laplacian, v, lambda);
                 assert!(
                     r < 5e-1,
                     "dataset={}, residual[{}]={:.2e} exceeds threshold 5e-1",
