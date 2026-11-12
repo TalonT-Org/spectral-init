@@ -28,7 +28,7 @@ proptest! {
     #[test]
     fn proptest_eigenvalues_sorted(n in 50usize..=200) {
         let laplacian = fixtures::ring_laplacian(n);
-        let ((eigs, _vecs), _level) =
+        let ((eigs, _vecs), _report) =
             internals::solve_with_unit_hint(&laplacian, 2, 42, ComputeMode::PythonCompat, &SolverParams::default());
         for i in 0..eigs.len() - 1 {
             prop_assert!(
@@ -42,7 +42,7 @@ proptest! {
     #[test]
     fn proptest_eigenvalues_nonneg(n in 50usize..=200) {
         let laplacian = fixtures::ring_laplacian(n);
-        let ((eigs, _vecs), _level) =
+        let ((eigs, _vecs), _report) =
             internals::solve_with_unit_hint(&laplacian, 2, 42, ComputeMode::PythonCompat, &SolverParams::default());
         for (i, &e) in eigs.iter().enumerate() {
             prop_assert!(e >= 0.0, "eigenvalue λ[{}]={} is negative", i, e);
@@ -52,7 +52,7 @@ proptest! {
     #[test]
     fn proptest_eigenvalues_leq_2(n in 50usize..=200) {
         let laplacian = fixtures::ring_laplacian(n);
-        let ((eigs, _vecs), _level) =
+        let ((eigs, _vecs), _report) =
             internals::solve_with_unit_hint(&laplacian, 2, 42, ComputeMode::PythonCompat, &SolverParams::default());
         for (i, &e) in eigs.iter().enumerate() {
             prop_assert!(
@@ -65,7 +65,7 @@ proptest! {
     #[test]
     fn proptest_trivial_null_space(n in 50usize..=200) {
         let laplacian = fixtures::ring_laplacian(n);
-        let ((eigs, _vecs), _level) =
+        let ((eigs, _vecs), _report) =
             internals::solve_with_unit_hint(&laplacian, 2, 42, ComputeMode::PythonCompat, &SolverParams::default());
         prop_assert!(
             eigs[0].abs() < 1e-6,
@@ -77,7 +77,7 @@ proptest! {
     #[test]
     fn proptest_residual_leq_1e5(n in 50usize..=200) {
         let laplacian = fixtures::ring_laplacian(n);
-        let ((eigs, vecs), _level) =
+        let ((eigs, vecs), _report) =
             internals::solve_with_unit_hint(&laplacian, 2, 42, ComputeMode::PythonCompat, &SolverParams::default());
         for i in 0..eigs.len() {
             let col = vecs.column(i);
@@ -93,7 +93,7 @@ proptest! {
     #[test]
     fn proptest_orthogonality(n in 50usize..=200) {
         let laplacian = fixtures::ring_laplacian(n);
-        let ((_eigs, vecs), _level) =
+        let ((_eigs, vecs), _report) =
             internals::solve_with_unit_hint(&laplacian, 2, 42, ComputeMode::PythonCompat, &SolverParams::default());
         // vecs is (n, 3) — compute V^T * V which should be I_3
         let vtv = vecs.t().dot(&vecs);
