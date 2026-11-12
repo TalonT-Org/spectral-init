@@ -63,23 +63,16 @@ pub(crate) fn trustworthiness_inner(
         PENALTY_NS.store(0, Ordering::Relaxed);
     }
 
+    // SIMD dispatch needs C-contiguous rows; other layouts take the scalar path.
     #[cfg(target_arch = "x86_64")]
-    let use_avx2 = is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma");
-    #[cfg(target_arch = "x86_64")]
-    let d_x = x.ncols();
+    let use_avx2_x = x.ncols() >= 10
+        && x.is_standard_layout()
+        && is_x86_feature_detected!("avx2")
+        && is_x86_feature_detected!("fma");
 
     #[cfg(target_arch = "x86_64")]
     let use_avx2_y =
         { y.ncols() == 2 && y.is_standard_layout() && is_x86_feature_detected!("avx2") };
-
-    // Validate contiguity once before the parallel loop: SIMD dispatch requires C-contiguous rows.
-    #[cfg(target_arch = "x86_64")]
-    if use_avx2 && d_x >= 10 {
-        assert!(
-            x.is_standard_layout(),
-            "trustworthiness: x must be in C-contiguous (standard) layout for SIMD dispatch"
-        );
-    }
 
     thread_local! {
         static COMB_DIST_X:  RefCell<Vec<f64>>   = const { RefCell::new(Vec::new()) };
@@ -120,10 +113,11 @@ pub(crate) fn trustworthiness_inner(
                     dist_x[j] = {
                         #[cfg(target_arch = "x86_64")]
                         {
-                            if use_avx2 && d_x >= 10 {
+                            if use_avx2_x {
                                 let si = xi.as_slice().expect("x row must be contiguous");
                                 let sj = xj.as_slice().expect("x row must be contiguous");
-                                // SAFETY: runtime + d_x check guarantees AVX2+FMA and >= 10 elements.
+                                // SAFETY: use_avx2_x guarantees AVX2+FMA at run time; both
+                                // rows are slices of equal length d_x >= 10.
                                 unsafe { dist_sq_avx2_looped(si, sj) }
                             } else {
                                 xi.iter()
@@ -279,7 +273,8 @@ pub(crate) fn trustworthiness_inner(
 ///
 /// Uses partial rank (introselect) for O(n)-average X-NN detection, thread-local
 /// scratch buffers to eliminate per-row allocations, and AVX2+FMA SIMD dispatch
-/// for X-distance computation when dimensionality >= 10.
+/// for X-distance computation when dimensionality >= 10 and `x` is C-contiguous;
+/// other layouts use the scalar path.
 ///
 /// # Formula
 /// `T(k) = 1 − (2 / (n·k·(2n−3k−1))) · Σᵢ Σ_{j ∈ U_i(k)} (r(i,j) − k)`
@@ -596,6 +591,32 @@ mod tests {
             let knn: Vec<usize> = dists[..k].iter().map(|&(_, j)| j).collect();
             assert!(!knn.contains(&i), "point {i} appeared in its own k-NN");
         }
+    }
+
+    #[test]
+    fn t_tw_11_column_major_x_takes_the_scalar_path() {
+        // d_x = 12 meets the SIMD width threshold: a column-major x must fall back to
+        // the scalar path instead of panicking, and score like its C-order copy.
+        use ndarray::ShapeBuilder;
+        use rand::{Rng, SeedableRng};
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(4242);
+        let n = 40;
+        let k = 5;
+        let x_f = ndarray::Array2::from_shape_fn((n, 12).f(), |_| rng.random::<f64>());
+        let y = ndarray::Array2::from_shape_fn((n, 2), |_| rng.random::<f64>());
+        assert!(!x_f.is_standard_layout());
+
+        let t = trustworthiness(x_f.view(), y.view(), k);
+        let t_ref = trustworthiness_brute_force(x_f.view(), y.view(), k);
+        let t_c_order = trustworthiness(x_f.as_standard_layout().view(), y.view(), k);
+        assert!(
+            (t - t_ref).abs() < 1e-12,
+            "column-major x: T={t} diverges from brute-force reference={t_ref}"
+        );
+        assert!(
+            (t - t_c_order).abs() < 1e-12,
+            "column-major x: T={t} diverges from its C-order copy={t_c_order}"
+        );
     }
 
     fn trustworthiness_brute_force_subsampled(
