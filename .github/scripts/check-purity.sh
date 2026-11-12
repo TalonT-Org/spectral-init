@@ -14,17 +14,22 @@ status=0
 
 # forbid <description> <extended regex> <path>...
 # Fails the gate when the pattern occurs in any Rust source under the given paths.
+# Files named in the space-separated variable `allowed` are exempt.
 forbid() {
     local description="$1" pattern="$2"
     shift 2
-    local path hits
-    for path in "$@"; do
+    local path hits file
+    for path in "$@" ${allowed:-}; do
         if [ ! -e "$path" ]; then
             echo "error: ${path} does not exist" >&2
             exit 2
         fi
     done
-    if hits="$(grep -rnE --include='*.rs' -e "$pattern" "$@")"; then
+    hits="$(grep -rnE --include='*.rs' -e "$pattern" "$@" || true)"
+    for file in ${allowed:-}; do
+        hits="$(grep -v "^${file}:" <<< "$hits" || true)"
+    done
+    if [ -n "$hits" ]; then
         echo "error: ${description}" >&2
         echo "$hits" >&2
         status=1
@@ -37,6 +42,11 @@ forbid "the library must not print or read the environment (src/)" \
 
 forbid "random numbers come from the named generator ChaCha12Rng, not StdRng (src/)" \
     'StdRng' \
+    src
+
+allowed="src/solvers/nd16_bridge.rs" \
+forbid "ndarray 0.16 and linfa-linalg are reached only through src/solvers/nd16_bridge.rs" \
+    'ndarray16|linfa_linalg' \
     src
 
 forbid "no package has a 'testing' feature" \

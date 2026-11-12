@@ -69,6 +69,8 @@ fn t_profiler_01_produces_valid_json() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
+// `--stderr-capture` redirects stderr with `dup2`, which exists on Unix only.
+#[cfg(unix)]
 #[test]
 fn t_profiler_02_stderr_capture_writes_file() {
     let tmp = std::env::temp_dir().join(format!("tw_profiler_stderr_test_{}", std::process::id()));

@@ -49,6 +49,12 @@ fn ulp_distance(a: f64, b: f64) -> u64 {
 
 #[test]
 fn test_spmv_divergence() {
+    #[cfg(target_arch = "x86_64")]
+    if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
+        eprintln!("test_spmv_divergence: skipping — AVX2/FMA not available");
+        return;
+    }
+
     let results_dir = results_dir();
     std::fs::create_dir_all(&results_dir).expect("cannot create RESULTS_DIR");
 
@@ -59,7 +65,7 @@ fn test_spmv_divergence() {
         let laplacian = fixtures::load_sparse_csr(&lap_path);
         let n = laplacian.rows();
         let nnz = laplacian.nnz();
-        let indptr = laplacian.indptr().raw_storage().to_vec();
+        let indptr = laplacian.proper_indptr().into_owned();
         let indices = laplacian.indices().to_vec();
         let data = laplacian.data().to_vec();
 
@@ -74,7 +80,12 @@ fn test_spmv_divergence() {
             #[cfg(target_arch = "x86_64")]
             let (max_abs_diff, rms_diff, max_ulp) = {
                 let mut y_avx2 = vec![0.0_f64; n];
-                spmv_avx2_gather(&indptr, &indices, &data, &x, &mut y_avx2);
+                // SAFETY: AVX2 and FMA were detected at the top of the test. `indptr`
+                // (zero-based), `indices` and `data` are the storage of a valid `n × n`
+                // CSR matrix, so `indptr` has `n + 1` non-decreasing entries ending at
+                // the length of `indices` and `data`, and every column index is below
+                // `n`, the length of `x`, which is far below `i32::MAX`.
+                unsafe { spmv_avx2_gather(&indptr, &indices, &data, &x, &mut y_avx2) };
 
                 let mut max_abs: f64 = 0.0;
                 let mut sum_sq: f64 = 0.0;

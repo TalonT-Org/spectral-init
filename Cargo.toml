@@ -22,10 +22,21 @@ members = ["trustworthiness", "eval"]
 # the `eval` research harness. Exempt from semver; not for downstream use.
 __internal = []
 
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+missing_docs = "deny"
+
+[lints.clippy]
+undocumented_unsafe_blocks = "deny"
+
+[lints.rustdoc]
+broken_intra_doc_links = "deny"
+
 [dependencies]
-sprs = "0.11"
+sprs = { version = "0.11", default-features = false }
 ndarray = "0.17"
-faer = "0.24"
+# `rayon` keeps faer's parallel dense solvers; `sparse-linalg` provides the sparse Cholesky.
+faer = { version = "0.24", default-features = false, features = ["std", "rayon", "sparse-linalg"] }
 rand = "0.9"
 rand_chacha = "0.9"       # the named generator behind the reproducibility contract
 rand_distr = "0.5"

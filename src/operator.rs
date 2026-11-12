@@ -49,9 +49,26 @@ pub fn spmv_csr(indptr: &[usize], indices: &[usize], data: &[f64], x: &[f64], y:
     }
 }
 
-// ─── AVX2 gather kernel (x86 only) ───────────────────────────────────────────
+// ─── AVX2 gather kernel (x86_64 only) ────────────────────────────────────────
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+/// Whether the column indices of a matrix with `cols` columns fit the signed 32-bit
+/// gather indices of the AVX2 kernel.
+#[cfg(target_arch = "x86_64")]
+#[doc(hidden)]
+pub fn simd_index_fits(cols: usize) -> bool {
+    cols <= i32::MAX as usize
+}
+
+/// CSR sparse-matrix × dense-vector product `y = A * x` with an AVX2 gather and FMA.
+///
+/// # Safety
+///
+/// - The CPU supports AVX2 and FMA.
+/// - `indptr` holds `y.len() + 1` non-decreasing entries, and `data` holds at least
+///   `indptr[y.len()]` elements.
+/// - Every column index in `indices[..indptr[y.len()]]` is below `x.len()` and at most
+///   `i32::MAX`.
+#[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2,fma")]
 unsafe fn spmv_avx2_gather_inner(
     indptr: &[usize],
@@ -67,6 +84,11 @@ unsafe fn spmv_avx2_gather_inner(
         let start = indptr[i];
         let end = indptr[i + 1];
 
+        // SAFETY: AVX2 and FMA are present (caller's contract). Every column index is
+        // below `x.len()` and at most `i32::MAX`, so each `as i32` cast is lossless and
+        // the gather reads four elements inside `x`. `base + 4 <= end <= indptr[n]` and
+        // `data` holds at least `indptr[n]` elements, so the unaligned load reads
+        // `data[base..base + 4]` in bounds.
         let (mut result, mut base) = unsafe {
             let mut acc = _mm256_setzero_pd();
             let mut base = start;
@@ -102,26 +124,25 @@ unsafe fn spmv_avx2_gather_inner(
     }
 }
 
-/// Safe wrapper around the AVX2+FMA gather SpMV kernel, for tests.
+/// Raw-slice entry to the AVX2+FMA gather SpMV kernel, for tests.
 ///
-/// Panics if AVX2 or FMA is not available on the current CPU.
-#[cfg(all(
-    any(test, feature = "__internal"),
-    any(target_arch = "x86", target_arch = "x86_64")
-))]
+/// # Safety
+///
+/// - The CPU supports AVX2 and FMA.
+/// - `indptr` holds `y.len() + 1` non-decreasing entries, and `indices` and `data` each
+///   hold at least `indptr[y.len()]` elements.
+/// - Every column index in `indices[..indptr[y.len()]]` is below `x.len()` and at most
+///   `i32::MAX`.
+#[cfg(all(any(test, feature = "__internal"), target_arch = "x86_64"))]
 #[doc(hidden)]
-pub fn spmv_avx2_gather(
+pub unsafe fn spmv_avx2_gather(
     indptr: &[usize],
     indices: &[usize],
     data: &[f64],
     x: &[f64],
     y: &mut [f64],
 ) {
-    assert!(
-        is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma"),
-        "spmv_avx2_gather: AVX2+FMA not available on this CPU"
-    );
-    // SAFETY: feature detection above guarantees avx2+fma are present.
+    // SAFETY: this function's contract is the kernel's.
     unsafe { spmv_avx2_gather_inner(indptr, indices, data, x, y) }
 }
 
@@ -207,50 +228,55 @@ impl<'a> LinearOperator for CsrOperator<'a> {
 /// SIMD-accelerated variant of `CsrOperator`. Routes k=1 through
 /// `spmv_avx2_gather_inner` (AVX2 gather kernel); k>1 falls back to `csr_mulacc_dense_rowmaj`.
 ///
-/// Only available on x86/x86_64. Construct via [`CsrOperatorSimd::new`], which panics if
-/// AVX2 or FMA are not available at runtime, ensuring the `unsafe` SIMD kernel in `apply`
-/// is never invoked on unsupported hardware.
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+/// Only available on x86_64. The only way to build one is [`CsrOperatorSimd::new`], which
+/// checks everything the `unsafe` SIMD kernel in `apply` relies on that can be checked
+/// once per matrix.
+#[cfg(target_arch = "x86_64")]
 pub struct CsrOperatorSimd<'a>(&'a CsMatI<f64, usize>);
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[cfg(target_arch = "x86_64")]
 impl<'a> CsrOperatorSimd<'a> {
-    /// Constructs a `CsrOperatorSimd` operator.
+    /// Wraps `mat` if the AVX2 kernel can run on it.
     ///
-    /// # Panics
-    ///
-    /// Panics if AVX2 or FMA CPU features are not available at runtime.
-    pub fn new(mat: &'a CsMatI<f64, usize>) -> Self {
-        assert!(
-            is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma"),
-            "CsrOperatorSimd requires AVX2 and FMA CPU features; \
-             check is_x86_feature_detected!(\"avx2\") && is_x86_feature_detected!(\"fma\") before constructing"
-        );
-        Self(mat)
+    /// Returns `None` unless `mat` is a square CSR matrix whose index pointer starts at
+    /// zero, its column indices fit 32 bits ([`simd_index_fits`]), and the CPU supports
+    /// AVX2 and FMA. Callers fall back to [`CsrOperator`] on `None`.
+    pub fn new(mat: &'a CsMatI<f64, usize>) -> Option<Self> {
+        let usable = mat.is_csr()
+            && mat.rows() == mat.cols()
+            && mat.indptr().is_proper()
+            && simd_index_fits(mat.cols())
+            && is_x86_feature_detected!("avx2")
+            && is_x86_feature_detected!("fma");
+        usable.then_some(Self(mat))
     }
 }
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[cfg(target_arch = "x86_64")]
 impl<'a> LinearOperator for CsrOperatorSimd<'a> {
+    /// # Panics
+    ///
+    /// Panics if `x` does not have one row per matrix column or `y` one row per matrix
+    /// row.
     fn apply(&self, x: ArrayView2<f64>, y: &mut Array2<f64>) {
-        debug_assert_eq!(
-            x.shape()[0],
-            self.0.rows(),
-            "CsrOperatorSimd::apply: x row count {} != matrix rows {}",
-            x.shape()[0],
-            self.0.rows()
+        let mat = self.0;
+        assert_eq!(
+            x.nrows(),
+            mat.cols(),
+            "CsrOperatorSimd::apply: x has {} rows, the matrix has {} columns",
+            x.nrows(),
+            mat.cols()
         );
-        debug_assert_eq!(
-            y.shape()[0],
-            self.0.rows(),
-            "CsrOperatorSimd::apply: y row count {} != matrix rows {}",
-            y.shape()[0],
-            self.0.rows()
+        assert_eq!(
+            y.nrows(),
+            mat.rows(),
+            "CsrOperatorSimd::apply: y has {} rows, the matrix has {} rows",
+            y.nrows(),
+            mat.rows()
         );
         y.fill(0.0);
         let k = x.shape()[1];
         if k == 1 {
-            let mat = self.0;
             let x_col0 = x.column(0);
             let x_col_vec: Vec<f64>;
             let x_col: &[f64] = match x_col0.as_slice() {
@@ -260,42 +286,40 @@ impl<'a> LinearOperator for CsrOperatorSimd<'a> {
                     &x_col_vec
                 }
             };
-            match y.column_mut(0).as_slice_mut() {
-                Some(y_col) => {
-                    // SAFETY: AVX2+FMA availability is enforced at construction time by
-                    // `CsrOperatorSimd::new()`, which panics if either feature is absent.
-                    // The private field prevents bypassing the constructor.
-                    unsafe {
-                        spmv_avx2_gather_inner(
-                            mat.indptr().raw_storage(),
-                            mat.indices(),
-                            mat.data(),
-                            x_col,
-                            y_col,
-                        );
-                    }
+            let kernel = |y_col: &mut [f64]| {
+                // SAFETY:
+                // - `new` detected AVX2 and FMA, and the private field admits no other
+                //   constructor.
+                // - `new` checked that `mat` is CSR with an index pointer starting at
+                //   zero. With the structure invariants sprs maintains for every
+                //   `CsMatI`, `indptr` then holds `rows + 1` non-decreasing entries
+                //   ending at `nnz`, `indices` and `data` hold `nnz` elements, and every
+                //   column index is below `cols`.
+                // - `x_col.len() == cols` and `y_col.len() == rows` by the asserts above,
+                //   and `cols <= i32::MAX` by `new`, so every column index is below
+                //   `x_col.len()` and fits an `i32`.
+                unsafe {
+                    spmv_avx2_gather_inner(
+                        mat.indptr().raw_storage(),
+                        mat.indices(),
+                        mat.data(),
+                        x_col,
+                        y_col,
+                    );
                 }
+            };
+            match y.column_mut(0).as_slice_mut() {
+                Some(y_col) => kernel(y_col),
                 None => {
                     let mut y_col = vec![0.0_f64; mat.rows()];
-                    // SAFETY: AVX2+FMA availability is enforced at construction time by
-                    // `CsrOperatorSimd::new()`, which panics if either feature is absent.
-                    // The private field prevents bypassing the constructor.
-                    unsafe {
-                        spmv_avx2_gather_inner(
-                            mat.indptr().raw_storage(),
-                            mat.indices(),
-                            mat.data(),
-                            x_col,
-                            &mut y_col,
-                        );
-                    }
+                    kernel(&mut y_col);
                     for (i, v) in y_col.into_iter().enumerate() {
                         y[[i, 0]] = v;
                     }
                 }
             }
         } else {
-            sprs::prod::csr_mulacc_dense_rowmaj(self.0.view(), x, y.view_mut());
+            sprs::prod::csr_mulacc_dense_rowmaj(mat.view(), x, y.view_mut());
         }
     }
 
@@ -528,10 +552,38 @@ mod tests {
 
     // ─── AVX2/SIMD operator tests ────────────────────────────────────────────
 
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    /// Whether the build or the CPU provides the features the AVX2 kernel needs.
+    #[cfg(target_arch = "x86_64")]
+    fn avx2_fma_available() -> bool {
+        is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma")
+    }
+
+    /// A 12×12 CSR matrix whose rows hold between 1 and 12 non-zeros, so the kernel's
+    /// four-wide loop runs zero to three times per row, with and without a scalar tail.
+    #[cfg(target_arch = "x86_64")]
+    fn wide_row_matrix() -> CsMatI<f64, usize> {
+        let n = 12usize;
+        let mut indptr = vec![0usize];
+        let mut indices = Vec::new();
+        let mut data = Vec::new();
+        for i in 0..n {
+            for j in 0..n {
+                // Rows 0..6 hold columns 0..=i+8; rows 6..12 hold columns i..12.
+                let stored = if i < 6 { j <= i + 8 } else { j >= i };
+                if stored {
+                    indices.push(j);
+                    data.push(1.0 / (1.0 + (i * n + j) as f64));
+                }
+            }
+            indptr.push(indices.len());
+        }
+        CsMatI::new((n, n), indptr, indices, data)
+    }
+
+    #[cfg(target_arch = "x86_64")]
     #[test]
     fn test_spmv_avx2_gather_matches_scalar() {
-        if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
+        if !avx2_fma_available() {
             return; // skip on non-AVX2 machines
         }
         let indptr = vec![0usize, 2, 5, 7];
@@ -541,7 +593,10 @@ mod tests {
         let mut y_scalar = vec![0.0_f64; 3];
         let mut y_avx2 = vec![0.0_f64; 3];
         spmv_csr(&indptr, &indices, &data, &x, &mut y_scalar);
-        spmv_avx2_gather(&indptr, &indices, &data, &x, &mut y_avx2);
+        // SAFETY: AVX2 and FMA were detected above; `indptr` has `y.len() + 1`
+        // non-decreasing entries ending at 7, the length of `indices` and `data`; every
+        // column index is below `x.len()` = 3.
+        unsafe { spmv_avx2_gather(&indptr, &indices, &data, &x, &mut y_avx2) };
         for i in 0..3 {
             assert!(
                 (y_avx2[i] - y_scalar[i]).abs() < 1e-13,
@@ -552,15 +607,78 @@ mod tests {
         }
     }
 
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     #[test]
-    fn test_csr_operator_simd_single_vector_matches_scalar() {
-        if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
+    fn test_csr_operator_simd_wide_rows_match_scalar() {
+        // Skipped only where the kernel cannot run. A build with AVX2 and FMA enabled
+        // at compile time never skips, so there the operator must be constructible.
+        if !avx2_fma_available() {
             return;
         }
+        let mat = wide_row_matrix();
+        let row_nnz: Vec<usize> = mat.outer_iterator().map(|row| row.nnz()).collect();
+        assert!(
+            row_nnz.contains(&9),
+            "need a row with two vector steps and a tail"
+        );
+        assert!(row_nnz.contains(&12), "need a row without a tail");
+        assert!(row_nnz.contains(&3), "need a row with only a tail");
+
+        let op_scalar = CsrOperator(&mat);
+        let op_simd = CsrOperatorSimd::new(&mat).expect("AVX2 and FMA are available");
+        let x = Array2::from_shape_fn((12, 1), |(i, _)| (i as f64 + 1.0) * 0.25);
+        let mut y_scalar = Array2::zeros((12, 1));
+        let mut y_simd = Array2::zeros((12, 1));
+        op_scalar.apply(x.view(), &mut y_scalar);
+        op_simd.apply(x.view(), &mut y_simd);
+        for i in 0..12 {
+            assert!(
+                (y_simd[[i, 0]] - y_scalar[[i, 0]]).abs() < 1e-13,
+                "row {i}: simd={}, scalar={}",
+                y_simd[[i, 0]],
+                y_scalar[[i, 0]]
+            );
+        }
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_csr_operator_simd_rejects_unsupported_matrices() {
+        // Non-square.
+        let rect = CsMatI::<f64, usize>::new((2, 3), vec![0, 1, 2], vec![0, 2], vec![1.0, 1.0]);
+        assert!(CsrOperatorSimd::new(&rect).is_none());
+        // CSC storage.
+        let csc = laplacian_3x3().to_csc();
+        assert!(CsrOperatorSimd::new(&csc).is_none());
+        // Index pointer not starting at zero: the last two rows of a 4×2 matrix.
+        let tall = CsMatI::<f64, usize>::new(
+            (4, 2),
+            vec![0, 1, 2, 3, 4],
+            vec![0, 1, 0, 1],
+            vec![1.0, 2.0, 3.0, 4.0],
+        );
+        let tail = tall.slice_outer(2..4).to_owned();
+        assert_eq!(tail.shape(), (2, 2));
+        assert!(!tail.indptr().is_proper());
+        assert!(CsrOperatorSimd::new(&tail).is_none());
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn simd_index_fits_is_bounded_by_i32_max() {
+        assert!(simd_index_fits(0));
+        assert!(simd_index_fits(i32::MAX as usize));
+        assert!(!simd_index_fits(i32::MAX as usize + 1));
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_csr_operator_simd_single_vector_matches_scalar() {
         let mat = laplacian_3x3();
         let op_scalar = CsrOperator(&mat);
-        let op_simd = CsrOperatorSimd(&mat);
+        let Some(op_simd) = CsrOperatorSimd::new(&mat) else {
+            return; // skip on non-AVX2 machines
+        };
         let x: ndarray::Array2<f64> = ndarray::array![[1.0], [2.0], [3.0]];
         let mut y_scalar = ndarray::Array2::zeros((3, 1));
         let mut y_simd = ndarray::Array2::zeros((3, 1));
@@ -576,14 +694,13 @@ mod tests {
         }
     }
 
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     #[test]
     fn test_csr_operator_simd_block_matches_sequential() {
-        if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
-            return;
-        }
         let mat = laplacian_3x3();
-        let op = CsrOperatorSimd(&mat);
+        let Some(op) = CsrOperatorSimd::new(&mat) else {
+            return; // skip on non-AVX2 machines
+        };
         let x_block: ndarray::Array2<f64> = ndarray::array![[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]];
         let mut y_block = ndarray::Array2::zeros((3, 2));
         op.apply(x_block.view(), &mut y_block);

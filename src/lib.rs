@@ -72,6 +72,23 @@
 //! report that no solver could produce acceptable eigenvectors within the configured
 //! dense memory budget. See [`spectral_init`] for the full list and a fallback example.
 //!
+//! # Reproducibility
+//!
+//! For a fixed `Cargo.lock`, target, CPU feature set and thread configuration, the output
+//! is a deterministic function of the graph, the data and the configuration. Random
+//! numbers come from the ChaCha12 generator (`rand_chacha::ChaCha12Rng`), seeded with
+//! [`SpectralInitConfig::with_seed`].
+//!
+//! Across thread configurations the output agrees to rounding, not bit for bit: the dense
+//! eigensolver splits larger problems across threads. Measured on x86_64 with faer 0.24.4,
+//! one thread against four changed no coordinate for a 500-node graph and changed
+//! coordinates by at most 1.2 × 10⁻¹⁰ for a 1500-node graph (coordinates are scaled to a
+//! maximum magnitude of 10); the test suite accepts differences up to 10⁻⁵. To pin the
+//! thread configuration, call `faer::set_global_parallelism` before [`spectral_init`], or
+//! set the `RAYON_NUM_THREADS` environment variable, which sizes the thread pool the
+//! solvers share. A different target or CPU feature set can change results by rounding in
+//! the same way; no bitwise agreement is promised across them.
+//!
 //! # Public Dependencies
 //!
 //! The graph and array types in the signature of [`spectral_init`] come from the
@@ -82,7 +99,6 @@
 //!
 //! For step-by-step integration instructions with `umap-rs` and standalone usage,
 //! see the [user guide](https://github.com/TalonT-Org/spectral-init/blob/main/docs/user-guide.md).
-#![warn(missing_docs)]
 
 mod components;
 mod config;
@@ -115,7 +131,7 @@ pub mod __internal {
     pub use crate::operator::{CsrOperator, LinearOperator, spmv_csr};
     #[cfg(target_arch = "x86_64")]
     #[doc(hidden)]
-    pub use crate::operator::{CsrOperatorSimd, spmv_avx2_gather};
+    pub use crate::operator::{CsrOperatorSimd, simd_index_fits, spmv_avx2_gather};
     #[doc(hidden)]
     pub use crate::scaling::{normalize_signs, scale_and_add_noise, scale_coords};
     #[doc(hidden)]

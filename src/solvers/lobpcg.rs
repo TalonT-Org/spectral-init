@@ -1,6 +1,6 @@
 //! LOBPCG iterative eigensolver (Levels 1 and 3 of the solver escalation chain).
 //!
-//! Wraps `linfa_linalg::lobpcg` with an ndarray 0.16 ↔ 0.17 bridging layer.
+//! Runs linfa-linalg's LOBPCG, reached through the `nd16_bridge` module.
 //! Level 1 runs without regularization; Level 3 applies an ε·I diagonal shift
 //! ([`REGULARIZATION_EPS`]) to widen the eigengap and improve convergence on
 //! near-degenerate graphs.
@@ -14,63 +14,16 @@
 //! within its iteration budget. The residual quality gate then determines whether
 //! to accept a converged result or escalate.
 
-// linfa-linalg 0.2 uses ndarray 0.16, while this crate uses ndarray 0.17.
-// We alias ndarray 0.16 as `nd16` for use at the linfa-linalg boundary only.
-// All internal types and return values use ndarray 0.17 (the `ndarray` crate).
-extern crate ndarray16;
-use ndarray16 as nd16;
-
 use super::EigenResult;
+use super::nd16_bridge::{self, LobpcgOutcome, Order, from_nd16_view2, nd16, to_nd16_array2};
 use super::quality::LOBPCG_ACCEPT_TOL;
 use crate::operator::LinearOperator;
 use faer::linalg::solvers::SelfAdjointEigen;
 use faer::{Mat as FaerMat, Side};
-use linfa_linalg::lobpcg::{Order, lobpcg};
 use ndarray::{Array1, Array2};
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
 use rand_distr::{Distribution, StandardNormal};
-
-// ─── ndarray 0.16 ↔ 0.17 conversion helpers ──────────────────────────────────
-//
-// Each helper rebuilds an array from exactly `rows * cols` elements read off the source,
-// so the `from_shape_vec` calls cannot fail.
-
-/// Convert an owned ndarray 0.17 `Array2<f64>` to ndarray 0.16 `Array2<f64>`.
-fn to_nd16_array2(a: Array2<f64>) -> nd16::Array2<f64> {
-    let (rows, cols) = (a.nrows(), a.ncols());
-    // iter() respects logical shape regardless of memory layout or slicing.
-    let raw: Vec<f64> = a.iter().copied().collect();
-    nd16::Array2::from_shape_vec((rows, cols), raw)
-        .expect("shape/data mismatch converting nd17→nd16 Array2")
-}
-
-/// Convert an ndarray 0.16 `ArrayView2<f64>` to an owned ndarray 0.17 `Array2<f64>`.
-fn from_nd16_view2(v: nd16::ArrayView2<f64>) -> Array2<f64> {
-    let (rows, cols) = (v.nrows(), v.ncols());
-    let raw: Vec<f64> = v.iter().copied().collect();
-    Array2::from_shape_vec((rows, cols), raw)
-        .expect("shape/data mismatch converting nd16→nd17 ArrayView2")
-}
-
-/// Convert an owned ndarray 0.16 `Array1<f64>` to ndarray 0.17 `Array1<f64>`.
-///
-/// Uses `iter()` instead of `into_raw_vec()` because linfa-linalg can return sliced arrays
-/// whose backing Vec is longer than the logical length. `iter()` always respects logical size.
-fn from_nd16_array1(a: nd16::Array1<f64>) -> Array1<f64> {
-    Array1::from_iter(a.iter().copied())
-}
-
-/// Convert an owned ndarray 0.16 `Array2<f64>` to ndarray 0.17 `Array2<f64>`.
-///
-/// Uses `iter()` for the same reason as `from_nd16_array1`: slice_move can leave backing
-/// Vecs larger than the logical extent, and `into_raw_vec()` would return all elements.
-fn from_nd16_array2(a: nd16::Array2<f64>) -> Array2<f64> {
-    let (rows, cols) = (a.nrows(), a.ncols());
-    let raw: Vec<f64> = a.iter().copied().collect();
-    Array2::from_shape_vec((rows, cols), raw)
-        .expect("shape/data mismatch converting nd16→nd17 Array2")
-}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -258,7 +211,7 @@ pub fn lobpcg_solve<O: LinearOperator>(
         return None;
     }
 
-    // Build random initial block [n, k] in ndarray 0.17, then convert to 0.16 for lobpcg.
+    // Build the random initial block [n, k].
     let mut rng = ChaCha12Rng::seed_from_u64(seed);
     let mut x_init_17: Array2<f64> =
         Array2::from_shape_fn((n, k), |_| StandardNormal.sample(&mut rng));
@@ -310,7 +263,7 @@ pub fn lobpcg_solve<O: LinearOperator>(
         }
     }
 
-    let mut x_init_opt: Option<nd16::Array2<f64>> = Some(to_nd16_array2(x_init_17));
+    let mut x_init_opt: Option<Array2<f64>> = Some(x_init_17);
     let mut last_result: Option<EigenResult> = None;
     // restart_count semantics (returned as the second element of the tuple):
     //   0                     — converged in initial pass; no warm restart was needed
@@ -326,12 +279,6 @@ pub fn lobpcg_solve<O: LinearOperator>(
     // LOBPCG_RESTART_MAXITER_CAP (1000). See Issue #123.
     let tol: f32 = LOBPCG_ACCEPT_TOL as f32;
 
-    // Defined outside the loop: captures nothing from the environment, so no need to
-    // re-create it on every iteration.
-    let extract = |r: linfa_linalg::lobpcg::Lobpcg<f64>| -> EigenResult {
-        (from_nd16_array1(r.eigvals), from_nd16_array2(r.eigvecs))
-    };
-
     for restart in 0..=MAX_WARM_RESTARTS {
         let maxiter = if restart == 0 {
             (n * 5).min(LOBPCG_INITIAL_MAXITER_CAP)
@@ -345,13 +292,13 @@ pub fn lobpcg_solve<O: LinearOperator>(
             x_init_opt.is_some(),
             "x_init_opt must be set at every loop entry"
         );
-        let x_init_nd16 = x_init_opt
+        let x_init = x_init_opt
             .take()
             .expect("x_init_opt is always set at loop entry");
 
         // ── Run linfa-linalg LOBPCG ──────────────────────────────────────────
-        let lobpcg_result = if regularize {
-            lobpcg(
+        let outcome = if regularize {
+            nd16_bridge::lobpcg(
                 |x: nd16::ArrayView2<f64>| -> nd16::Array2<f64> {
                     let x17 = from_nd16_view2(x);
                     let mut y17 = Array2::zeros((n, x17.ncols()));
@@ -359,24 +306,20 @@ pub fn lobpcg_solve<O: LinearOperator>(
                     y17.zip_mut_with(&x17, |yi, &xi| *yi += REGULARIZATION_EPS * xi);
                     to_nd16_array2(y17)
                 },
-                x_init_nd16,
-                |_: nd16::ArrayViewMut2<f64>| {},
-                None,
+                x_init,
                 tol,
                 maxiter,
                 Order::Smallest,
             )
         } else {
-            lobpcg(
+            nd16_bridge::lobpcg(
                 |x: nd16::ArrayView2<f64>| -> nd16::Array2<f64> {
                     let x17 = from_nd16_view2(x);
                     let mut y17 = Array2::zeros((n, x17.ncols()));
                     op.apply(x17.view(), &mut y17);
                     to_nd16_array2(y17)
                 },
-                x_init_nd16,
-                |_: nd16::ArrayViewMut2<f64>| {},
-                None,
+                x_init,
                 tol,
                 maxiter,
                 Order::Smallest,
@@ -387,19 +330,17 @@ pub fn lobpcg_solve<O: LinearOperator>(
         // When rnorms fail the gate but partial eigvecs exist, preserve them as a
         // warm-restart seed (comment 2971872705): a partially-converged subspace is
         // better than a cold random start.
-        let (raw_opt, partial_seed): (Option<EigenResult>, Option<Array2<f64>>) =
-            match lobpcg_result {
-                Ok(r) => (Some(extract(r)), None),
-                Err((_, Some(r))) => {
-                    if r.rnorm.iter().all(|&norm| norm < LOBPCG_ACCEPT_TOL) {
-                        (Some(extract(r)), None)
-                    } else {
-                        let seed_vecs = from_nd16_array2(r.eigvecs);
-                        (None, Some(seed_vecs))
-                    }
+        let (raw_opt, partial_seed): (Option<EigenResult>, Option<Array2<f64>>) = match outcome {
+            LobpcgOutcome::Converged(eigenpairs) => (Some(eigenpairs), None),
+            LobpcgOutcome::Partial { eigenpairs, rnorm } => {
+                if rnorm.iter().all(|&norm| norm < LOBPCG_ACCEPT_TOL) {
+                    (Some(eigenpairs), None)
+                } else {
+                    (None, Some(eigenpairs.1))
                 }
-                Err((_, None)) => (None, None),
-            };
+            }
+            LobpcgOutcome::Failed => (None, None),
+        };
 
         // If no primary result is available, attempt a warm restart with partial eigvecs
         // before giving up (addresses the silent-discard bug in comment 2971872705).
@@ -411,7 +352,7 @@ pub fn lobpcg_solve<O: LinearOperator>(
                     "[lobpcg] rnorm gate failed at restart {restart}/{MAX_WARM_RESTARTS}; \
                      seeding next restart with partial eigvecs"
                 );
-                x_init_opt = Some(to_nd16_array2(seed));
+                x_init_opt = Some(seed);
                 continue;
             }
             // No eigvecs to seed the next restart, or restarts exhausted:
@@ -444,7 +385,7 @@ pub fn lobpcg_solve<O: LinearOperator>(
                         "[lobpcg] Rayleigh-Ritz failed at restart {restart}/{MAX_WARM_RESTARTS}; \
                          seeding next restart with raw eigvecs"
                     );
-                    x_init_opt = Some(to_nd16_array2(raw_eigvecs));
+                    x_init_opt = Some(raw_eigvecs);
                     continue;
                 }
                 // Restarts exhausted: same dual-outcome break as the rnorm-fail path above.
@@ -479,7 +420,7 @@ pub fn lobpcg_solve<O: LinearOperator>(
                          (max_residual={max_res:.2e}); firing warm restart {}/{MAX_WARM_RESTARTS}",
                         restart + 1
                     );
-                    x_init_opt = Some(to_nd16_array2(result.1.clone()));
+                    x_init_opt = Some(result.1.clone());
                 } else {
                     log::debug!(
                         "[lobpcg] unconvergence detected after Rayleigh-Ritz \

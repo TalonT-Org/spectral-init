@@ -14,13 +14,7 @@
 //! In that case, execution falls through silently to Level 3 (LOBPCG + ε·I
 //! regularization).
 
-// linfa-linalg 0.2 uses ndarray 0.16, while this crate uses ndarray 0.17.
-// We alias ndarray 0.16 as `nd16` for use at the linfa-linalg boundary only.
-extern crate ndarray16;
-use ndarray16 as nd16;
-
 use faer::prelude::Solve;
-use linfa_linalg::lobpcg::{Order, lobpcg};
 use ndarray::{Array1, Array2, ArrayView2};
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
@@ -28,40 +22,11 @@ use rand_distr::{Distribution, StandardNormal};
 use sprs::CsMatI;
 
 use super::EigenResult;
+use super::nd16_bridge::{self, LobpcgOutcome, Order, from_nd16_view2, nd16, to_nd16_array2};
 use super::quality::{SINV_LINFA_TOL, SINV_LOBPCG_QUALITY_THRESHOLD};
 
 /// Diagonal shift ε making M = L + εI strictly SPD (REQ-SINV-002).
 pub(crate) const SINV_SHIFT: f64 = 1e-4;
-
-// ─── ndarray 0.16 ↔ 0.17 conversion helpers ──────────────────────────────────
-//
-// Each helper rebuilds an array from exactly `rows * cols` elements read off the source,
-// so the `from_shape_vec` calls cannot fail.
-
-fn to_nd16_array2(a: Array2<f64>) -> nd16::Array2<f64> {
-    let (rows, cols) = (a.nrows(), a.ncols());
-    let raw: Vec<f64> = a.iter().copied().collect();
-    nd16::Array2::from_shape_vec((rows, cols), raw)
-        .expect("shape/data mismatch converting nd17→nd16 Array2")
-}
-
-fn from_nd16_view2(v: nd16::ArrayView2<f64>) -> Array2<f64> {
-    let (rows, cols) = (v.nrows(), v.ncols());
-    let raw: Vec<f64> = v.iter().copied().collect();
-    Array2::from_shape_vec((rows, cols), raw)
-        .expect("shape/data mismatch converting nd16→nd17 ArrayView2")
-}
-
-fn from_nd16_array1(a: nd16::Array1<f64>) -> Array1<f64> {
-    Array1::from_iter(a.iter().copied())
-}
-
-fn from_nd16_array2(a: nd16::Array2<f64>) -> Array2<f64> {
-    let (rows, cols) = (a.nrows(), a.ncols());
-    let raw: Vec<f64> = a.iter().copied().collect();
-    Array2::from_shape_vec((rows, cols), raw)
-        .expect("shape/data mismatch converting nd16→nd17 Array2")
-}
 
 // ─── sprs ↔ faer sparse conversion ───────────────────────────────────────────
 
@@ -154,11 +119,10 @@ pub fn lobpcg_sinv_solve(
             .column_mut(0)
             .assign(&sqrt_deg.mapv(|x| x / sqrt_deg_norm));
     }
-    let x_init = to_nd16_array2(x_init_17);
 
     // Run LOBPCG with M⁻¹ operator — finds k largest eigenvalues of M⁻¹,
     // i.e. the k smallest eigenvalues of L (REQ-SINV-003).
-    let result = lobpcg(
+    let outcome = nd16_bridge::lobpcg(
         |x: nd16::ArrayView2<f64>| -> nd16::Array2<f64> {
             let x17 = from_nd16_view2(x);
             let mut rhs = nd17_view_to_faer(x17.view());
@@ -166,27 +130,21 @@ pub fn lobpcg_sinv_solve(
             chol.solve_in_place(&mut rhs);
             faer_to_nd17_nd16(&rhs)
         },
-        x_init,
-        |_: nd16::ArrayViewMut2<f64>| {},
-        None,
+        x_init_17,
         SINV_LINFA_TOL as f32,
         (n * 5).min(300),
         Order::Largest,
     );
 
-    // Extract result; accept partially-converged results if all residuals are small.
-    let extract = |r: linfa_linalg::lobpcg::Lobpcg<f64>| -> EigenResult {
-        (from_nd16_array1(r.eigvals), from_nd16_array2(r.eigvecs))
-    };
-
-    let result_opt = match result {
-        Ok(r) => Some(extract(r)),
-        Err((_, Some(r)))
-            if r.rnorm
+    // Accept partially-converged results if all residuals are small.
+    let result_opt = match outcome {
+        LobpcgOutcome::Converged(eigenpairs) => Some(eigenpairs),
+        LobpcgOutcome::Partial { eigenpairs, rnorm }
+            if rnorm
                 .iter()
                 .all(|&norm| norm < SINV_LOBPCG_QUALITY_THRESHOLD) =>
         {
-            Some(extract(r))
+            Some(eigenpairs)
         }
         _ => None,
     };

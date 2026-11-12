@@ -130,7 +130,7 @@ fn dk_bound_predicted(gap: f64, n_iterations: u32, avg_nnz_per_row: usize) -> f6
 ///
 /// `bridge_weight` is recorded verbatim; `n` is the per-clique cluster size
 /// used to estimate `avg_nnz_per_row` for the DK bound.
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[cfg(target_arch = "x86_64")]
 fn measure_solver_pair(
     laplacian: &CsMatI<f64, usize>,
     n: usize,
@@ -197,7 +197,7 @@ fn measure_solver_pair(
     })
 }
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[cfg(target_arch = "x86_64")]
 #[test]
 fn test_gap_sweep() {
     if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
@@ -236,7 +236,7 @@ fn test_gap_sweep() {
     println!("Wrote gap_sweep.json ({} entries)", records.len());
 }
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[cfg(target_arch = "x86_64")]
 #[test]
 fn test_discrete_multi_seed() {
     if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
@@ -267,7 +267,7 @@ fn test_discrete_multi_seed() {
     println!("Wrote discrete_gaps.json ({} entries)", records.len());
 }
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[cfg(target_arch = "x86_64")]
 #[test]
 fn test_solver_level_parity() {
     if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {

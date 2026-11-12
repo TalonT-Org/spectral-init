@@ -20,6 +20,7 @@ src/selection.rs
 src/solvers/dense.rs
 src/solvers/lobpcg.rs
 src/solvers/mod.rs
+src/solvers/nd16_bridge.rs
 src/solvers/quality.rs
 src/solvers/rsvd.rs
 src/solvers/sinv.rs

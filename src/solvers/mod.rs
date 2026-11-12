@@ -28,6 +28,7 @@
 
 mod dense;
 pub(crate) mod lobpcg;
+mod nd16_bridge;
 pub(crate) mod quality;
 pub(crate) mod rsvd;
 pub(crate) mod sinv;
@@ -415,8 +416,9 @@ fn solve_eigenproblem_with_op<O: crate::operator::LinearOperator>(
 
 /// Solver escalation chain with runtime operator dispatch.
 ///
-/// On x86/x86_64, `ComputeMode::RustNative` with AVX2+FMA available routes LOBPCG
-/// levels through `CsrOperatorSimd`; all other configurations use scalar `CsrOperator`.
+/// On x86_64, `ComputeMode::RustNative` routes LOBPCG levels through `CsrOperatorSimd`
+/// when the CPU supports AVX2 and FMA and the Laplacian's column indices fit 32 bits;
+/// all other configurations use scalar `CsrOperator`.
 /// `ComputeMode::PythonCompat` always uses the scalar path regardless of CPU features.
 ///
 /// Returns the `n_components + 1` smallest eigenpairs together with a [`SolveReport`].
@@ -436,15 +438,15 @@ pub fn solve_eigenproblem(
     compute_mode: ComputeMode,
     params: &SolverParams,
 ) -> Result<(EigenResult, SolveReport), SpectralError> {
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     if matches!(compute_mode, ComputeMode::RustNative)
-        && is_x86_feature_detected!("avx2")
-        && is_x86_feature_detected!("fma")
+        && let Some(op) = crate::operator::CsrOperatorSimd::new(laplacian)
     {
-        use crate::operator::CsrOperatorSimd;
-        let op = CsrOperatorSimd::new(laplacian);
         return solve_eigenproblem_with_op(laplacian, op, n_components, seed, sqrt_deg, params);
     }
+    // Other architectures have no SIMD operator: both modes use the scalar one.
+    #[cfg(not(target_arch = "x86_64"))]
+    let _ = compute_mode;
     let op = CsrOperator(laplacian);
     solve_eigenproblem_with_op(laplacian, op, n_components, seed, sqrt_deg, params)
 }

@@ -161,7 +161,7 @@ impl SellCsigma {
 
 // ─── AVX2 gather kernel ───────────────────────────────────────────────────────
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2,fma")]
 unsafe fn spmv_avx2_gather(
     indptr: &[usize],
@@ -215,7 +215,7 @@ unsafe fn spmv_avx2_gather(
     }
 }
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[cfg(target_arch = "x86_64")]
 fn spmv_avx2_dispatch(indptr: &[usize], indices: &[usize], data: &[f64], x: &[f64], y: &mut [f64]) {
     if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
         // SAFETY: feature detection above guarantees avx2+fma are available.
@@ -227,7 +227,7 @@ fn spmv_avx2_dispatch(indptr: &[usize], indices: &[usize], data: &[f64], x: &[f6
 
 // ─── AVX-512 gather kernel ───────────────────────────────────────────────────
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx512f")]
 unsafe fn spmv_avx512_gather(
     indptr: &[usize],
@@ -292,7 +292,7 @@ unsafe fn spmv_avx512_gather(
     }
 }
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[cfg(target_arch = "x86_64")]
 fn spmv_avx512_dispatch(
     indptr: &[usize],
     indices: &[usize],
@@ -340,9 +340,9 @@ fn verify_avx512(n: usize) {
     spmv_csr(&indptr, &indices, &data, &x, &mut y_csr);
 
     let mut y_avx512 = vec![0.0_f64; n];
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     spmv_avx512_dispatch(&indptr, &indices, &data, &x, &mut y_avx512);
-    #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+    #[cfg(not(target_arch = "x86_64"))]
     spmv_csr(&indptr, &indices, &data, &x, &mut y_avx512);
 
     for i in 0..n {
@@ -363,9 +363,9 @@ fn verify_avx2(n: usize) {
     spmv_csr(&indptr, &indices, &data, &x, &mut y_csr);
 
     let mut y_avx2 = vec![0.0_f64; n];
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     spmv_avx2_dispatch(&indptr, &indices, &data, &x, &mut y_avx2);
-    #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+    #[cfg(not(target_arch = "x86_64"))]
     spmv_csr(&indptr, &indices, &data, &x, &mut y_avx2);
 
     for i in 0..n {
@@ -441,6 +441,7 @@ fn bench_spmv_sell_c_conversion(c: &mut Criterion) {
 fn bench_spmv_avx2(c: &mut Criterion) {
     // ISA detection: emits "[isa] avx512f=true/false" so results files can confirm
     // the hardware context that produced the benchmark data.
+    #[cfg(target_arch = "x86_64")]
     eprintln!("[isa] avx512f={}", is_x86_feature_detected!("avx512f"));
     verify_avx2(200);
     verify_avx512(200);
@@ -462,7 +463,7 @@ fn bench_spmv_avx2(c: &mut Criterion) {
             });
         });
 
-        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        #[cfg(target_arch = "x86_64")]
         group.bench_with_input(BenchmarkId::new("avx2_gather", n), &n, |b, _| {
             b.iter(|| {
                 spmv_avx2_dispatch(
@@ -475,7 +476,7 @@ fn bench_spmv_avx2(c: &mut Criterion) {
             });
         });
 
-        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        #[cfg(target_arch = "x86_64")]
         if is_x86_feature_detected!("avx512f") {
             group.bench_with_input(BenchmarkId::new("avx512_gather", n), &n, |b, _| {
                 b.iter(|| {
