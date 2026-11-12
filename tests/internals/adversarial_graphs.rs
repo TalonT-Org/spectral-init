@@ -4,7 +4,10 @@
 
 use crate::{fixtures, internals};
 use ndarray::{Array1, Array2, Axis, s};
-use spectral_init::__internal::{CsrOperator, SolverLevel, SolverParams, lobpcg_solve, rsvd_solve};
+use spectral_init::__internal::{
+    CsrOperator, SolverLevel, SolverParams, build_normalized_laplacian, compute_degrees,
+    lobpcg_solve, rsvd_solve,
+};
 use spectral_init::{ComputeMode, SpectralError, SpectralInitConfig, spectral_init};
 use sprs::CsMatI;
 
@@ -653,6 +656,37 @@ fn epsilon_bridge_laplacian_shape_and_symmetry() {
             assert!(
                 (a - b).abs() < 1e-14,
                 "Laplacian not symmetric: L[{i},{j}]={a} != L[{j},{i}]={b}"
+            );
+        }
+    }
+}
+
+#[test]
+fn path_laplacian_equals_the_pipeline_laplacian() {
+    // n = 2 (two endpoints), 3 (one interior node) and 4 (the first size with an interior
+    // edge) are the cases where the endpoint rules overlap; 50 is the general case.
+    for n in [2usize, 3, 4, 50] {
+        let fixture = fixtures::path_laplacian(n);
+        let graph = fixtures::make_path(n as u32);
+        let (_, sqrt_deg) = compute_degrees(graph.view(), ComputeMode::PythonCompat);
+        let inv_sqrt_deg: Vec<f64> = sqrt_deg.iter().map(|&s| 1.0 / s).collect();
+        let pipeline = build_normalized_laplacian(graph.view(), &inv_sqrt_deg);
+        for i in 0..n {
+            for j in 0..n {
+                let want = pipeline.get(i, j).copied().unwrap_or(0.0);
+                let got = fixture.get(i, j).copied().unwrap_or(0.0);
+                assert!(
+                    (got - want).abs() < 1e-15,
+                    "path_laplacian({n})[{i},{j}] = {got}, the pipeline builds {want}"
+                );
+            }
+        }
+        // sqrt(degree) spans the null space: L · sqrt(d) = 0.
+        let residual = &fixture * &fixtures::path_sqrt_deg(n);
+        for (i, r) in residual.iter().enumerate() {
+            assert!(
+                r.abs() < 1e-14,
+                "path_laplacian({n}): (L·sqrt(d))[{i}] = {r}"
             );
         }
     }

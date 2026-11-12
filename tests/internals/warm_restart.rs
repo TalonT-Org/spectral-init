@@ -7,7 +7,6 @@ use crate::{fixtures, internals};
 use spectral_init::__internal::{CsrOperator, lobpcg_solve};
 
 #[test]
-#[ignore = "requires --release; LOBPCG convergence behaviour differs in debug mode and the test times out (>1200s) without optimisation"]
 fn test_path_2000_warm_restart_majority_converged() {
     // With the 1000-iteration cap on warm-restart passes, path_2000 should converge
     // on a majority of seeds.

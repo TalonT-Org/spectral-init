@@ -289,25 +289,26 @@ pub fn make_path(n: u32) -> CsMatI<f32, u32, usize> {
 }
 
 /// Normalized Laplacian of P_n (path graph) in f64.
-/// L = D^{-1/2}(D - A)D^{-1/2}. Tridiagonal with known closed-form entries:
-///   diagonal = 1.0, endpoint off-diagonals = -1/sqrt(2), interior off-diagonals = -0.5.
+/// L = I - D^{-1/2} A D^{-1/2}, so `L[i,j] = -1/sqrt(d_i d_j)` for neighbours `|i - j| = 1`.
+/// The two endpoints have degree 1 and every other node degree 2, which makes the entries
+/// between an endpoint and its neighbour `-1/sqrt(2)` (in both triangles) and all other
+/// off-diagonals `-0.5`; for n = 2 the single edge between two endpoints is `-1.0`.
 pub fn path_laplacian(n: usize) -> CsMatI<f64, usize> {
-    let inv_sqrt2 = 1.0_f64 / 2.0_f64.sqrt();
+    let degree = |i: usize| if i == 0 || i + 1 == n { 1.0_f64 } else { 2.0 };
+    let off_diagonal = |i: usize, j: usize| -1.0 / (degree(i) * degree(j)).sqrt();
     let mut indptr = vec![0usize; n + 1];
     let mut indices: Vec<usize> = Vec::new();
     let mut data: Vec<f64> = Vec::new();
     for i in 0..n {
         if i > 0 {
-            let w = if i == n - 1 { -inv_sqrt2 } else { -0.5 };
             indices.push(i - 1);
-            data.push(w);
+            data.push(off_diagonal(i, i - 1));
         }
         indices.push(i);
         data.push(1.0);
         if i + 1 < n {
-            let w = if i == 0 { -inv_sqrt2 } else { -0.5 };
             indices.push(i + 1);
-            data.push(w);
+            data.push(off_diagonal(i, i + 1));
         }
         indptr[i + 1] = indices.len();
     }
