@@ -57,7 +57,7 @@ struct SellCsigma {
     chunk_len: Vec<usize>, // max NNZ per chunk
     col_idx: Vec<usize>,   // padded column indices, interleaved row-major within chunk
     values: Vec<f64>,      // padded values, same layout as col_idx
-    inv_perm: Vec<usize>,  // inv_perm[sorted_pos] = orig_row (σ-sort permutation)
+    inv_perm: Vec<usize>,  // inv_perm[sorted_pos] = orig_row (inverse σ-sort permutation)
 }
 
 impl SellCsigma {
