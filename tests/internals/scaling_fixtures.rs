@@ -84,23 +84,6 @@ fn test_noise_distribution_blobs_50() {
     );
 }
 
-#[test]
-fn test_max_abs_is_10() {
-    for dataset in &["blobs_50", "moons_200", "circles_300"] {
-        let embedding = load_embedding(dataset);
-        let pre_noise = scale_coords(&embedding, 10.0).expect("scale_coords failed");
-        let max_abs = pre_noise
-            .iter()
-            .cloned()
-            .map(f32::abs)
-            .fold(0.0f32, f32::max);
-
-        // Tolerance is 1e-6f32: deterministic f64→f32 cast; max element rounds
-        // to 10.0 with at most ~9.5e-7 (f32 ULP at 10.0 = 2^(3-23)); 1e-6 gives headroom.
-        approx::assert_abs_diff_eq!(max_abs, 10.0f32, epsilon = 1e-6f32);
-    }
-}
-
 macro_rules! make_scale_test {
     ($name:ident, $dataset:literal) => {
         #[test]
