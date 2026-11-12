@@ -45,7 +45,7 @@ forbid "random numbers come from the named generator ChaCha12Rng, not StdRng (sr
     src
 
 allowed="src/solvers/nd16_bridge.rs" \
-forbid "ndarray 0.16 and linfa-linalg are reached only through src/solvers/nd16_bridge.rs" \
+forbid "the library reaches ndarray 0.16 and linfa-linalg only through src/solvers/nd16_bridge.rs (src/)" \
     'ndarray16|linfa_linalg' \
     src
 
