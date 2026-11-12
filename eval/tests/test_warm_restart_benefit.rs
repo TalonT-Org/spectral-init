@@ -1,11 +1,12 @@
-// Run with:
-//   cargo test -p spectral-init-eval --release --test test_warm_restart_benefit -- --nocapture
-//
-// This test file measures warm-restart count and eigenvector residuals on adversarial
-// graph types to determine whether the warm-restart loop in lobpcg_solve is reachable
-// and beneficial for UMAP-style Laplacians.
+//! Warm-restart benefit of the LOBPCG solver on adversarial graph types.
+//!
+//! Measures the warm-restart count and the eigenvector residuals to determine whether
+//! the warm-restart loop in lobpcg_solve is reachable and beneficial for UMAP-style
+//! Laplacians.
+//!
+//! Run with:
+//!   cargo test -p spectral-init-eval --release --test test_warm_restart_benefit -- --nocapture
 
-extern crate ndarray16;
 use ndarray16 as nd16;
 
 use linfa_linalg::lobpcg::{Order, lobpcg};
