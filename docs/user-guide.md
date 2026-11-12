@@ -24,6 +24,9 @@ crate's test suite.
 - Rust 1.88 or later.
 - No BLAS, LAPACK or C toolchain. The linear algebra comes from `faer` (dense and sparse
   factorizations) and `linfa-linalg` (LOBPCG), both pure Rust.
+- `linfa-linalg` is built on ndarray 0.16, while this crate (and `umap-rs`) use
+  ndarray 0.17, so a build also compiles ndarray 0.16, rand 0.8 and thiserror 1. None of
+  them appears in the public API.
 
 ## Background
 
