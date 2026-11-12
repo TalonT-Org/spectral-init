@@ -22,7 +22,10 @@ fn graph() -> CsMatI<f32, u32, usize> {
 fn degrees_and_laplacian(mode: ComputeMode) -> (Array1<f64>, CsMatI<f64, usize>) {
     let graph = graph();
     let (degrees, sqrt_deg) = compute_degrees(graph.view(), mode);
-    let inv_sqrt_deg: Vec<f64> = sqrt_deg.iter().map(|&s| 1.0 / s).collect();
+    let inv_sqrt_deg: Vec<f64> = sqrt_deg
+        .iter()
+        .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
+        .collect();
     (
         degrees,
         build_normalized_laplacian(graph.view(), &inv_sqrt_deg),
