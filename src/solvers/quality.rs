@@ -23,18 +23,6 @@ pub const LOBPCG_QUALITY_THRESHOLD: f64 = 2e-5;
 /// well-converged results while correctly escalating pathological graphs.
 pub const SINV_LOBPCG_QUALITY_THRESHOLD: f64 = 1e-6;
 
-/// LOBPCG internal per-vector convergence tolerance (linfa-linalg `tol` argument).
-/// Remains at 1e-5 — this is independent of `LOBPCG_QUALITY_THRESHOLD`: the former
-/// controls the iterative solver's per-step stopping criterion; the latter is the
-/// post-solve acceptance gate applied to the returned residuals.
-pub const LOBPCG_ACCEPT_TOL: f64 = 1e-5;
-
-/// Linfa-linalg internal convergence tolerance for shift-invert LOBPCG.
-/// Tighter than SINV_LOBPCG_QUALITY_THRESHOLD (1e-6) because this controls the iterative
-/// solver's per-step residual; the outer acceptance guard (SINV_LOBPCG_QUALITY_THRESHOLD)
-/// then decides whether the converged result is good enough to use.
-pub const SINV_LINFA_TOL: f64 = 1e-8;
-
 /// Computes the relative residual `‖L·v − λ·v‖₂ / max(‖v‖₂, ε)` for a single eigenpair.
 pub fn eigenpair_residual(
     laplacian: &CsMatI<f64, usize>,
@@ -93,7 +81,6 @@ mod tests {
         assert_eq!(LOBPCG_QUALITY_THRESHOLD, 2e-5_f64);
         assert_eq!(SINV_LOBPCG_QUALITY_THRESHOLD, 1e-6_f64);
         assert_eq!(RSVD_QUALITY_THRESHOLD, 1e-2_f64);
-        assert_eq!(LOBPCG_ACCEPT_TOL, 1e-5_f64);
     }
 
     #[test]
@@ -141,5 +128,22 @@ mod tests {
             max_res >= RSVD_QUALITY_THRESHOLD,
             "max_residual={max_res:.2e}, expected >= RSVD_QUALITY_THRESHOLD"
         );
+    }
+
+    #[test]
+    fn t_maxresid_02_propagates_nan_from_any_eigenpair() {
+        let laplacian = path_laplacian_3();
+        let s = 1.0_f64 / 3.0_f64.sqrt();
+        let eigenvalues = Array1::from_vec(vec![0.0_f64, 0.0_f64]);
+        // The NaN pair first and last covers both operands of the fold.
+        for nan_col in 0..2 {
+            let mut eigenvectors = Array2::from_elem((3, 2), s);
+            eigenvectors[[0, nan_col]] = f64::NAN;
+            let max_res = max_eigenpair_residual(&laplacian, &eigenvalues, &eigenvectors);
+            assert!(
+                max_res.is_nan(),
+                "NaN in column {nan_col}: max_residual={max_res:.2e}, expected NaN"
+            );
+        }
     }
 }

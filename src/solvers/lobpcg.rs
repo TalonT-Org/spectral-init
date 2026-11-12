@@ -16,7 +16,6 @@
 
 use super::EigenResult;
 use super::nd16_bridge::{self, LobpcgOutcome, Order, from_nd16_view2, nd16, to_nd16_array2};
-use super::quality::LOBPCG_ACCEPT_TOL;
 use crate::operator::LinearOperator;
 use faer::linalg::solvers::SelfAdjointEigen;
 use faer::{Mat as FaerMat, Side};
@@ -29,6 +28,14 @@ use rand_distr::{Distribution, StandardNormal};
 
 /// Epsilon shift applied to the operator in Level 3 (regularized) LOBPCG.
 pub const REGULARIZATION_EPS: f64 = 1e-5;
+
+/// Per-vector convergence tolerance passed to linfa-linalg as `tol`: 1e-5.
+///
+/// It is also the criterion for accepting a partially converged result and for
+/// deciding whether to warm-restart. It is the solver's own stopping criterion,
+/// independent of `LOBPCG_QUALITY_THRESHOLD` (2e-5), the chain's post-solve
+/// acceptance gate on the returned residuals.
+const LOBPCG_ACCEPT_TOL: f64 = 1e-5;
 
 /// Lower bound of the unwanted eigenvalue interval for Chebyshev preconditioning.
 /// Conservative choice: works for UMAP k-NN graphs where lambda_{k+1} < 0.1.
@@ -334,7 +341,8 @@ pub fn lobpcg_solve<O: LinearOperator>(
                 if rnorm.iter().all(|&norm| norm < LOBPCG_ACCEPT_TOL) {
                     (Some(eigenpairs), None)
                 } else {
-                    (None, Some(eigenpairs.1))
+                    let (_eigenvalues, seed_vecs) = eigenpairs;
+                    (None, Some(seed_vecs))
                 }
             }
             LobpcgOutcome::Failed => (None, None),

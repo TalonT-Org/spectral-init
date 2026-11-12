@@ -23,10 +23,17 @@ use sprs::CsMatI;
 
 use super::EigenResult;
 use super::nd16_bridge::{self, LobpcgOutcome, Order, from_nd16_view2, nd16, to_nd16_array2};
-use super::quality::{SINV_LINFA_TOL, SINV_LOBPCG_QUALITY_THRESHOLD};
+use super::quality::SINV_LOBPCG_QUALITY_THRESHOLD;
 
 /// Diagonal shift ε making M = L + εI strictly SPD.
 pub(crate) const SINV_SHIFT: f64 = 1e-4;
+
+/// Convergence tolerance passed to linfa-linalg as `tol` for the M⁻¹ problem: 1e-8.
+///
+/// It is the solver's own per-step stopping criterion. A partially converged
+/// result is accepted against `SINV_LOBPCG_QUALITY_THRESHOLD`, and the chain's
+/// residual gate then decides whether the result is used.
+const SINV_LINFA_TOL: f64 = 1e-8;
 
 // ─── sprs ↔ faer sparse conversion ───────────────────────────────────────────
 
