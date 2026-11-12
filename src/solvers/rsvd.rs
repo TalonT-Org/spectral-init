@@ -111,7 +111,7 @@ fn rsvd_k_sub(n: usize, rank: usize, oversampling: Option<usize>) -> usize {
     (rank + oversampling).min(n)
 }
 
-/// Randomized SVD eigensolver via the 2I − L trick (Level 3).
+/// Randomized SVD eigensolver via the 2I − L trick (Level 4).
 ///
 /// Implements Algorithm 5.1 (Halko-Tropp) with power iteration:
 /// - Forms M = 2I − L (eigenvalues of M = 2 − eigenvalues of L)

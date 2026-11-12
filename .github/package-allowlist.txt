@@ -2,10 +2,12 @@
 Cargo.lock
 Cargo.toml
 Cargo.toml.orig
-LICENSE
+LICENSE-APACHE
+LICENSE-MIT
 README.md
 docs/katex-header.html
 docs/umap-rs-integration.md
+docs/user-guide.md
 examples/basic.rs
 examples/compute_modes.rs
 examples/from_adjacency_list.rs

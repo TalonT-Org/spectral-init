@@ -1,425 +1,497 @@
-# User Guide: spectral-init
+# User guide: spectral-init
 
-> For crate-level API documentation see [docs.rs/spectral-init](https://docs.rs/spectral-init).
+The API reference is on [docs.rs/spectral-init](https://docs.rs/spectral-init). This guide
+covers how to build the input, how to configure the call, what happens with disconnected
+graphs, and what each error means. Every Rust snippet here is compiled and run by the
+crate's test suite.
 
-## Table of Contents
+## Contents
 
-1. [Prerequisites](#prerequisites)
+1. [Requirements](#requirements)
 2. [Background](#background)
 3. [Installation](#installation)
-4. [Path A: Integration with umap-rs](#path-a-integration-with-umap-rs)
-5. [Path B: Standalone Usage](#path-b-standalone-usage)
-6. [Configuration](#configuration)
-7. [Troubleshooting](#troubleshooting)
-8. [Performance Tips](#performance-tips)
+4. [The call](#the-call)
+5. [Building the input graph](#building-the-input-graph)
+6. [Using it with umap-rs](#using-it-with-umap-rs)
+7. [Configuration](#configuration)
+8. [Disconnected graphs and the `data` argument](#disconnected-graphs-and-the-data-argument)
+9. [Errors](#errors)
+10. [Reproducibility](#reproducibility)
+11. [Performance notes](#performance-notes)
 
----
+## Requirements
 
-## Prerequisites
-
-**Rust 1.88 or later (MSRV).** Install Rust via [rustup](https://www.rust-lang.org/tools/install).
-
-**No LAPACK/BLAS required** — this crate is pure Rust. All linear algebra is
-handled by `linfa-linalg` (LOBPCG) and `faer` (dense EVD).
-
----
+- Rust 1.88 or later.
+- No BLAS, LAPACK or C toolchain. The linear algebra comes from `faer` (dense and sparse
+  factorizations) and `linfa-linalg` (LOBPCG), both pure Rust.
 
 ## Background
 
-**What is spectral initialization?**
-Spectral initialization uses the eigenvectors of the graph Laplacian to produce a
-globally-aware starting point for UMAP's SGD optimization phase. Instead of placing
-points at random, it encodes the manifold topology directly into the initial
-coordinates — the primary reason Python UMAP produces superior embeddings. For
-theoretical background see [McInnes et al., "UMAP: Uniform Manifold Approximation
-and Projection for Dimension Reduction" (2018)](https://arxiv.org/abs/1802.03426).
+**Spectral initialization** places every node of a graph at its entries in a few
+eigenvectors of the graph Laplacian. The eigenvectors of the smallest non-zero eigenvalues
+change slowly from node to node, so nodes that are well connected end up close together
+and the layout reflects the large-scale shape of the graph. umap-learn uses this layout as
+the default starting point of its optimization (McInnes, Healy and Melville, *UMAP:
+Uniform Manifold Approximation and Projection for Dimension Reduction*,
+[arXiv:1802.03426](https://arxiv.org/abs/1802.03426)).
 
-**What is a fuzzy k-NN graph?**
-A sparse symmetric matrix `W` where entry `W[i,j]` represents the strength of
-connectivity between data points `i` and `j`. Higher values mean more similar.
-For UMAP, values are fuzzy membership weights in `[0, 1]`.
-
----
+**The graph** is a symmetric sparse matrix `W`. `W[i, j]` is the strength of the
+connection between nodes `i` and `j`; a larger value means the two are more similar. In
+UMAP it is the fuzzy k-nearest-neighbour graph, whose weights lie in `[0, 1]`.
 
 ## Installation
 
-Add to `Cargo.toml`:
-
 ```toml
 [dependencies]
 spectral-init = "0.1"
 ```
 
-For standalone graph construction (Path B), also add:
+The crate re-exports the two crates whose types appear in its API, as
+`spectral_init::sprs` and `spectral_init::ndarray`. If you depend on them directly, use
+`sprs` 0.11 and `ndarray` 0.17 so that the types are the same. The crate has no Cargo
+features to choose from.
 
-```toml
-sprs = "0.11"
-```
-
-### Feature Flags
-
-The crate has no public Cargo features.
-
----
-
-## Path A: Integration with umap-rs
-
-### Overview
-
-`umap_rs::Umap::graph()` returns `&CsMatI<f32, u32, usize>`, which is the exact
-type `spectral_init` accepts. No adapter or type conversion is needed.
-
-### Dependencies
-
-```toml
-[dependencies]
-spectral-init = "0.1"
-umap-rs = "..."       # check crates.io for current version
-ndarray = "0.17"      # for data loading
-```
-
-### Full Worked Example
+## The call
 
 ```rust
-use spectral_init::{spectral_init, SpectralInitConfig};
+use spectral_init::sprs::CsMatI;
+use spectral_init::{SpectralError, SpectralInitConfig, spectral_init};
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Step 1: Load or prepare your feature data.
-    // Shape: [n_samples, n_features], dtype f32.
-    // (Replace this with your actual data loading. The synthetic data below
-    // creates 100 points with distinct coordinates — zero-filled arrays would
-    // produce a degenerate graph and cause spectral_init to error.)
-    let data: ndarray::Array2<f32> = ndarray::Array2::from_shape_fn((100, 10), |(i, j)| {
-        ((i as f32 * 0.1 + j as f32) * std::f32::consts::PI / 5.0).sin()
-    });
+fn main() -> Result<(), SpectralError> {
+    // A path of four nodes: 0 – 1 – 2 – 3.
+    let graph = CsMatI::<f32, u32, usize>::new(
+        (4, 4),
+        vec![0, 1, 3, 5, 6],
+        vec![1, 0, 2, 1, 3, 2],
+        vec![1.0; 6],
+    );
 
-    // Step 2: Build the fuzzy k-NN graph with umap-rs.
-    // umap-rs handles nearest-neighbour search and fuzzy membership internally.
-    let umap = umap_rs::Umap::fit(&data, umap_rs::UmapConfig::default())?;
+    let config = SpectralInitConfig::new(2).with_seed(42);
+    let coords = spectral_init(graph.view(), None, &config)?;
 
-    // Step 3: Extract the graph. The return type is &CsMatI<f32, u32, usize> —
-    // exactly what spectral_init expects; no conversion needed.
-    let graph = umap.graph();
-
-    // Step 4: Compute spectral initialization.
-    // - n_components: embedding dimensionality (2 for 2-D visualization)
-    // - seed: RNG seed for reproducibility
-    // - data: None (only needed if graph has disconnected components)
-    // - config: SpectralInitConfig::default() uses PythonCompat mode
-    // `graph` is already `&CsMatI<f32, u32, usize>` (the return type of `umap.graph()`),
-    // so no additional `&` is needed here. In Path B below, an owned `CsMatI` is built
-    // from scratch, which is why that example passes `&graph`.
-    let init_coords = spectral_init(graph, 2, 42, None, SpectralInitConfig::default())?;
-
-    // init_coords: Array2<f32> with shape [n_samples, 2]
-    // Values are in approximately [-10, 10] with small Gaussian noise.
-    println!("Initial embedding shape: {:?}", init_coords.shape());
-    assert_eq!(init_coords.shape(), &[100, 2]);
-    assert!(init_coords.iter().all(|&v| v.is_finite()));
-
-    // Step 5: Pass init_coords as the starting embedding to your SGD optimizer.
-    // (Integrate with your UMAP SGD loop here.)
-
+    // One row per node, one column per embedding dimension.
+    assert_eq!(coords.dim(), (4, 2));
+    assert!(coords.is_standard_layout());
     Ok(())
 }
 ```
 
-### Verifying Output Quality
+`spectral_init` takes three arguments:
 
-- **Shape:** `[n_samples, n_components]`
-- **Finite values:** all entries pass `v.is_finite()`
-- **Scale:** values are scaled to approximately `[-10, 10]` with small noise (σ = 10⁻⁴)
-- **Structure:** for connected graphs, each column is a Laplacian eigenvector encoding global manifold topology
-- Residual quality is validated internally; if `ConvergenceFailure` is returned, something unexpected occurred — see [Troubleshooting](#troubleshooting)
+- `graph` — a view of the graph matrix (`CsMatViewI<f32, u32, usize>`); `.view()` on an
+  owned `CsMatI` gives one.
+- `data` — `Option<ArrayView2<f32>>`, the points the graph was built from, one row per
+  node. It is needed only for graphs with many connected components; see
+  [below](#disconnected-graphs-and-the-data-argument).
+- `config` — a [`SpectralInitConfig`](#configuration), which carries the number of
+  embedding dimensions and the seed.
 
----
+The result is an `(n, n_components)` array of `f32` in standard (row-major) layout. The
+coordinates are scaled so that the largest magnitude is 10, and carry Gaussian noise with
+standard deviation 10⁻⁴.
 
-## Path B: Standalone Usage
+## Building the input graph
 
-### When to Use This Path
+The graph must be
 
-Use Path B when:
-- You are not using `umap-rs` (custom UMAP, non-UMAP dimensionality reduction, visualization pipelines)
-- You already have a precomputed sparse similarity graph from another source
-- You want spectral initialization for a custom SGD optimizer that does not come with built-in initialization
+- **square**, with one row and column per node, and more nodes than embedding
+  dimensions;
+- **symmetric**: `W[i, j]` and `W[j, i]` are both stored and equal (a relative difference
+  up to 10⁻⁶ is tolerated);
+- **non-negative and finite**: no negative weight, NaN or infinity.
 
-### Building the Input Graph
+A stored zero is treated as an absent edge. A diagonal entry (a self-loop) counts towards
+the degree of its node and towards the adjacency, as it does in umap-learn. CSR and CSC
+storage are both accepted. Anything else is reported as an [error](#errors) before any
+computation starts.
 
-The input type is `CsMatI<f32, u32, usize>` from the `sprs` crate:
-
-- `f32` weights — non-negative, no NaN or Inf
-- `u32` column indices
-- `usize` row pointer offsets (standard CSR format)
-- The matrix **must be symmetric**: if edge `(i,j,w)` exists, edge `(j,i,w)` must also exist
-
-#### From an adjacency list (most common)
+### From a list of edges
 
 ```rust
-use sprs::{CsMatI, TriMatI};
+use spectral_init::sprs::{CsMatI, TriMatI};
+use spectral_init::{SpectralError, SpectralInitConfig, spectral_init};
 
-// Your kNN edges: (source_node, target_node, similarity_weight)
-// Weights must be non-negative. For UMAP fuzzy membership, values are in [0,1].
-let edges: Vec<(usize, usize, f32)> = vec![
-    (0, 1, 0.9),
-    (0, 2, 0.7),
-    (1, 3, 0.8),
-    (2, 3, 0.6),
-    // ... more edges
-];
-let n = 4; // number of nodes
+fn main() -> Result<(), SpectralError> {
+    // Undirected edges as (node, node, weight).
+    let edges = [
+        (0, 1, 0.9_f32),
+        (0, 2, 0.7),
+        (1, 3, 0.8),
+        (2, 3, 0.6),
+        (3, 4, 0.5),
+    ];
+    let n = 5;
 
-// Build a COO-format sparse matrix, then symmetrize and convert to CSR.
-let mut tri: TriMatI<f32, u32> = TriMatI::new((n, n));
-for &(i, j, w) in &edges {
-    tri.add_triplet(i, j, w); // forward edge
-    tri.add_triplet(j, i, w); // reverse edge — REQUIRED for symmetry
+    // Store every edge in both directions: the matrix has to be symmetric.
+    let mut triplets: TriMatI<f32, u32> = TriMatI::new((n, n));
+    for &(i, j, weight) in &edges {
+        triplets.add_triplet(i, j, weight);
+        triplets.add_triplet(j, i, weight);
+    }
+    let graph: CsMatI<f32, u32, usize> = triplets.to_csr();
+
+    let coords = spectral_init(graph.view(), None, &SpectralInitConfig::new(2))?;
+    assert_eq!(coords.dim(), (n, 2));
+    Ok(())
 }
-let graph: CsMatI<f32, u32, usize> = tri.to_csr();
 ```
 
-#### From a dense similarity matrix
+`TriMatI` sums the weights of an edge that is added twice. Add each undirected edge once
+in each direction.
+
+### From a dense similarity matrix
 
 ```rust
-use sprs::{CsMatI, TriMatI};
+use spectral_init::sprs::{CsMatI, TriMatI};
+use spectral_init::{SpectralError, SpectralInitConfig, spectral_init};
 
-// If you have an n×n dense similarity matrix (e.g., from a Gaussian kernel),
-// convert only the non-zero entries.
-let n = 4;
-let dense_sim: Vec<Vec<f32>> = vec![
-    vec![0.0, 0.9, 0.7, 0.0],
-    vec![0.9, 0.0, 0.0, 0.8],
-    vec![0.7, 0.0, 0.0, 0.6],
-    vec![0.0, 0.8, 0.6, 0.0],
-];
+fn main() -> Result<(), SpectralError> {
+    // A symmetric similarity matrix; zeros mean "no edge".
+    let similarity = [
+        [0.0_f32, 0.9, 0.7, 0.0],
+        [0.9, 0.0, 0.0, 0.8],
+        [0.7, 0.0, 0.0, 0.6],
+        [0.0, 0.8, 0.6, 0.0],
+    ];
+    let n = similarity.len();
 
-let mut tri: TriMatI<f32, u32> = TriMatI::new((n, n));
-for i in 0..n {
-    for j in 0..n {
-        let w = dense_sim[i][j];
-        if w > 0.0 {
-            tri.add_triplet(i, j, w);
+    let mut triplets: TriMatI<f32, u32> = TriMatI::new((n, n));
+    for (i, row) in similarity.iter().enumerate() {
+        for (j, &weight) in row.iter().enumerate() {
+            if weight > 0.0 {
+                triplets.add_triplet(i, j, weight);
+            }
         }
     }
+    let graph: CsMatI<f32, u32, usize> = triplets.to_csr();
+
+    let coords = spectral_init(graph.view(), None, &SpectralInitConfig::new(2))?;
+    assert_eq!(coords.dim(), (n, 2));
+    Ok(())
 }
-// Already symmetric if dense_sim[i][j] == dense_sim[j][i].
-let graph: CsMatI<f32, u32, usize> = tri.to_csr();
 ```
 
-> **Weight requirements:**
-> - Non-negative (`w >= 0.0`). Negative weights cause `InvalidGraph`.
-> - Finite (no `f32::NAN`, `f32::INFINITY`). NaN/Inf cause `InvalidGraph`.
-> - **Symmetric: `W[i,j] == W[j,i]`.** The crate does **not** validate symmetry. Passing an asymmetric matrix will silently produce mathematically incorrect eigenvectors — no error or warning is raised. Verifying symmetry before calling `spectral_init` is entirely the caller's responsibility.
-> - A weight of 0.0 is equivalent to no edge. Diagonal self-loops are ignored.
+### From points, with a brute-force neighbour search
 
-### Full Worked Example (Standalone Brute-Force kNN)
-
-A complete, self-contained example that computes brute-force nearest neighbors on
-a set of 2-D points, builds the sparse graph, and calls `spectral_init`. Requires
-only `spectral-init` and `sprs` as dependencies.
+This builds a k-nearest-neighbour graph of two well-separated clusters and embeds it. For
+real data, use a nearest-neighbour library instead of the quadratic search.
 
 ```rust
-use spectral_init::{spectral_init, SpectralInitConfig};
-use sprs::{CsMatI, TriMatI};
+use spectral_init::sprs::{CsMatI, TriMatI};
+use spectral_init::{SpectralError, SpectralInitConfig, spectral_init};
 
-fn euclidean_sq(a: &[f32], b: &[f32]) -> f32 {
-    a.iter().zip(b.iter()).map(|(x, y)| (x - y).powi(2)).sum()
+fn squared_distance(a: &[f32; 2], b: &[f32; 2]) -> f32 {
+    (a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2)
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 20 synthetic 2-D points arranged in two clusters.
+fn main() -> Result<(), SpectralError> {
+    // Two clusters of ten points each, five units apart.
     let points: Vec<[f32; 2]> = (0..10)
-        .map(|i| [i as f32 * 0.1, 0.0_f32])
-        .chain((0..10).map(|i| [5.0 + i as f32 * 0.1, 0.0_f32]))
+        .map(|i| [i as f32 * 0.1, 0.0])
+        .chain((0..10).map(|i| [5.0 + i as f32 * 0.1, 0.0]))
         .collect();
     let n = points.len();
-    let k = 5; // number of nearest neighbours per point
+    let k = 5;
 
-    // Brute-force kNN: find the k closest neighbours for each point.
-    // In production, use a proper kNN library (e.g., hora, hnsw_rs).
-    let mut tri: TriMatI<f32, u32> = TriMatI::new((n, n));
+    // A weight for every pair (i, j) where j is one of the k nearest neighbours of i
+    // or the other way round. The larger of the two directed weights is kept, which
+    // makes the matrix symmetric.
+    let mut weights = vec![vec![0.0_f32; n]; n];
     for i in 0..n {
-        // Compute distances to all other points.
-        let mut dists: Vec<(usize, f32)> = (0..n)
+        let mut neighbours: Vec<(f32, usize)> = (0..n)
             .filter(|&j| j != i)
-            .map(|j| (j, euclidean_sq(&points[i], &points[j])))
+            .map(|j| (squared_distance(&points[i], &points[j]), j))
             .collect();
-        dists.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
-
-        // Add only directed k-NN edges; reverse edges are added by symmetrization
-        // below. Adding both directions here would create duplicate triplets for
-        // mutual kNN pairs, doubling their weight when sprs sums duplicates.
-        // Weight = 1.0 / (1.0 + distance) converts distance to similarity.
-        for &(j, dist) in dists.iter().take(k) {
-            let w = 1.0 / (1.0 + dist.sqrt());
-            tri.add_triplet(i, j, w);
+        neighbours.sort_by(|a, b| a.0.total_cmp(&b.0));
+        for &(distance_squared, j) in neighbours.iter().take(k) {
+            let weight = 1.0 / (1.0 + distance_squared.sqrt());
+            weights[i][j] = weights[i][j].max(weight);
+            weights[j][i] = weights[j][i].max(weight);
         }
     }
-    // Symmetrize: W_sym = W + W^T. Edges present in only one direction are
-    // mirrored; mutual kNN edges accumulate to 2w, reflecting stronger affinity.
-    let directed: CsMatI<f32, u32, usize> = tri.to_csr();
-    let graph: CsMatI<f32, u32, usize> = &directed + &directed.transpose_view();
-
-    // Compute spectral initialization.
-    let init_coords = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())?;
-
-    println!("Embedding shape: {:?}", init_coords.shape());
-    for (i, row) in init_coords.outer_iter().enumerate() {
-        println!("  point {i:>2}: [{:.4}, {:.4}]", row[0], row[1]);
+    let mut triplets: TriMatI<f32, u32> = TriMatI::new((n, n));
+    for (i, row) in weights.iter().enumerate() {
+        for (j, &weight) in row.iter().enumerate() {
+            if weight > 0.0 {
+                triplets.add_triplet(i, j, weight);
+            }
+        }
     }
+    let graph: CsMatI<f32, u32, usize> = triplets.to_csr();
 
-    assert_eq!(init_coords.shape(), &[n, 2]);
-    assert!(init_coords.iter().all(|&v| v.is_finite()));
+    let config = SpectralInitConfig::new(2).with_seed(42);
+    let coords = spectral_init(graph.view(), None, &config)?;
+    assert_eq!(coords.dim(), (n, 2));
+    assert!(coords.iter().all(|v| v.is_finite()));
 
-    // Verify that the two clusters (points 0–9 vs 10–19) are separated in the
-    // first embedding dimension. The clusters are 5 units apart in input space,
-    // so their mean coordinates should differ by at least 1.0.
-    let mean_a: f32 = (0..10).map(|i| init_coords[[i, 0]]).sum::<f32>() / 10.0;
-    let mean_b: f32 = (10..20).map(|i| init_coords[[i, 0]]).sum::<f32>() / 10.0;
-    assert!(
-        (mean_a - mean_b).abs() > 1.0,
-        "clusters should be separated: mean_a={mean_a:.4}, mean_b={mean_b:.4}",
-    );
+    // The clusters do not share an edge, so the graph has two connected components
+    // and each is placed around its own position.
+    let centre = |range: std::ops::Range<usize>| -> [f32; 2] {
+        let count = range.len() as f32;
+        let sum = range.fold([0.0, 0.0], |acc, i| {
+            [acc[0] + coords[[i, 0]], acc[1] + coords[[i, 1]]]
+        });
+        [sum[0] / count, sum[1] / count]
+    };
+    let (a, b) = (centre(0..10), centre(10..20));
+    assert!(squared_distance(&a, &b).sqrt() > 1.0);
     Ok(())
 }
 ```
 
-### Use Cases for Standalone Path
+### From raw CSR arrays
 
-- Feeding initial coordinates into a custom UMAP SGD optimizer
-- Spectral embedding for data visualization (layout pre-computation)
-- Initializing t-SNE or ForceAtlas2 with a topology-aware starting point
-- Any pipeline where you already have a precomputed sparse similarity graph
+If the graph already exists as CSR arrays (`indptr`, `indices`, `data`), borrow them as a
+view instead of copying them:
 
----
+```rust
+use spectral_init::sprs::CsMatViewI;
+use spectral_init::{SpectralInitConfig, spectral_init};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // The path 0 – 1 – 2 – 3 in CSR form.
+    let indptr: Vec<usize> = vec![0, 1, 3, 5, 6];
+    let indices: Vec<u32> = vec![1, 0, 2, 1, 3, 2];
+    let weights: Vec<f32> = vec![1.0; 6];
+
+    // `try_new` checks the structure: `indptr` has `n + 1` non-decreasing entries, and
+    // the column indices of every row are sorted and below `n`.
+    let graph = CsMatViewI::<f32, u32, usize>::try_new((4, 4), &indptr, &indices, &weights)
+        .map_err(|(_, _, _, error)| error)?;
+
+    let coords = spectral_init(graph, None, &SpectralInitConfig::new(2))?;
+    assert_eq!(coords.dim(), (4, 2));
+    Ok(())
+}
+```
+
+`try_new_csc` does the same for CSC arrays.
+
+## Using it with umap-rs
+
+[`umap-rs`](https://crates.io/crates/umap-rs) takes the initial coordinates from the
+caller and exposes the graph they are computed from:
+
+1. `Umap::learn_manifold(data, knn_indices, knn_dists)` builds the fuzzy graph.
+2. `spectral_init(manifold.graph().view(), Some(data), &config)` computes the initial
+   coordinates.
+3. `Optimizer::new(manifold, init, ..)` or `Umap::fit(.., init.view())` optimizes from
+   them.
+
+The [integration guide](umap-rs-integration.md) has the complete code for both
+variants, the settings that matter (`symmetrize` must stay `true`), and the current state
+of `umap-rs`.
 
 ## Configuration
 
-### ComputeMode
-
-`SpectralInitConfig` is `#[non_exhaustive]`, which means struct literal construction
-is not allowed outside the crate. The only valid construction pattern is:
+`SpectralInitConfig::new(n_components)` creates a configuration with the defaults; the
+`with_*` methods change one setting each and can be chained.
 
 ```rust
 use spectral_init::{ComputeMode, SpectralInitConfig};
 
-let mut config = SpectralInitConfig::default(); // always start from default
-config.compute_mode = ComputeMode::RustNative;  // then override fields
+let config = SpectralInitConfig::new(2)
+    .with_seed(42)
+    .with_compute_mode(ComputeMode::RustNative)
+    .with_dense_memory_budget(8 << 30); // 8 GiB
+
+assert_eq!(config.n_components(), 2);
+assert_eq!(config.seed(), 42);
+assert_eq!(config.compute_mode(), ComputeMode::RustNative);
+assert_eq!(config.dense_memory_budget(), 8 << 30);
 ```
 
-**Decision guide:**
+| Setting | Default | Meaning |
+|---------|---------|---------|
+| `n_components` | (required) | Number of embedding dimensions. Must be at least 1 and less than the number of nodes. |
+| `with_seed` | `0` | Seed of the random numbers: the starting vectors of the iterative solvers and the final noise. |
+| `with_compute_mode` | `PythonCompat` | See below. |
+| `with_dense_memory_budget` | 4 GiB | Largest dense matrix, in bytes, a solver may allocate. See [Performance notes](#performance-notes). |
 
-| Requirement | Recommended mode |
-|-------------|-----------------|
-| Match Python UMAP output exactly (reproducibility, CI validation) | `PythonCompat` (default) |
-| Maximum throughput on large graphs (n > 2 000) on x86\_64 with AVX2 | `RustNative` |
-| Running on non-x86\_64 platforms (ARM, RISC-V, etc.) | Either — `RustNative` silently falls back to the same scalar path as `PythonCompat` |
-| Embeddings are subspace-equivalent between modes | True — they span the same eigenspace, may differ by sign per column |
+### Compute mode
 
-### Disconnected Graphs and the `data` Parameter
+| | `PythonCompat` | `RustNative` |
+|---|---|---|
+| Degree sums | single precision, in SciPy's order | double precision |
+| Sparse matrix-vector product in the iterative solvers | scalar | AVX2+FMA on x86_64 CPUs that have both (detected at run time), scalar elsewhere |
+| Relation to umap-learn | the mode the reference tests run in | same subspace, coordinates differ by rounding |
 
-- For fully connected graphs (the typical UMAP case), always pass `None`.
-- If your graph has disconnected components (isolated subgraphs, isolated nodes),
-  `spectral_init` handles each component independently. For components too small
-  to run spectral initialization, it uses PCA on the raw feature data.
-- Pass `Some(data.view())` only when your graph may have disconnected components
-  **and** you want PCA-based fallback for small components.
+Choose `PythonCompat` to stay as close as possible to umap-learn, and `RustNative` when
+that is not a concern. On targets other than x86_64 the two modes still differ in how
+degrees are summed.
+
+## Disconnected graphs and the `data` argument
+
+A graph that falls into several connected components has no single spectral layout: the
+eigenvectors of eigenvalue zero only tell the components apart. `spectral_init` therefore
+
+1. embeds every component on its own, with the same solvers;
+2. chooses a position for every component;
+3. scales each component to half the distance to its nearest neighbour component and
+   moves it to its position.
+
+How the positions are chosen depends on the number of components:
+
+- **Up to `2 · n_components` components.** The components are placed on the coordinate
+  axes, at `+e₁, +e₂, …, −e₁, −e₂, …`. `data` is not consulted and may be `None`.
+- **More than `2 · n_components` components.** The components are laid out by a spectral
+  embedding of their centroids, and the centroids are computed from `data`. Without
+  `data` the call returns `SpectralError::DataRequired`.
+
+A component with fewer than `2 · n_components` nodes is not embedded: all its nodes are
+put at the position of the component, and only the final noise separates them.
+
+`data`, when given, must have one row per node and only finite values. It is validated
+even when it ends up unused.
 
 ```rust
-use ndarray::ArrayView2;
+use spectral_init::ndarray::Array2;
+use spectral_init::sprs::{CsMatI, TriMatI};
+use spectral_init::{SpectralError, SpectralInitConfig, spectral_init};
 
-// If graph may be disconnected and you have the raw feature matrix:
-let data: ndarray::Array2<f32> = /* your feature matrix, shape [n_samples, n_features] */;
-let init_coords = spectral_init(
-    &graph,
-    2,
-    42,
-    Some(data.view()), // enables PCA fallback for small components
-    SpectralInitConfig::default(),
-)?;
+fn main() -> Result<(), SpectralError> {
+    // Five separate pairs of nodes: five connected components.
+    let n = 10;
+    let mut triplets: TriMatI<f32, u32> = TriMatI::new((n, n));
+    for pair in 0..5 {
+        triplets.add_triplet(2 * pair, 2 * pair + 1, 1.0);
+        triplets.add_triplet(2 * pair + 1, 2 * pair, 1.0);
+    }
+    let graph: CsMatI<f32, u32, usize> = triplets.to_csr();
+    let config = SpectralInitConfig::new(2);
+
+    // Five components are more than 2 · 2, so the data is required.
+    let without_data = spectral_init(graph.view(), None, &config);
+    assert!(matches!(
+        without_data,
+        Err(SpectralError::DataRequired {
+            connected_components: 5,
+            n_components: 2,
+            ..
+        })
+    ));
+
+    // The points the graph was built from: one row per node.
+    let data = Array2::from_shape_fn((n, 3), |(node, feature)| {
+        (node / 2) as f32 + 0.1 * feature as f32
+    });
+    let coords = spectral_init(graph.view(), Some(data.view()), &config)?;
+    assert_eq!(coords.dim(), (n, 2));
+    Ok(())
+}
 ```
 
-When `data` is `None` and the graph is disconnected:
-- Components with fewer than `2 × n_components` nodes are too small for spectral
-  initialization and are placed at a **deterministic** orthogonal meta-embedding
-  position. Placement depends only on component index and `n_components` — output
-  is fully reproducible across runs regardless of the `seed` parameter.
-- If the number of disconnected components exceeds `2 × n_components`, `spectral_init`
-  returns `InvalidGraph` (it needs centroid data to place components relative to each
-  other). In this case pass `Some(data.view())`.
+## Errors
 
----
-
-## Troubleshooting
-
-| Error | Typical cause | Fix |
-|-------|--------------|-----|
-| `SpectralError::TooFewNodes { n, dims }` | Graph has `n` nodes but `n_components >= n` | Reduce `n_components` below `n`, or use a larger dataset |
-| `SpectralError::InvalidGraph(msg)` | Malformed adjacency matrix | Inspect `msg`; check for negative weights, NaN/Inf, non-square shape, zero-size graph |
-| `SpectralError::ConvergenceFailure` | Degenerate graph or solver bug | This should not occur on any valid graph; file a bug at the repository |
-
-### `TooFewNodes`
+`spectral_init` does not panic. It returns a `SpectralError`, whose variants carry the
+details as fields. The enum and its variants are `#[non_exhaustive]`, so patterns need
+`..` and a wildcard arm:
 
 ```rust
-// This will fail: 3 nodes, 5 embedding dimensions
-let result = spectral_init(&small_graph, 5, 42, None, SpectralInitConfig::default());
-// Err(TooFewNodes { n: 3, dims: 5 })
-//
-// Fix: use n_components < n
-let result = spectral_init(&small_graph, 2, 42, None, SpectralInitConfig::default()); // ok
+use spectral_init::sprs::CsMatI;
+use spectral_init::{SpectralError, SpectralInitConfig, spectral_init};
+
+// One edge from node 0 to node 1 and none back.
+let graph = CsMatI::<f32, u32, usize>::new((3, 3), vec![0, 1, 1, 1], vec![1], vec![1.0]);
+
+match spectral_init(graph.view(), None, &SpectralInitConfig::new(2)) {
+    Ok(_) => unreachable!("the graph is not symmetric"),
+    Err(SpectralError::NotSymmetric { row, col, .. }) => assert_eq!((row, col), (0, 1)),
+    Err(other) => panic!("unexpected error: {other}"),
+}
 ```
 
-### `InvalidGraph`
+### Errors in the input
 
-Common causes:
+These are found before any computation, in this order.
 
-- Negative edge weights → `InvalidGraph("negative weight at (i, j)")`
-- NaN or Inf weights → `InvalidGraph("non-finite weight at (i, j)")`
-- Non-square matrix → `InvalidGraph("matrix is not square")`
-- Zero nodes (`n == 0`) or zero components (`n_components == 0`) → `InvalidGraph`
+| Variant | Cause | What to do |
+|---------|-------|------------|
+| `InvalidParameter { name, reason }` | `n_components` is 0. | Ask for at least one dimension. |
+| `NotSquare { rows, cols }` | The matrix is not square. | Pass the `n × n` graph, not a rectangular neighbour table. |
+| `TooFewNodes { n, n_components }` | The graph has `n ≤ n_components` nodes (an empty graph included). | Use fewer dimensions; `n_components` must be below `n`. |
+| `NonFiniteWeight { row, col }` | The weight at `(row, col)` is NaN or infinite. | Fix the weight computation; distances of zero or overflow are the usual source. |
+| `NegativeWeight { row, col }` | The weight at `(row, col)` is negative. | Use similarities, not signed values. |
+| `NotSymmetric { row, col }` | The entry at `(row, col)` has no equal entry at `(col, row)`. | Store every edge in both directions with the same weight. A directed k-nearest-neighbour graph has to be symmetrized first. |
+| `DegreeOverflow { node }` | The weights of `node` sum to more than an `f32` can hold. | Rescale the weights. |
+| `DataShapeMismatch { expected_rows, actual_rows }` | `data` does not have one row per node. | Pass the rows the graph was built from, in the same order. |
+| `NonFiniteData { row, col }` | `data` contains NaN or an infinity. | Clean the data, or pass `None` if the graph has few components. |
 
-### `ConvergenceFailure`
+Row and column numbers refer to the matrix as it was passed, whatever its storage order.
 
-This error fires only if the full 6-level solver escalation chain (dense EVD →
-LOBPCG → shift-invert LOBPCG → LOBPCG+regularization → randomized SVD → forced
-dense EVD) fails on every level. In practice this should not happen on any valid,
-non-degenerate graph. If encountered, it is a bug — file an issue at the repository
-with the graph's shape, density, and a reproducible construction.
+### Errors of the computation
 
----
+| Variant | Cause | What to do |
+|---------|-------|------------|
+| `DataRequired { connected_components, n_components }` | The graph has more than `2 · n_components` connected components and `data` is `None`. | Pass `Some(data)`, or check why the graph is so fragmented (too few neighbours, isolated points). |
+| `DenseBudgetExceeded { required_bytes, budget_bytes }` | The iterative solvers were not accepted and the dense one needs a larger matrix than the budget allows; or the graph has so many components that the matrix of their affinities exceeds it. | Raise the budget with `with_dense_memory_budget` if the memory is available, or substitute another initialization. |
+| `ConvergenceFailure { n }` | No solver produced eigenvectors of acceptable quality for a problem of size `n`. | Substitute another initialization. If the graph is an ordinary one, please report it. |
+| `DegenerateEmbedding` | Every computed coordinate is zero. | Substitute another initialization. |
 
-## Performance Tips
+umap-learn falls back to a random layout in the cases of the second table. This crate
+never does that silently; the README shows a `match` that substitutes a fallback.
 
-### Use `RustNative` for Large Graphs
+## Reproducibility
 
-On x86\_64 machines with AVX2 support, `ComputeMode::RustNative` routes SpMV operations
-through an AVX2+FMA SIMD kernel, improving throughput for large graphs:
+For a fixed `Cargo.lock`, target, CPU feature set and thread configuration, the result is
+a deterministic function of the graph, the data and the configuration. Random numbers
+come from the ChaCha12 generator (`rand_chacha::ChaCha12Rng`).
+
+Across thread configurations, CPU feature sets and targets the results agree to rounding
+but not bit for bit, because the dense solvers split their work differently. Measured on
+x86_64 with faer 0.24.4, one thread against four changed no coordinate for a 500-node
+graph and changed coordinates by at most 1.2 × 10⁻¹⁰ for a 1500-node graph, on
+coordinates of magnitude up to 10.
+
+The solvers use faer's global parallelism setting, which defaults to the Rayon thread
+pool. To pin it, either set the `RAYON_NUM_THREADS` environment variable or, with
+`faer = "0.24"` among your dependencies, set it in code:
 
 ```rust
-let mut config = SpectralInitConfig::default();
-config.compute_mode = ComputeMode::RustNative;
+use spectral_init::sprs::CsMatI;
+use spectral_init::{SpectralError, SpectralInitConfig, spectral_init};
+
+fn main() -> Result<(), SpectralError> {
+    // Run the dense solvers on the calling thread only.
+    faer::set_global_parallelism(faer::Par::Seq);
+
+    let graph = CsMatI::<f32, u32, usize>::new(
+        (4, 4),
+        vec![0, 1, 3, 5, 6],
+        vec![1, 0, 2, 1, 3, 2],
+        vec![1.0; 6],
+    );
+    let config = SpectralInitConfig::new(2).with_seed(42);
+    let first = spectral_init(graph.view(), None, &config)?;
+    let second = spectral_init(graph.view(), None, &config)?;
+    assert_eq!(first, second);
+    Ok(())
+}
 ```
 
-Measured on a 2 000-node ring graph:
+## Performance notes
 
-| Stage | Time |
-|-------|------|
-| Full pipeline | ~223 ms |
-| Laplacian construction | ~228 µs |
-| LOBPCG solve (k = 3) | ~306 ms |
-| Randomized SVD (k = 3) | ~286 ms |
+**The solver is chosen automatically.** Graphs with fewer than 2000 nodes are solved by a
+dense eigendecomposition, which is exact and costs time cubic in the number of nodes.
+Larger graphs go to the iterative solvers, which only multiply by the sparse Laplacian;
+if one of them does not reach its accuracy threshold, the next is tried. The crate logs
+the solver that produced the result through the [`log`](https://crates.io/crates/log)
+crate at debug level.
 
-### Compile with `target-cpu=native`
+**The dense memory budget** matters only when the iterative solvers are not accepted on a
+large graph. With the default of 4 GiB:
 
-To fully enable AVX2+FMA on your specific CPU:
+- the randomized SVD needs an `n × (n/10 + n_components + 1)` matrix and is skipped
+  above roughly 73,000 nodes;
+- the final dense eigendecomposition needs an `n × n` matrix and is refused above 23,170
+  nodes, in which case the call returns `DenseBudgetExceeded`.
 
-```sh
-RUSTFLAGS="-C target-cpu=native" cargo build --release
-```
+The budget caps each matrix, not the total: the dense solvers hold a few matrices of
+that size at once.
 
-This is especially effective when `ComputeMode::RustNative` is selected.
+**`RustNative` on x86_64** uses an AVX2+FMA kernel for the sparse matrix-vector product
+of the iterative solvers. It is selected at run time; building with
+`-C target-cpu=native` is not needed for it.
 
-### Solver Selection is Automatic
-
-The eigensolver escalates through up to six levels automatically; you do not need
-to tune it. For graphs with `n < 2 000`, dense EVD is used directly (fast and exact).
-For larger graphs, LOBPCG iterative solvers are used.
+**Each connected component is solved separately**, so a graph of many small components
+is cheaper than a connected graph of the same size.

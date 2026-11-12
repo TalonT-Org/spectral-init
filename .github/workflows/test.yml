@@ -158,6 +158,9 @@ jobs:
       - name: Run doctests
         run: cargo test --locked --workspace --doc
 
+      - name: KaTeX header integrity hashes
+        run: .github/scripts/check-sri.sh
+
   msrv:
     name: msrv
     runs-on: ubuntu-latest

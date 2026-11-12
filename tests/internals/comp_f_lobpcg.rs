@@ -45,12 +45,12 @@ fn run_lobpcg_test(dataset: &str, _expected_n: usize, regularized: bool) {
             );
         }
     } else {
-        // Level 2: residuals against the unshifted Laplacian must be < 1e-5.
+        // Level 3: residuals against the unshifted Laplacian must be < 1e-5.
         for i in 0..eigvals.len() {
             let residual = internals::eigenpair_residual(&op, eigvecs.column(i), eigvals[i]);
             assert!(
                 residual < 1e-5,
-                "dataset={dataset}, level2 residual for eigenpair {i}: {residual} >= 1e-5"
+                "dataset={dataset}, level3 residual for eigenpair {i}: {residual} >= 1e-5"
             );
         }
     }

@@ -131,7 +131,7 @@ def _section_memory(memory: dict) -> str:
 def _section_plots(plots_dir: pathlib.Path) -> str:
     lines = ["## 5. Plot References", ""]
     for fname in _PLOT_FILES:
-        rel = f"../tests/visual_eval/output/{fname}"
+        rel = f"../../tests/visual_eval/output/{fname}"
         lines.append(f"![{fname}]({rel})")
     return "\n".join(lines)
 
@@ -235,12 +235,12 @@ def generate_report(
 def main() -> None:
     PROJECT_ROOT = pathlib.Path(__file__).parent.parent.parent.parent
     OUTPUT_DIR   = PROJECT_ROOT / "tests" / "visual_eval" / "output"
-    DOCS_DIR     = PROJECT_ROOT / "docs"
+    REPORTS_DIR  = PROJECT_ROOT / "research" / "reports"
     generate_report(
         OUTPUT_DIR / "merfish_10k_metrics.json",
         OUTPUT_DIR / "merfish_10k_timing.json",
         OUTPUT_DIR / "merfish_10k_memory.json",
-        DOCS_DIR   / "merfish-10k-benchmark-report.md",
+        REPORTS_DIR / "merfish-10k-benchmark-report.md",
         OUTPUT_DIR,
     )
 

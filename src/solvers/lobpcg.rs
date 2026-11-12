@@ -27,7 +27,7 @@ use rand_distr::{Distribution, StandardNormal};
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-/// Epsilon shift applied to the operator in Level 2 (regularized) LOBPCG.
+/// Epsilon shift applied to the operator in Level 3 (regularized) LOBPCG.
 pub const REGULARIZATION_EPS: f64 = 1e-5;
 
 /// Lower bound of the unwanted eigenvalue interval for Chebyshev preconditioning.
@@ -58,13 +58,12 @@ const MAX_WARM_RESTARTS: usize = 3;
 
 /// Iteration budget cap for the initial (cold-start) LOBPCG pass.
 /// Matches Python UMAP's default; sufficient for well-conditioned graphs.
-/// Preserved unchanged by Issue #123.
 const LOBPCG_INITIAL_MAXITER_CAP: usize = 300;
 
 /// Iteration budget cap for warm-restart passes (restart > 0).
-/// Raised from 300 to 1000 by Issue #123: each restart starts from a
-/// partially-converged subspace, so more iterations are productive for
-/// adversarial graphs with small eigengap (path P_n, ring C_n).
+/// Larger than the initial cap: each restart starts from a partially-converged
+/// subspace, so more iterations are productive for adversarial graphs with small
+/// eigengap (path P_n, ring C_n).
 const LOBPCG_RESTART_MAXITER_CAP: usize = 1000;
 
 // ─── LOBPCG solver ────────────────────────────────────────────────────────────
@@ -193,8 +192,8 @@ fn per_vector_residuals<O: LinearOperator>(
         .collect()
 }
 
-/// LOBPCG iterative eigensolver (Levels 1 and 2).
-/// Level 1: no regularization. Level 2: adds epsilon*I shift.
+/// LOBPCG iterative eigensolver (Levels 1 and 3).
+/// Level 1: no regularization. Level 3: adds epsilon*I shift.
 pub fn lobpcg_solve<O: LinearOperator>(
     op: &O,
     n_components: usize,
@@ -272,11 +271,10 @@ pub fn lobpcg_solve<O: LinearOperator>(
     //                           without achieving residuals < LOBPCG_ACCEPT_TOL
     let mut restart_count: usize = 0;
 
-    // Convergence tolerance. Tol is set to 1e-5 (Issue #92): tighter tolerance,
-    // combined with the ChFSI-filtered starting subspace, achieves residual < 1e-5
-    // (REQ-PERF-001). The iteration budget (maxiter) is now per-pass: initial pass
-    // uses LOBPCG_INITIAL_MAXITER_CAP (300), warm-restart passes use
-    // LOBPCG_RESTART_MAXITER_CAP (1000). See Issue #123.
+    // Convergence tolerance. Combined with the ChFSI-filtered starting subspace, a
+    // tolerance of 1e-5 achieves residuals below 1e-5. The iteration budget (maxiter)
+    // is per pass: the initial pass uses LOBPCG_INITIAL_MAXITER_CAP (300), warm-restart
+    // passes use LOBPCG_RESTART_MAXITER_CAP (1000).
     let tol: f32 = LOBPCG_ACCEPT_TOL as f32;
 
     for restart in 0..=MAX_WARM_RESTARTS {
@@ -328,8 +326,8 @@ pub fn lobpcg_solve<O: LinearOperator>(
 
         // ── Extract eigenpairs if rnorms are acceptable ──────────────────────
         // When rnorms fail the gate but partial eigvecs exist, preserve them as a
-        // warm-restart seed (comment 2971872705): a partially-converged subspace is
-        // better than a cold random start.
+        // warm-restart seed: a partially-converged subspace is better than a cold
+        // random start.
         let (raw_opt, partial_seed): (Option<EigenResult>, Option<Array2<f64>>) = match outcome {
             LobpcgOutcome::Converged(eigenpairs) => (Some(eigenpairs), None),
             LobpcgOutcome::Partial { eigenpairs, rnorm } => {
@@ -343,7 +341,7 @@ pub fn lobpcg_solve<O: LinearOperator>(
         };
 
         // If no primary result is available, attempt a warm restart with partial eigvecs
-        // before giving up (addresses the silent-discard bug in comment 2971872705).
+        // before giving up.
         if raw_opt.is_none() {
             if restart < MAX_WARM_RESTARTS
                 && let Some(seed) = partial_seed
@@ -378,8 +376,7 @@ pub fn lobpcg_solve<O: LinearOperator>(
         match refined_opt {
             None => {
                 // RR failed (degenerate Gram matrix). Try raw eigvecs as warm-restart seed
-                // before giving up (comment 2971872707): asymmetric with the unconverged path
-                // which does reuse eigvecs for the next restart.
+                // before giving up, as the unconverged path does.
                 if restart < MAX_WARM_RESTARTS {
                     log::debug!(
                         "[lobpcg] Rayleigh-Ritz failed at restart {restart}/{MAX_WARM_RESTARTS}; \
@@ -401,7 +398,7 @@ pub fn lobpcg_solve<O: LinearOperator>(
                 break;
             }
             Some(result) => {
-                // ── Unconvergence detection (REQ-UCD-001) ──────────────────
+                // ── Unconvergence detection ────────────────────────────────
                 let residuals = per_vector_residuals(op, &result.0, &result.1);
                 if residuals.iter().all(|&r| r < LOBPCG_ACCEPT_TOL) {
                     if restart > 0 {
@@ -413,7 +410,7 @@ pub fn lobpcg_solve<O: LinearOperator>(
                 }
                 let max_res = residuals.iter().cloned().fold(0.0_f64, f64::max);
                 restart_count += 1;
-                // ── Warm restart: use refined eigvecs as next x_init (REQ-UCD-004) ──
+                // ── Warm restart: use refined eigvecs as next x_init ──
                 if restart < MAX_WARM_RESTARTS {
                     log::debug!(
                         "[lobpcg] unconvergence detected after Rayleigh-Ritz \
@@ -537,7 +534,7 @@ mod tests {
     }
 
     #[test]
-    fn lobpcg_solve_level2_eigenvalues_corrected() {
+    fn lobpcg_solve_level3_eigenvalues_corrected() {
         let diag = [0.0_f64, 0.1, 0.3, 0.7, 1.2, 2.0];
         let mat = diagonal_csr(&diag);
         let op = CsrOperator(&mat);
@@ -545,7 +542,7 @@ mod tests {
         let result = lobpcg_solve(&op, 2, 42, true, &Array1::from_vec(vec![1.0_f64; 6]));
         assert!(
             result.is_some(),
-            "Level 2 lobpcg_solve returned None on diagonal matrix"
+            "Level 3 lobpcg_solve returned None on diagonal matrix"
         );
         let ((eigvals, eigvecs), _) = result.unwrap();
 
@@ -569,7 +566,7 @@ mod tests {
         // Residual check against original Laplacian — no manual shift needed by the caller
         for i in 0..eigvals.len() {
             let r = residual(&op, eigvecs.column(i), eigvals[i]);
-            assert!(r < 1e-5, "level2 residual for eigenpair {i}: {r} >= 1e-5");
+            assert!(r < 1e-5, "level3 residual for eigenpair {i}: {r} >= 1e-5");
         }
     }
 

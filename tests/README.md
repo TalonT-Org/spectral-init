@@ -92,7 +92,7 @@ Exit code 0 = all checks pass, 1 = at least one check failed.
 2. Recreate the environment: `micromamba env update -f tests/environment.yml`.
 3. Delete old fixture files: `find tests/fixtures -name "*.npz" -delete`
 4. Regenerate: `python tests/generate_fixtures.py --verify`
-5. Commit the updated `manifest.json` (the `.npz` files are gitignored and generated locally).
+5. Commit the regenerated `.npz` files together with `manifest.json`; the fixtures are tracked.
 6. Update `tests/README.md` if the pipeline steps or format change.
 
 **Note:** `full_umap_e2e.npz` embeddings will differ across UMAP versions because SGD
@@ -123,7 +123,7 @@ references from Python UMAP.
 | File | Keys | Dtypes | Shape | Notes |
 |------|------|--------|-------|-------|
 | `comp_a_degrees.npz` | `degrees`, `sqrt_deg` | f64, f64 | (n,), (n,) | Row-sum degrees of pruned graph |
-| `comp_b_laplacian.npz` | *(scipy sparse CSR)* | f64 | (n,n) | Normalized Laplacian L = I − D^{-½}AD^{-½}; diagonal = 1 |
+| `comp_b_laplacian.npz` | *(scipy sparse CSR)* | f64 | (n,n) | Normalized Laplacian L = I − D^{-½}AD^{-½}; diagonal = 1 − A_ii/d_i, which is 1 without self-loops |
 | `comp_c_components.npz` | `n_components`, `labels` | i32, i32 | (), (n,) | Connected components of pruned graph |
 | `comp_d_eigensolver.npz` | `eigenvalues`, `eigenvectors`, `residuals`, `k` | f64, f64, f64, i32 | (k,), (n,k), (k,), () | k = dim+1 smallest eigenpairs; residuals = ‖Lv−λv‖/‖v‖ |
 | `comp_e_selection.npz` | `order`, `embedding` | i32, f64 | (dim,), (n,dim) | Indices of selected (non-trivial) eigenvectors |
@@ -139,9 +139,9 @@ references from Python UMAP.
 ### Sparse File Format
 
 `step3_membership.npz`, `step4_symmetrized.npz`, `step5a_pruned.npz`, and
-`comp_b_laplacian.npz` are written by `scipy.sparse.save_npz` and must be read
-with `scipy.sparse.load_npz`. The internal keys (`data`, `indices`, `indptr`,
-`format`, `shape`) are scipy-managed and not consumed directly by Rust tests.
+`comp_b_laplacian.npz` are written by `scipy.sparse.save_npz`; in Python, read them
+with `scipy.sparse.load_npz`. The Rust loaders read the CSR arrays inside (`data`,
+`indices`, `indptr`, `shape`) directly.
 
 ---
 
@@ -164,31 +164,26 @@ with `scipy.sparse.load_npz`. The internal keys (`data`, `indices`, `indptr`,
 
 ## How Rust Tests Consume Fixtures
 
-Rust integration tests locate fixtures via `CARGO_MANIFEST_DIR`:
+The loaders live in `tests/common/fixtures.rs`, which the test binaries of the root
+package and of `eval/` include by path:
+
+- `fixture_path(dataset, file)` finds `tests/fixtures/` by walking up from the including
+  package's `CARGO_MANIFEST_DIR`, so every workspace member reads the same files.
+- `load_dense(path, key)` reads one array of a numpy `.npz` archive.
+- `load_sparse_csr(path)` reads a scipy CSR matrix as `f64` values with `usize` indices
+  (the Laplacian fixtures); `load_sparse_csr_f32_u32(path)` reads one as `f32` values with
+  `u32` indices (the graph fixtures, the input type of `spectral_init`).
 
 ```rust
-use std::path::Path;
-
-fn fixture_path(dataset: &str, file: &str) -> std::path::PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures")
-        .join(dataset)
-        .join(file)
-}
-
-#[test]
-fn test_laplacian_matches_reference() {
-    let path = fixture_path("blobs_50", "comp_b_laplacian.npz");
-    // load with ndarray-npz or similar, then compare to Rust output
-}
+let laplacian = fixtures::load_sparse_csr(&fixtures::fixture_path(
+    "blobs_connected_200",
+    "comp_b_laplacian.npz",
+));
+let degrees: ndarray::Array1<f64> = fixtures::load_dense(
+    &fixtures::fixture_path("blobs_connected_200", "comp_a_degrees.npz"),
+    "degrees",
+);
 ```
-
-Dense `.npz` files (single-array): open the archive, extract the array key (e.g. `"X"`),
-and compare with `assert_relative_eq!` from the `approx` crate.
-
-Sparse `.npz` files (scipy format): these are not directly loadable by standard Rust npz
-readers; for Rust tests, prefer loading the dense intermediate steps (comp_a through
-comp_f) which are all standard numpy `.npz` archives.
 
 ### Self-loop mini-fixture
 
@@ -207,12 +202,12 @@ python tests/generate_fixtures.py --selfloop
 
 | Name | Shape | Type | Description |
 |------|-------|------|-------------|
-| `blobs_50` | (50, 2) | Gaussian blobs | Small connected graph; primary reference dataset |
-| `blobs_500` | (500, 2) | Gaussian blobs | Medium connected graph |
-| `blobs_5000` | (5000, 2) | Gaussian blobs | Large connected graph |
-| `moons_200` | (200, 2) | Two moons | Nonlinear structure |
-| `circles_300` | (300, 2) | Concentric circles | Nonlinear structure |
-| `near_dupes_100` | (100, 2) | Near-duplicates | Tests degenerate eigenvalue handling |
+| `blobs_50` | (50, 2) | Gaussian blobs | Small graph with 3 connected components |
+| `blobs_500` | (500, 2) | Gaussian blobs | Medium graph with 4 connected components |
+| `blobs_5000` | (5000, 2) | Gaussian blobs | Large graph with 2 connected components |
+| `moons_200` | (200, 2) | Two moons | Nonlinear structure; connected |
+| `circles_300` | (300, 2) | Concentric circles | Nonlinear structure; connected |
+| `near_dupes_100` | (100, 2) | Near-duplicates | Tests degenerate eigenvalue handling; connected |
 | `disconnected_200` | (200, 2) | 4 isolated clusters | Tests multi-component graph handling |
-| `blobs_connected_200` | (200, 2) | Gaussian blobs | Guaranteed-connected graph; tests eigensolver on medium connected input |
-| `blobs_connected_2000` | (2000+, 2) | Gaussian blobs | Guaranteed-connected graph; tests eigensolver on large connected input |
+| `blobs_connected_200` | (200, 2) | Gaussian blobs | Connected graph; tests the dense eigensolver |
+| `blobs_connected_2000` | (2000, 10) | Gaussian blobs | Connected graph; tests the iterative eigensolvers |

@@ -1,10 +1,13 @@
 //! Spectral initialization for UMAP embeddings.
 //!
-//! Computes the Laplacian eigenvectors of a fuzzy k-NN graph to provide
-//! globally-aware starting coordinates for the SGD optimization phase of UMAP.
-//! This is the primary reason Python UMAP produces superior embeddings compared to
-//! random or PCA initialization: eigenvectors of the graph Laplacian encode the
-//! global manifold structure before a single gradient step is taken.
+//! Computes the spectral layout that umap-learn uses as its default starting point for
+//! stochastic gradient descent: the eigenvectors of the normalized graph Laplacian that
+//! belong to its smallest non-zero eigenvalues. These eigenvectors vary slowly across the
+//! graph, so the coordinates reflect its large-scale structure before the optimizer
+//! takes a step.
+//!
+//! The input is a symmetric, non-negative sparse graph in [`sprs`] storage, such as the
+//! fuzzy k-nearest-neighbour graph of UMAP. The crate depends on no UMAP implementation.
 //!
 //! # Quick Start
 //!
@@ -33,32 +36,54 @@
 //!
 //! $$L = I - D^{-1/2} W D^{-1/2}$$
 //!
-//! where $W$ is the fuzzy k-NN adjacency matrix and $D$ is the degree matrix.
-//! The $k$ smallest non-trivial eigenvectors of $L$ (skipping the all-ones trivial
-//! eigenvector at $\lambda = 0$) form the initial coordinate matrix. Coordinates are
-//! then scaled to $[-10, 10]$ and perturbed with $\mathcal{N}(0, 10^{-4})$ noise to
-//! break symmetry.
+//! where $W$ is the weighted adjacency matrix and $D$ the diagonal matrix of its row
+//! sums, in double precision. The eigenvectors of the $k$ smallest non-zero eigenvalues
+//! of $L$ form the coordinate matrix; the eigenvector of $\lambda = 0$, proportional to
+//! $\sqrt{d}$, is skipped. Each column is given a fixed sign, all coordinates are scaled
+//! by one factor so that the largest magnitude is 10, and Gaussian noise with standard
+//! deviation $10^{-4}$ is added.
 //!
-//! The eigensolver uses a 6-level escalation chain (dense EVD → LOBPCG →
-//! shift-invert LOBPCG → LOBPCG+regularization → randomized SVD → forced dense EVD)
-//! to guarantee convergence on any valid graph.
+//! A graph with several connected components is embedded component by component, and
+//! the components are then placed relative to one another; see [`spectral_init`].
+//!
+//! The eigenvectors come from a chain of six solvers of increasing cost: a dense
+//! eigendecomposition for small graphs, then LOBPCG, shift-and-invert LOBPCG, regularized
+//! LOBPCG, a randomized SVD and, last, a dense eigendecomposition for any size that fits
+//! the [dense memory budget](SpectralInitConfig::with_dense_memory_budget). A result is
+//! accepted only if its residual $\lVert L v - \lambda v \rVert / \lVert v \rVert$ is
+//! below the threshold of its solver; when no solver produces one, the call returns an
+//! error.
 //!
 //! # Compute Mode
 //!
-//! [`ComputeMode::PythonCompat`] (default) matches Python UMAP's degree accumulation
-//! order and solver paths exactly, enabling bit-for-bit validation against reference
-//! outputs. [`ComputeMode::RustNative`] routes large-graph LOBPCG levels through an
-//! AVX2+FMA SIMD matrix-vector kernel (~1 ULP divergence from Python), offering
-//! improved throughput on x86_64 hardware with AVX2 support.
+//! [`ComputeMode::PythonCompat`] (default) follows umap-learn's arithmetic where it
+//! affects the result: degrees are accumulated in single precision, in SciPy's order, and
+//! the iterative solvers use a scalar matrix-vector product.
+//! [`ComputeMode::RustNative`] sums degrees in double precision on every target and, on
+//! x86_64 CPUs with AVX2 and FMA, runs the matrix-vector product of the iterative solvers
+//! through a SIMD kernel. The two modes span the same embedding subspace and differ in
+//! the coordinates by rounding.
+//!
+//! The reference for `PythonCompat` is the spectral layout of umap-learn 0.5.x, which
+//! umap-learn 0.6 keeps as its default. The test suite compares every stage with values
+//! recorded from umap-learn 0.5.11: degrees within $10^{-15}$, Laplacian entries within
+//! $10^{-14}$, eigenvalues within the threshold of the solver that produced them, and
+//! coordinates up to the sign of each column. Where eigenvalues nearly coincide, the
+//! spanned subspace is compared instead of the individual vectors.
 //!
 //! # Feature Flags
 //!
 //! The crate has no public Cargo features.
 //!
-//! # Integration with umap-rs
+//! # Use with a UMAP Implementation
 //!
-//! Pass the graph returned by `umap_rs::Umap::graph()` directly — its type
-//! `CsMatI<f32, u32, usize>` matches this crate's input type exactly.
+//! `umap-rs` exposes the graph this crate needs: `Umap::learn_manifold(..).graph()` is a
+//! `CsMatI<f32, u32, usize>`, and its `Optimizer` takes the initial coordinates. The
+//! [integration guide] has the full sequence, and `examples/umap_rs.rs` is a runnable
+//! version. An implementation that keeps its graph as raw CSR arrays can lend them to
+//! [`spectral_init`] as a [`sprs::CsMatViewI`] without copying.
+//!
+//! [integration guide]: https://github.com/TalonT-Org/spectral-init/blob/main/docs/umap-rs-integration.md
 //!
 //! # Error Handling
 //!
@@ -93,12 +118,14 @@
 //!
 //! The graph and array types in the signature of [`spectral_init`] come from the
 //! [`sprs`] and [`ndarray`] crates, which are re-exported so that callers can name the
-//! exact versions this crate was built against.
+//! exact versions this crate was built against. Moving to a semver-incompatible release
+//! of either is a breaking change of this crate.
 //!
 //! # User Guide
 //!
-//! For step-by-step integration instructions with `umap-rs` and standalone usage,
-//! see the [user guide](https://github.com/TalonT-Org/spectral-init/blob/main/docs/user-guide.md).
+//! The [user guide](https://github.com/TalonT-Org/spectral-init/blob/main/docs/user-guide.md)
+//! covers building the input graph, configuration, disconnected graphs and
+//! troubleshooting.
 
 mod components;
 mod config;
@@ -152,10 +179,16 @@ pub mod __internal {
     };
 }
 
-/// The guides shipped with the crate, attached as documentation so that their Rust
-/// snippets are compiled and run as doctests.
+/// The README and the guides shipped with the crate, attached as documentation so that
+/// their Rust snippets are compiled and run as doctests.
 #[cfg(doctest)]
 mod guides {
+    #[doc = include_str!("../README.md")]
+    struct Readme;
+
+    #[doc = include_str!("../docs/user-guide.md")]
+    struct UserGuide;
+
     #[doc = include_str!("../docs/umap-rs-integration.md")]
     struct UmapRsIntegration;
 }

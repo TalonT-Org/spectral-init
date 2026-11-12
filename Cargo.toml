@@ -3,7 +3,7 @@ name = "spectral-init"
 version = "0.1.0"
 edition = "2024"
 description = "Spectral initialization for UMAP embeddings"
-license = "MIT"
+license = "MIT OR Apache-2.0"
 repository = "https://github.com/TalonT-Org/spectral-init"
 readme = "README.md"
 rust-version = "1.88"
@@ -14,8 +14,10 @@ include = [
     "/examples/**",
     "/docs/katex-header.html",
     "/docs/umap-rs-integration.md",
+    "/docs/user-guide.md",
     "/README.md",
-    "/LICENSE",
+    "/LICENSE-APACHE",
+    "/LICENSE-MIT",
 ]
 
 [package.metadata.docs.rs]

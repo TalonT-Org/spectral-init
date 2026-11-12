@@ -63,7 +63,7 @@ fn make_laplacian(n: usize, half: usize) -> sprs::CsMatI<f64, usize> {
 // ─── Benchmark Groups ─────────────────────────────────────────────────────────
 
 /// SpMV: single-vector CSR sparse-matrix × dense-vector product.
-/// This is the Phase 3 SIMD replacement target.
+/// This is the scalar kernel the SIMD variants replace.
 fn bench_spmv(c: &mut Criterion) {
     let mut group = c.benchmark_group("spmv_csr");
     for &n in &[200_usize, 2000, 5000] {

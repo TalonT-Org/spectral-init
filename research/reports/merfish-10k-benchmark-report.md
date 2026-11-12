@@ -60,10 +60,10 @@
 
 ## 5. Plot References
 
-![merfish_10k_baseline.png](../tests/visual_eval/output/merfish_10k_baseline.png)
-![merfish_10k_comparison.png](../tests/visual_eval/output/merfish_10k_comparison.png)
-![merfish_10k_overlay.png](../tests/visual_eval/output/merfish_10k_overlay.png)
-![merfish_10k_three_way_overlay.png](../tests/visual_eval/output/merfish_10k_three_way_overlay.png)
+![merfish_10k_baseline.png](../../tests/visual_eval/output/merfish_10k_baseline.png)
+![merfish_10k_comparison.png](../../tests/visual_eval/output/merfish_10k_comparison.png)
+![merfish_10k_overlay.png](../../tests/visual_eval/output/merfish_10k_overlay.png)
+![merfish_10k_three_way_overlay.png](../../tests/visual_eval/output/merfish_10k_three_way_overlay.png)
 
 ## 6. Interpretation
 

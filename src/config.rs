@@ -1,5 +1,5 @@
-/// Controls whether to match Python UMAP behavior exactly or use
-/// best-available Rust-native algorithms.
+/// Selects between following umap-learn's arithmetic and using the best available
+/// native algorithms.
 ///
 /// # Examples
 ///
@@ -15,20 +15,19 @@
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum ComputeMode {
-    /// Match Python UMAP behavior exactly. This is the default.
+    /// Follow umap-learn's arithmetic. This is the default.
     ///
-    /// Degree accumulation uses f32 column-sum scatter-add to match SciPy's `csc_matvec`
-    /// behavior, and LOBPCG levels use the scalar matrix-vector kernel. Produces outputs
-    /// that are bit-for-bit comparable to the Python UMAP reference implementation for
-    /// validation purposes.
+    /// Degrees are accumulated in single precision, column by column, as SciPy's
+    /// `csc_matvec` does, and the LOBPCG levels use the scalar matrix-vector kernel. This
+    /// is the mode the reference tests against umap-learn run in.
     #[default]
     PythonCompat,
-    /// Use best-available Rust-native algorithms.
+    /// Use the best available native algorithms.
     ///
-    /// On x86_64 with AVX2+FMA, LOBPCG levels route through a SIMD matrix-vector kernel
-    /// for improved throughput. Degree accumulation uses f64 row-sum for better numerical
-    /// precision. Results may diverge from Python UMAP by approximately 1 ULP. Use this
-    /// mode when performance matters more than exact Python parity.
+    /// Degrees are summed in double precision on every target. On x86_64 CPUs with AVX2
+    /// and FMA, detected at run time, the LOBPCG levels use a SIMD matrix-vector kernel.
+    /// Results span the same subspace as [`PythonCompat`](Self::PythonCompat) and differ
+    /// from it by rounding.
     RustNative,
 }
 

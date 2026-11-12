@@ -1,6 +1,6 @@
 # Metrics Reference: MERFISH UMAP Benchmark
 
-This directory documents all 17 metrics used in the MERFISH UMAP benchmark pipeline. All definitions, formulas, and thresholds derive from [`docs/merfish-umap-benchmark-plan.md`](../merfish-umap-benchmark-plan.md) Sections 8 and 10. Each metric is fully specified in its category file below.
+This directory documents all 17 metrics used in the MERFISH UMAP benchmark pipeline. All definitions, formulas, and thresholds derive from [`merfish-umap-benchmark-plan.md`](../merfish-umap-benchmark-plan.md) Sections 8 and 10. Each metric is fully specified in its category file below.
 
 **Category files:**
 - [Category A: Structure Preservation](structure-preservation.md) — 5 metrics

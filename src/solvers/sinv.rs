@@ -25,7 +25,7 @@ use super::EigenResult;
 use super::nd16_bridge::{self, LobpcgOutcome, Order, from_nd16_view2, nd16, to_nd16_array2};
 use super::quality::{SINV_LINFA_TOL, SINV_LOBPCG_QUALITY_THRESHOLD};
 
-/// Diagonal shift ε making M = L + εI strictly SPD (REQ-SINV-002).
+/// Diagonal shift ε making M = L + εI strictly SPD.
 pub(crate) const SINV_SHIFT: f64 = 1e-4;
 
 // ─── sprs ↔ faer sparse conversion ───────────────────────────────────────────
@@ -105,7 +105,7 @@ pub fn lobpcg_sinv_solve(
     // Build faer shifted matrix M = L + SINV_SHIFT·I.
     let m_faer = sprs_csc_to_faer(laplacian, SINV_SHIFT);
 
-    // Sparse Cholesky factorization of M (REQ-SINV-001).
+    // Sparse Cholesky factorization of M.
     // If Cholesky fails (M not SPD despite shift — pathological case), return None.
     let chol = m_faer.sp_cholesky(faer::Side::Lower).ok()?;
 
@@ -121,7 +121,7 @@ pub fn lobpcg_sinv_solve(
     }
 
     // Run LOBPCG with M⁻¹ operator — finds k largest eigenvalues of M⁻¹,
-    // i.e. the k smallest eigenvalues of L (REQ-SINV-003).
+    // i.e. the k smallest eigenvalues of L.
     let outcome = nd16_bridge::lobpcg(
         |x: nd16::ArrayView2<f64>| -> nd16::Array2<f64> {
             let x17 = from_nd16_view2(x);
@@ -149,7 +149,7 @@ pub fn lobpcg_sinv_solve(
         _ => None,
     };
 
-    // Eigenvalue recovery (REQ-SINV-004): λ_k = 1/μ_k − ε
+    // Eigenvalue recovery: λ_k = 1/μ_k − ε
     // LOBPCG Order::Largest returns eigenvalues in some order; sort ascending.
     result_opt.map(|(mut eigvals, mut eigvecs)| {
         eigvals.mapv_inplace(|mu| 1.0 / mu - SINV_SHIFT);

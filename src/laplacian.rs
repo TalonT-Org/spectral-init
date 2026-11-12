@@ -20,9 +20,10 @@ pub(crate) fn column_sum_f32(graph: CsMatViewI<'_, f32, u32, usize>) -> Vec<f32>
 /// `mode` selects the accumulation algorithm:
 /// - `ComputeMode::PythonCompat` (default): f32 column-sum scatter-add that matches scipy's
 ///   `csc_matvec` behavior — iterates nonzeros and accumulates `deg_f32[col] += val` in f32
-///   before widening to f64. Produces bit-for-bit matching results against the Python reference.
+///   before widening to f64, so that degrees reproduce the Python reference.
 /// - `ComputeMode::RustNative`: f64 row-sum — iterates CSR rows and accumulates f32 weights
-///   with f64 accumulation. Numerically superior but may differ from Python by ~1 ULP.
+///   with f64 accumulation. More accurate, and different from Python in the last bits of
+///   an f32.
 ///
 /// Diagonal weights (self-loops) count towards the degree; stored zeros add nothing.
 ///

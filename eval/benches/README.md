@@ -1,7 +1,8 @@
 # Benchmark Baselines — spectral-init
 
-These baselines were captured before Phase 3 optimization (SIMD, SELL-C-sigma, Rayon).
-Use them to measure improvement after optimizations land.
+These baselines were captured on scalar code, before any SIMD, SELL-C-sigma or Rayon
+work on the sparse matrix-vector product. Use them as the reference when measuring such
+changes.
 
 ## Running
 
@@ -15,7 +16,7 @@ HTML reports are written to `target/criterion/`.
 
 | Benchmark | Input | What It Measures | Baseline (mean) |
 |-----------|-------|------------------|----------------|
-| `spmv_csr/200` | 200-node ring Laplacian | SpMV Phase 3 SIMD target | 396 ns |
+| `spmv_csr/200` | 200-node ring Laplacian | Scalar SpMV (the kernel that SIMD variants replace) | 396 ns |
 | `spmv_csr/2000` | 2000-node ring Laplacian | SpMV at scale | 4.83 µs |
 | `dense_evd_200` | 200-node ring Laplacian | Dense EVD via faer | 12.6 ms |
 | `lobpcg_2000` | 2000-node ring Laplacian, k=3 | LOBPCG full solve | 306 ms |
@@ -38,16 +39,16 @@ All benchmarks use deterministic synthetic ring graphs (`make_ring_graph(n, 2)`)
 > degree distributions and irregular access; expect 2–4× slower SpMV in practice.
 > The baseline numbers here are pre-optimization reference points, not real-world targets.
 
-## Phase 3 Target
+## SpMV Target
 
-`spmv_csr` is the primary Phase 3 optimization target. Compare
+`spmv_csr` is the primary optimization target. Compare
 `spmv_csr/200` and `spmv_csr/2000` before and after SIMD/SELL-C-sigma changes.
 
 ## LOBPCG Microbenchmark
 
 `lobpcg_bench` provides algorithm-level timing for `solve_eigenproblem()`,
 bypassing the `cargo nextest` process-spawn overhead that dominated the 100K
-MERFISH wall-time measurement in the H4 benchmark (PR #216).
+MERFISH wall-time measurement.
 
 ### Run (mandatory fixture only)
 
