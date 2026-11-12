@@ -5,20 +5,9 @@ use crate::{fixtures, internals};
 use spectral_init::__internal::SolverParams;
 use spectral_init::ComputeMode;
 
-const ALL_FIXTURES: &[&str] = &[
-    "blobs_50",
-    "blobs_500",
-    "moons_200",
-    "circles_300",
-    "near_dupes_100",
-    "disconnected_200",
-    "blobs_connected_200",
-    "blobs_connected_2000",
-];
-
 #[test]
 fn test_psd_contract_all_fixtures() {
-    for fixture_name in ALL_FIXTURES {
+    for fixture_name in fixtures::DATASETS {
         let laplacian = fixtures::load_sparse_csr(
             &fixtures::fixture_path(fixture_name, "").join("comp_b_laplacian.npz"),
         );

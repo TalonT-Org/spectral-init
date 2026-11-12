@@ -14,18 +14,6 @@ use spectral_init::sprs::CsMatI;
 use spectral_init::{ComputeMode, SpectralInitConfig, spectral_init};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
-const FIXTURES: &[&str] = &[
-    "blobs_50",
-    "near_dupes_100",
-    "moons_200",
-    "blobs_connected_200",
-    "disconnected_200",
-    "circles_300",
-    "blobs_500",
-    "blobs_connected_2000",
-    "blobs_5000",
-];
-
 /// Largest |scalar − AVX2| accepted for one SpMV output element. The kernels differ in
 /// summation order and in fused versus separate multiply-add; on the fixture Laplacians
 /// (entries of magnitude at most 1, a few dozen per row) that amounts to a few units in
@@ -60,7 +48,7 @@ fn rust_native_and_python_compat_solver_outputs_agree() {
     }
 
     let params = SolverParams::default();
-    for &fixture in FIXTURES {
+    for &fixture in fixtures::DATASETS {
         let laplacian = fixture_laplacian(fixture);
 
         let ((_, mut eigvec_scalar), _) =
@@ -104,7 +92,7 @@ fn avx2_spmv_matches_scalar_on_fixture_laplacians() {
     }
 
     let mut widest_row_with_tail = 0;
-    for &fixture in FIXTURES {
+    for &fixture in fixtures::DATASETS {
         let laplacian = fixture_laplacian(fixture);
         let n = laplacian.rows();
         widest_row_with_tail = laplacian
@@ -169,7 +157,7 @@ fn avx2_spmv_matches_scalar_on_fixture_laplacians() {
 /// Both compute modes span the same embedding subspace through the public entry point.
 #[test]
 fn rust_native_and_python_compat_agree_end_to_end() {
-    for &fixture in FIXTURES {
+    for &fixture in fixtures::DATASETS {
         let graph = fixtures::load_sparse_csr_f32_u32(&fixtures::fixture_path(
             fixture,
             "step5a_pruned.npz",

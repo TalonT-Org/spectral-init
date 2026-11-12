@@ -432,20 +432,8 @@ fn many_components_require_data() {
 
 // ── tolerance calibration ────────────────────────────────────────────────────
 
-const DATASETS: &[&str] = &[
-    "blobs_50",
-    "blobs_500",
-    "blobs_5000",
-    "blobs_connected_200",
-    "blobs_connected_2000",
-    "circles_300",
-    "disconnected_200",
-    "moons_200",
-    "near_dupes_100",
-];
-
 fn fixture_graphs() -> impl Iterator<Item = (String, Graph)> {
-    DATASETS.iter().flat_map(|dataset| {
+    fixtures::DATASETS.iter().flat_map(|dataset| {
         ["step5a_pruned.npz", "step5a_pruned_exact.npz"].map(|file| {
             let graph = fixtures::load_sparse_csr_f32_u32(&fixtures::fixture_path(dataset, file));
             (format!("{dataset}/{file}"), graph)
@@ -484,7 +472,7 @@ fn every_fixture_graph_passes_validation() {
 /// and 1 the two halves of an edge can differ by a rounding error.
 #[test]
 fn umap_rs_graphs_pass_validation_for_every_mix_ratio() {
-    for dataset in DATASETS {
+    for dataset in fixtures::DATASETS {
         for set_op_mix_ratio in [0.3, 0.5, 0.7, 1.0] {
             let graph = crate::umap_rs_integration::fuzzy_graph(dataset, set_op_mix_ratio);
             assert_eq!(

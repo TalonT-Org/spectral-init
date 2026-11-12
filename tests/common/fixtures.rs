@@ -24,6 +24,19 @@ pub fn fixture_path(dataset: &str, filename: &str) -> PathBuf {
     fixtures_dir().join(dataset).join(filename)
 }
 
+/// The reference datasets under `tests/fixtures/`, smallest first.
+pub const DATASETS: &[&str] = &[
+    "blobs_50",
+    "near_dupes_100",
+    "moons_200",
+    "blobs_connected_200",
+    "disconnected_200",
+    "circles_300",
+    "blobs_500",
+    "blobs_connected_2000",
+    "blobs_5000",
+];
+
 pub fn load_dense<T, D>(path: &Path, key: &str) -> Array<T, D>
 where
     T: ReadableElement,

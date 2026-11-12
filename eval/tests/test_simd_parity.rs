@@ -9,20 +9,9 @@ use spectral_init::__internal::{SolverParams, spmv_csr};
 #[cfg(target_arch = "x86_64")]
 use spectral_init::__internal::{normalize_signs, scale_and_add_noise};
 use spectral_init::ComputeMode;
+use spectral_init_eval::fixtures::{self, DATASETS};
 use spectral_init_eval::internals::solve_with_unit_hint;
-use spectral_init_eval::{fixtures, results_dir};
-
-const FIXTURES: &[&str] = &[
-    "blobs_50",
-    "near_dupes_100",
-    "moons_200",
-    "blobs_connected_200",
-    "disconnected_200",
-    "circles_300",
-    "blobs_500",
-    "blobs_connected_2000",
-    "blobs_5000",
-];
+use spectral_init_eval::results_dir;
 
 fn ulp_distance(a: f64, b: f64) -> u64 {
     // Both exactly zero: 0 ULPs by definition.
@@ -55,7 +44,7 @@ fn test_spmv_divergence() {
 
     let mut records: Vec<serde_json::Value> = Vec::new();
 
-    for (fixture_idx, &fixture) in FIXTURES.iter().enumerate() {
+    for (fixture_idx, &fixture) in DATASETS.iter().enumerate() {
         let lap_path = fixtures::fixture_path(fixture, "comp_b_laplacian.npz");
         let laplacian = fixtures::load_sparse_csr(&lap_path);
         let n = laplacian.rows();
@@ -138,7 +127,7 @@ fn test_solver_divergence() {
 
     let mut records: Vec<serde_json::Value> = Vec::new();
 
-    for &fixture in FIXTURES.iter() {
+    for &fixture in DATASETS.iter() {
         let lap_path = fixtures::fixture_path(fixture, "comp_b_laplacian.npz");
         let laplacian = fixtures::load_sparse_csr(&lap_path);
         let n = laplacian.rows();
@@ -235,7 +224,7 @@ fn test_spectral_gaps() {
 
     let mut records: Vec<serde_json::Value> = Vec::new();
 
-    for &fixture in FIXTURES.iter() {
+    for &fixture in DATASETS.iter() {
         let lap_path = fixtures::fixture_path(fixture, "comp_b_laplacian.npz");
         let laplacian = fixtures::load_sparse_csr(&lap_path);
         let n = laplacian.rows();
