@@ -48,10 +48,11 @@ fn from_nd16_array1(a: nd16::Array1<f64>) -> Array1<f64> {
 
 /// Outcome of one LOBPCG run, in this crate's array types.
 pub(super) enum LobpcgOutcome {
-    /// Every eigenpair converged to the requested tolerance.
+    /// linfa returned `Ok`: every residual norm met the tolerance, or the iteration
+    /// budget ran out. Callers must still check the residuals.
     Converged(EigenResult),
-    /// The iteration stopped early. Carries the eigenpairs reached so far and their
-    /// residual norms, one per eigenpair.
+    /// The iteration stopped on a numerical error after at least one iterate. Carries
+    /// the best eigenpairs reached and their residual norms, one per eigenpair.
     Partial {
         eigenpairs: EigenResult,
         rnorm: Vec<f64>,
@@ -151,5 +152,15 @@ mod tests {
             LobpcgOutcome::Partial { rnorm, .. } => panic!("did not converge: rnorm {rnorm:?}"),
             LobpcgOutcome::Failed => panic!("LOBPCG failed"),
         }
+    }
+
+    #[test]
+    fn lobpcg_reports_failure_when_the_block_is_wider_than_the_problem() {
+        // linfa rejects a starting block with more columns than rows before iterating.
+        let x_init = Array2::ones((2, 3));
+        assert!(matches!(
+            lobpcg(|x| x.to_owned(), x_init, 1e-8, 10, Order::Smallest),
+            LobpcgOutcome::Failed
+        ));
     }
 }
