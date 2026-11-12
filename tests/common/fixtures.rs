@@ -93,14 +93,7 @@ pub fn load_sparse_csr(path: &Path) -> CsMat<f64> {
         }
         Err(e) => panic!("error reading 'shape' from {:?}: {}", path, e),
     };
-    assert!(
-        shape_arr.len() >= 2,
-        "shape key in {:?} has {} elements, expected 2",
-        path,
-        shape_arr.len()
-    );
-    let rows = shape_arr[0];
-    let cols = shape_arr[1];
+    let (rows, cols) = csr_shape(path, &shape_arr);
 
     // Assumes CSR format. ndarray-npy cannot read the |S3 "format" key (b"csr"), so the
     // storage order is not verified at runtime. Fixtures must be saved as CSR; if saved
@@ -162,9 +155,21 @@ pub fn load_sparse_csr_f32_u32(path: &Path) -> CsMatI<f32, u32, usize> {
         Err(e) => panic!("error reading 'shape' from {:?}: {}", path, e),
     };
 
-    let (rows, cols) = (shape_arr[0], shape_arr[1]);
+    let (rows, cols) = csr_shape(path, &shape_arr);
     CsMatI::try_new((rows, cols), indptr, indices, data)
         .unwrap_or_else(|e| panic!("fixture CSR structure invalid in {:?}: {:?}", path, e))
+}
+
+/// `(rows, cols)` from a scipy CSR archive's `shape` key, which must hold two entries.
+fn csr_shape(path: &Path, shape: &[usize]) -> (usize, usize) {
+    assert_eq!(
+        shape.len(),
+        2,
+        "shape key in {:?} has {} elements, expected 2",
+        path,
+        shape.len()
+    );
+    (shape[0], shape[1])
 }
 
 /// Convert a label vector to a set-of-sets, permitting label-invariant comparison.
