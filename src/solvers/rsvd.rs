@@ -87,7 +87,9 @@ fn qr_thin_q(y: &Array2<f64>) -> Array2<f64> {
 /// decomposition fails.
 fn sym_eig(b: &Array2<f64>) -> Option<(Vec<f64>, Array2<f64>)> {
     let faer_b = to_faer(b);
-    let eigen = SelfAdjointEigen::new(faer_b.as_ref(), Side::Lower).ok()?;
+    let eigen = SelfAdjointEigen::new(faer_b.as_ref(), Side::Lower)
+        .inspect_err(|e| log::warn!("rsvd: faer self_adjoint_eigen failed: {e:?}"))
+        .ok()?;
     // Eigenvalues in ASCENDING order (smallest first).
     // Use for_each since ColRef may have non-contiguous stride (no as_slice guarantee).
     let mut eigenvalues: Vec<f64> = Vec::new();
