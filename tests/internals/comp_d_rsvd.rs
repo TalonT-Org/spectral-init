@@ -1,12 +1,5 @@
 //! Integration tests for the randomized SVD solver (Component D).
 
-/// Compute residual ||L·v - λ·v|| / ||v|| for a single eigenpair.
-fn residual(laplacian: &sprs::CsMat<f64>, eigvec: ndarray::ArrayView1<f64>, eigval: f64) -> f64 {
-    let lv = laplacian * &eigvec.to_owned(); // SpMV via sprs
-    let diff = lv - eigval * &eigvec.to_owned();
-    diff.dot(&diff).sqrt() / eigvec.dot(&eigvec).sqrt()
-}
-
 macro_rules! rsvd_test {
     ($name:ident, $dataset:expr) => {
         #[test]
@@ -57,7 +50,7 @@ macro_rules! rsvd_test {
             for i in 0..n_components {
                 let v = eigenvectors.column(i + 1);
                 let lambda = eig_slice[i + 1];
-                let r = residual(&laplacian, v, lambda);
+                let r = crate::internals::residual_spmv(&laplacian, v, lambda);
                 assert!(
                     r < 5e-1,
                     "dataset={}, residual[{}]={:.2e} exceeds threshold 5e-1",
