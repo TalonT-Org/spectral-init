@@ -5,6 +5,8 @@
 //! and the locations the harness reads from and writes to.
 
 pub mod assess;
+// Compiled from the root package's `tests/common/` so that eval and the root tests share one
+// copy; the paths are relative to this file (see tests/README.md, "How Rust Tests Consume Fixtures").
 #[path = "../../tests/common/diagnostics.rs"]
 pub mod diagnostics;
 #[path = "../../tests/common/fixtures.rs"]
