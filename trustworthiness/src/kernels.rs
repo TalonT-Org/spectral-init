@@ -4,9 +4,14 @@
 ///
 /// 4-wide YMM loop with FMA accumulation, horizontal reduce, scalar tail 0-3.
 ///
+/// `xi` and `xj` are expected to have equal length; otherwise only their common prefix
+/// is summed (debug builds assert). The `d_x >= 10` threshold at the dispatch site is a
+/// performance choice, not a safety requirement.
+///
 /// # Safety
-/// Both slices must have the same length and at least 10 elements (caller ensures
-/// `xi.len() == xj.len()` and `d_x >= 10` at the dispatch site).
+/// The running CPU must support AVX2 and FMA, e.g. as checked by
+/// `is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma")`. Calling this
+/// function on a CPU without them is undefined behaviour.
 #[doc(hidden)]
 #[target_feature(enable = "avx2,fma")]
 pub unsafe fn dist_sq_avx2_looped(xi: &[f64], xj: &[f64]) -> f64 {
@@ -48,11 +53,10 @@ pub unsafe fn dist_sq_avx2_looped(xi: &[f64], xj: &[f64]) -> f64 {
 /// SIMD iteration using `_mm256_hadd_pd` for horizontal reduction.
 ///
 /// # Safety
+/// - The running CPU must support AVX2.
 /// - `yi` must have exactly 2 elements.
 /// - `y_flat` must have at least `n * 2` elements (row-major, d_y = 2).
 /// - `out` must have at least `n` elements.
-///
-/// Called only when `d_y == 2`, `y.is_standard_layout()`, and `avx2` is detected at runtime.
 #[target_feature(enable = "avx2")]
 pub(crate) unsafe fn dist_sq_2d_avx2_batch(yi: &[f64], y_flat: &[f64], n: usize, out: &mut [f64]) {
     use std::arch::x86_64::*;
