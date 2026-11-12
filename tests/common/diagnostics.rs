@@ -57,6 +57,7 @@ pub fn check_eigenvalue_bounds(eigenvalues: &Array1<f64>, tol: f64) -> (bool, bo
 /// # Panics
 /// Panics if a label in `0..n_components` has no members: its centroid would be NaN and
 /// silently drop out of the min/max, so the ratio would cover only some components.
+/// A label at or above the row count is rejected before any per-component allocation.
 pub fn separation_ratio(embedding: ArrayView2<f64>, labels: &[usize]) -> f64 {
     let n = labels.len();
     assert_eq!(
@@ -66,7 +67,18 @@ pub fn separation_ratio(embedding: ArrayView2<f64>, labels: &[usize]) -> f64 {
     );
     let n_dims = embedding.ncols();
 
-    let n_components = labels.iter().copied().max().map(|m| m + 1).unwrap_or(0);
+    let n_components = match labels.iter().copied().max() {
+        None => 0,
+        // Contiguous labels give every component a member, so they stay below n.
+        Some(max_label) => {
+            assert!(
+                max_label < n,
+                "separation_ratio: labels must be contiguous over 0..n_components; \
+                 label {max_label} is not below the row count {n}"
+            );
+            max_label + 1
+        }
+    };
     if n_components < 2 {
         return f64::INFINITY;
     }

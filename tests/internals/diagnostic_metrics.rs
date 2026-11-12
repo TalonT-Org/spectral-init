@@ -92,6 +92,16 @@ fn t_sep_03_non_contiguous_labels_panic() {
     let _ = separation_ratio(embedding.view(), &labels);
 }
 
+#[test]
+#[should_panic(expected = "not below the row count")]
+fn t_sep_04_label_beyond_row_count_panics() {
+    // A huge label must be rejected before sizing the per-component table from it.
+    let data = vec![0.0_f64, 0.0, 0.1, 0.0, 10.0, 0.0, 10.1, 0.0];
+    let embedding = Array2::from_shape_vec((4, 2), data).unwrap();
+    let labels = vec![0usize, 0, 1, usize::MAX];
+    let _ = separation_ratio(embedding.view(), &labels);
+}
+
 // ── Parity: eigenvalue_abs_errors ────────────────────────────────────────
 
 #[test]
