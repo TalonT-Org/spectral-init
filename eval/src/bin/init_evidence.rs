@@ -53,13 +53,21 @@ fn reference_umap_version(dataset: &Dataset) -> String {
         .to_string()
 }
 
+/// The distinct umap-learn versions that generated the reference fixtures, sorted and
+/// joined with ", ".
+fn reference_umap_versions() -> String {
+    let versions: std::collections::BTreeSet<String> =
+        DATASETS.iter().map(reference_umap_version).collect();
+    versions.into_iter().collect::<Vec<_>>().join(", ")
+}
+
 fn main() {
     let generated_at = humantime::format_rfc3339_seconds(std::time::SystemTime::now());
     println!("# Initialization evidence\n");
     println!(
         "spectral-init {} · reference: umap-learn {} · generated {generated_at}\n",
         env!("CARGO_PKG_VERSION"),
-        reference_umap_version(&DATASETS[0]),
+        reference_umap_versions(),
     );
 
     println!("## Connected graphs: agreement with umap-learn\n");
