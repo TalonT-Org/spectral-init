@@ -26,6 +26,9 @@ pub(super) fn to_nd16_array2(a: Array2<f64>) -> nd16::Array2<f64> {
 }
 
 /// Convert an ndarray 0.16 `ArrayView2<f64>` to an owned ndarray 0.17 `Array2<f64>`.
+///
+/// Uses `iter()` for the same reason as `from_nd16_array1`: slice_move can leave backing
+/// Vecs larger than the logical extent, and `into_raw_vec()` would return all elements.
 pub(super) fn from_nd16_view2(v: nd16::ArrayView2<f64>) -> Array2<f64> {
     let (rows, cols) = (v.nrows(), v.ncols());
     let raw: Vec<f64> = v.iter().copied().collect();
@@ -39,17 +42,6 @@ pub(super) fn from_nd16_view2(v: nd16::ArrayView2<f64>) -> Array2<f64> {
 /// whose backing Vec is longer than the logical length. `iter()` always respects logical size.
 fn from_nd16_array1(a: nd16::Array1<f64>) -> Array1<f64> {
     Array1::from_iter(a.iter().copied())
-}
-
-/// Convert an owned ndarray 0.16 `Array2<f64>` to ndarray 0.17 `Array2<f64>`.
-///
-/// Uses `iter()` for the same reason as `from_nd16_array1`: slice_move can leave backing
-/// Vecs larger than the logical extent, and `into_raw_vec()` would return all elements.
-fn from_nd16_array2(a: nd16::Array2<f64>) -> Array2<f64> {
-    let (rows, cols) = (a.nrows(), a.ncols());
-    let raw: Vec<f64> = a.iter().copied().collect();
-    Array2::from_shape_vec((rows, cols), raw)
-        .expect("shape/data mismatch converting nd16→nd17 Array2")
 }
 
 // ─── LOBPCG ───────────────────────────────────────────────────────────────────
@@ -83,7 +75,7 @@ where
     F: Fn(nd16::ArrayView2<f64>) -> nd16::Array2<f64>,
 {
     let eigenpairs = |eigvals: nd16::Array1<f64>, eigvecs: nd16::Array2<f64>| -> EigenResult {
-        (from_nd16_array1(eigvals), from_nd16_array2(eigvecs))
+        (from_nd16_array1(eigvals), from_nd16_view2(eigvecs.view()))
     };
     let result = linfa_linalg::lobpcg::lobpcg(
         operator,
@@ -114,7 +106,6 @@ mod tests {
         let a16 = to_nd16_array2(a.clone());
         assert_eq!(a16.dim(), (3, 2));
         assert_eq!(from_nd16_view2(a16.view()), a);
-        assert_eq!(from_nd16_array2(a16), a);
         assert_eq!(
             from_nd16_array1(nd16::Array1::from_vec(vec![1.0, 2.0])),
             Array1::from_vec(vec![1.0, 2.0])
@@ -134,7 +125,7 @@ mod tests {
         let wide = nd16::arr2(&[[1.0, 2.0, 9.0], [3.0, 4.0, 9.0]]);
         let sliced = wide.slice_move(nd16::s![.., ..2]);
         assert_eq!(
-            from_nd16_array2(sliced),
+            from_nd16_view2(sliced.view()),
             ndarray::arr2(&[[1.0, 2.0], [3.0, 4.0]])
         );
     }
