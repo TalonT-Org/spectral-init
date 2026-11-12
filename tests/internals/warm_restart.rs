@@ -1,7 +1,7 @@
 //! Warm-restart behaviour of the LOBPCG solver on ill-conditioned Laplacians.
 //!
-//! The restart counts asserted here are floating-point sensitive: they hold at the
-//! `opt-level = 2` this package's test profile uses.
+//! The restart counts asserted here are floating-point sensitive: the non-ignored tests'
+//! counts hold at the `opt-level = 2` this package's test profile uses.
 
 use crate::{fixtures, internals};
 use spectral_init::__internal::{CsrOperator, lobpcg_solve};
@@ -34,16 +34,13 @@ fn test_path_2000_warm_restart_majority_converged() {
 }
 
 #[test]
+#[ignore = "FP-sensitive research expectation (3 restarts, residual 9.74e-6 against the 1e-5 \
+            gate) that the test profile does not reproduce; run with --release --run-ignored"]
 fn test_ring_2000_warm_restart_converges() {
     // ring_2000 seed=42: single reproducible case from the research experiment
     // where warm restart achieves full convergence (residual < 1e-5).
     // Research evidence: restart_count=3, improvement_ratio=33.4x
     // (residual drops from 3.25e-4 to 9.74e-6).
-    // Only meaningful under --release; skip in debug builds where LOBPCG
-    // convergence behaviour differs due to reduced optimisation.
-    if cfg!(debug_assertions) {
-        return;
-    }
     let lap = fixtures::ring_laplacian(2000);
     let sqrt_deg = fixtures::ring_sqrt_deg(2000);
     let op = CsrOperator(&lap);
