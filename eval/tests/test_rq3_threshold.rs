@@ -1,7 +1,7 @@
 //! RQ3: Threshold override validation — dense EVD vs LOBPCG subspace agreement.
 
 use ndarray_npy::write_npy;
-use spectral_init::__internal::SolverParams;
+use spectral_init::__internal::{SolverLevel, SolverParams};
 use spectral_init::ComputeMode;
 use spectral_init_eval::diagnostics::max_subspace_angle;
 use spectral_init_eval::{fixtures, internals};
@@ -26,11 +26,12 @@ fn rq3_threshold_override_subspace_agreement() {
         ComputeMode::PythonCompat,
         &dense_params,
     );
-    let level_dense = report_dense.level as u8;
     assert_eq!(
-        level_dense, 0,
+        report_dense.level,
+        SolverLevel::DenseEvd,
         "expected Level 0 (dense EVD) with threshold=2000"
     );
+    let level_dense = report_dense.level as u8;
 
     // ── Run 2: Force LOBPCG (threshold=50, n=200 >= 50 → Level 1+) ──
     let lobpcg_params = SolverParams {
@@ -44,11 +45,12 @@ fn rq3_threshold_override_subspace_agreement() {
         ComputeMode::PythonCompat,
         &lobpcg_params,
     );
-    let level_lobpcg = report_lobpcg.level as u8;
     assert!(
-        level_lobpcg >= 1,
-        "expected Level >= 1 (LOBPCG path) with threshold=50, got {level_lobpcg}"
+        report_lobpcg.level > SolverLevel::DenseEvd,
+        "expected Level >= 1 (LOBPCG path) with threshold=50, got {:?}",
+        report_lobpcg.level
     );
+    let level_lobpcg = report_lobpcg.level as u8;
 
     // ── Save eigenvector matrices to .npy ──
     let results_dir = spectral_init_eval::results_dir().join("rq3_threshold");

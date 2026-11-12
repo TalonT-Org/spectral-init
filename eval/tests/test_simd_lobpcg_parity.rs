@@ -181,6 +181,8 @@ fn test_discrete_multi_seed() {
 #[cfg(target_arch = "x86_64")]
 #[test]
 fn test_solver_level_parity() {
+    use spectral_init::__internal::SolverLevel;
+
     if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
         eprintln!(
             "test_solver_level_parity: skipping — AVX2/FMA not available; \
@@ -196,17 +198,18 @@ fn test_solver_level_parity() {
             solve_with_unit_hint(&laplacian, 2, 42, ComputeMode::PythonCompat, &params);
         let (_, report_x) =
             solve_with_unit_hint(&laplacian, 2, 42, ComputeMode::RustNative, &params);
-        let level_s = report_s.level as u8;
-        let level_x = report_x.level as u8;
-
         let approx_gap = (eigenvalues_s[1] - eigenvalues_s[0]).max(0.0);
         let is_degenerate = approx_gap < DEGENERATE_GAP_THRESHOLD;
 
-        if level_s != level_x && level_s <= 3 && level_x <= 3 {
+        // Levels 0–3 (dense EVD through regularized LOBPCG) must agree between modes.
+        if report_s.level != report_x.level
+            && report_s.level <= SolverLevel::LobpcgRegularized
+            && report_x.level <= SolverLevel::LobpcgRegularized
+        {
             panic!(
                 "Solver level parity violation at bridge_weight={:.2e}: \
-                 approx_gap={:.6e} (degenerate={}), level_scalar={}, level_simd={}",
-                w, approx_gap, is_degenerate, level_s, level_x
+                 approx_gap={:.6e} (degenerate={}), level_scalar={:?}, level_simd={:?}",
+                w, approx_gap, is_degenerate, report_s.level, report_x.level
             );
         }
     }
