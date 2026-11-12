@@ -10,6 +10,7 @@ pub(super) use ndarray16 as nd16;
 
 use super::EigenResult;
 use ndarray::{Array1, Array2};
+use std::panic::{self, AssertUnwindSafe};
 
 // ─── ndarray 0.16 ↔ 0.17 conversion helpers ──────────────────────────────────
 //
@@ -65,6 +66,11 @@ pub(super) enum LobpcgOutcome {
 ///
 /// `operator` maps a block of column vectors to the operator applied to it, in ndarray
 /// 0.16 types; `x_init` is the starting block; `order` selects the end of the spectrum.
+///
+/// linfa sorts eigenvalues with `partial_cmp(..).expect(..)`, so an iterate that turns NaN
+/// (a near-singular Gram matrix can produce one) panics inside it. That panic is caught
+/// here and reported as [`LobpcgOutcome::Failed`], so the chain escalates instead of
+/// unwinding through `spectral_init`. Under `panic = "abort"` it aborts the process.
 pub(super) fn lobpcg<F>(
     operator: F,
     x_init: Array2<f64>,
@@ -78,31 +84,39 @@ where
     let eigenpairs = |eigvals: nd16::Array1<f64>, eigvecs: nd16::Array2<f64>| -> EigenResult {
         (from_nd16_array1(eigvals), from_nd16_view2(eigvecs.view()))
     };
-    let result = linfa_linalg::lobpcg::lobpcg(
-        operator,
-        to_nd16_array2(x_init),
-        |_: nd16::ArrayViewMut2<f64>| {},
-        None,
-        tol,
-        maxiter,
-        order,
-    );
-    match result {
-        Ok(r) => LobpcgOutcome::Converged(eigenpairs(r.eigvals, r.eigvecs)),
-        Err((e, Some(r))) => {
-            log::debug!(
-                "[spectral] LOBPCG stopped on a numerical error ({e}); keeping the best iterate"
-            );
-            LobpcgOutcome::Partial {
-                eigenpairs: eigenpairs(r.eigvals, r.eigvecs),
-                rnorm: r.rnorm,
+    // AssertUnwindSafe: after a panic nothing linfa touched is used again. It owns the
+    // starting block, and the operator only reads its matrix (no operator in this crate
+    // has interior mutability).
+    let run = panic::catch_unwind(AssertUnwindSafe(|| {
+        match linfa_linalg::lobpcg::lobpcg(
+            operator,
+            to_nd16_array2(x_init),
+            |_: nd16::ArrayViewMut2<f64>| {},
+            None,
+            tol,
+            maxiter,
+            order,
+        ) {
+            Ok(r) => LobpcgOutcome::Converged(eigenpairs(r.eigvals, r.eigvecs)),
+            Err((e, Some(r))) => {
+                log::debug!(
+                    "[spectral] LOBPCG stopped on a numerical error ({e}); keeping the best iterate"
+                );
+                LobpcgOutcome::Partial {
+                    eigenpairs: eigenpairs(r.eigvals, r.eigvecs),
+                    rnorm: r.rnorm,
+                }
+            }
+            Err((e, None)) => {
+                log::debug!("[spectral] LOBPCG failed without an iterate ({e})");
+                LobpcgOutcome::Failed
             }
         }
-        Err((e, None)) => {
-            log::debug!("[spectral] LOBPCG failed without an iterate ({e})");
-            LobpcgOutcome::Failed
-        }
-    }
+    }));
+    run.unwrap_or_else(|_| {
+        log::debug!("[spectral] LOBPCG panicked inside linfa-linalg; treating the run as failed");
+        LobpcgOutcome::Failed
+    })
 }
 
 #[cfg(test)]
@@ -168,6 +182,16 @@ mod tests {
         let x_init = Array2::ones((2, 3));
         assert!(matches!(
             lobpcg(|x| x.to_owned(), x_init, 1e-8, 10, Order::Smallest),
+            LobpcgOutcome::Failed
+        ));
+    }
+
+    #[test]
+    fn lobpcg_reports_failure_when_an_iterate_turns_nan() {
+        // linfa panics when it sorts NaN eigenvalues; the run must report failure instead.
+        let x_init = Array2::from_shape_fn((8, 2), |(i, j)| 1.0 / (1.0 + (i + 3 * j) as f64));
+        assert!(matches!(
+            lobpcg(|x| x.mapv(|_| f64::NAN), x_init, 1e-8, 10, Order::Smallest),
             LobpcgOutcome::Failed
         ));
     }

@@ -240,7 +240,9 @@ use sprs::CsMatViewI;
 ///
 /// The function does not panic on any input. A dense matrix within the budget is
 /// allocated like any other Rust allocation: if the system cannot provide the memory,
-/// the process aborts.
+/// the process aborts. A panic inside the LOBPCG dependency (which it raises when an
+/// iterate turns NaN) is caught and treated as a solver failure; in a build with
+/// `panic = "abort"` it aborts the process instead.
 ///
 /// # Examples
 ///
