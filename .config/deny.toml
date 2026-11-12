@@ -10,7 +10,8 @@ ignore = [
     # zip 6.0.0 reaches the workspace only through ndarray-npy, whose latest release
     # (0.10.0) requires it. ndarray-npy is a dev-dependency of the library and a
     # dependency of the unpublished `eval` and `trustworthiness` packages; it is not in
-    # the published crate's dependency tree. All four advisories concern
+    # the published crate's dependency tree (the deps workflow fails if it enters it).
+    # All four advisories concern
     # `ZipArchive::extract` and the stream extraction API, which write archive entries
     # to the file system. ndarray-npy only reads `.npy` members of `.npz` archives into
     # memory, and the archives read here are this repository's own fixtures.

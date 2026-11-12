@@ -39,6 +39,16 @@ jobs:
       - name: Advisories, licenses, bans and sources
         run: cargo deny --workspace --config .config/deny.toml check
 
+      # The zip advisory ignores in .config/deny.toml hold only while zip stays out of
+      # the published crate's dependency tree.
+      - name: The published crate does not depend on zip
+        run: |
+          tree="$(cargo tree --locked -p spectral-init --edges normal,build --prefix none --all-features)"
+          if grep -q '^zip ' <<< "$tree"; then
+            echo "::error::zip is in the published crate's dependency tree; the zip advisory ignores in .config/deny.toml assume it is not"
+            exit 1
+          fi
+
   machete:
     name: cargo machete
     runs-on: ubuntu-latest
