@@ -158,7 +158,10 @@ pub mod __internal {
     pub use crate::selection::select_eigenvectors;
     pub use crate::solvers::dense_evd;
     pub use crate::solvers::lobpcg::lobpcg_solve;
-    pub use crate::solvers::quality::*;
+    pub use crate::solvers::quality::{
+        DENSE_EVD_QUALITY_THRESHOLD, LOBPCG_QUALITY_THRESHOLD, RSVD_QUALITY_THRESHOLD,
+        SINV_LOBPCG_QUALITY_THRESHOLD, eigenpair_residual, max_eigenpair_residual,
+    };
     pub use crate::solvers::rsvd::{rsvd_solve, rsvd_solve_accurate};
     pub use crate::solvers::sinv::lobpcg_sinv_solve;
     pub use crate::solvers::{
