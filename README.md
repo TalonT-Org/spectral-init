@@ -256,7 +256,7 @@ of these is part of the published crate. [CONTRIBUTING](.github/CONTRIBUTING.md)
 how to build and test.
 
 The design of the algorithm is described in the
-[implementation report](https://github.com/TalonT-Org/spectral-init/blob/research-baseline-pre-0.1/docs/umap-spectral-initialization-rust-implementation-report.md).
+[implementation report](https://github.com/TalonT-Org/spectral-init/blob/4e2251690e9d4d9ab36f200a84ec9c7adaba73a8/docs/umap-spectral-initialization-rust-implementation-report.md).
 
 ## Acknowledgements
 
