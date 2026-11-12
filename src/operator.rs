@@ -4,7 +4,6 @@ use sprs::CsMatI;
 // ─── Trait ───────────────────────────────────────────────────────────────────
 
 /// A square linear operator applied to blocks of column vectors.
-#[doc(hidden)]
 pub trait LinearOperator {
     /// Apply operator: y = self * x. Both arrays have shape [n, k].
     fn apply(&self, x: ArrayView2<f64>, y: &mut Array2<f64>);
@@ -21,7 +20,6 @@ pub trait LinearOperator {
 /// y.len() + 1`, every column index below `x.len()`, `data` at least `nnz` long) are
 /// checked with `debug_assert!`; violating them in a release build panics on the
 /// out-of-bounds index.
-#[doc(hidden)]
 pub fn spmv_csr(indptr: &[usize], indices: &[usize], data: &[f64], x: &[f64], y: &mut [f64]) {
     debug_assert!(
         indptr.len() == y.len() + 1,
@@ -54,7 +52,6 @@ pub fn spmv_csr(indptr: &[usize], indices: &[usize], data: &[f64], x: &[f64], y:
 /// Whether the column indices of a matrix with `cols` columns fit the signed 32-bit
 /// gather indices of the AVX2 kernel.
 #[cfg(target_arch = "x86_64")]
-#[doc(hidden)]
 pub fn simd_index_fits(cols: usize) -> bool {
     cols <= i32::MAX as usize
 }
@@ -134,7 +131,6 @@ unsafe fn spmv_avx2_gather_inner(
 /// - Every column index in `indices[..indptr[y.len()]]` is below `x.len()` and at most
 ///   `i32::MAX`.
 #[cfg(all(any(test, feature = "__internal"), target_arch = "x86_64"))]
-#[doc(hidden)]
 pub unsafe fn spmv_avx2_gather(
     indptr: &[usize],
     indices: &[usize],
@@ -150,7 +146,6 @@ pub unsafe fn spmv_avx2_gather(
 
 /// Wraps a borrowed CSR Laplacian and implements `LinearOperator` via sprs
 /// sparse-dense multiply.
-#[doc(hidden)]
 pub struct CsrOperator<'a>(pub &'a CsMatI<f64, usize>);
 
 impl<'a> LinearOperator for CsrOperator<'a> {
