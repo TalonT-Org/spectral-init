@@ -501,41 +501,22 @@ mod tests {
 
     #[test]
     fn t_tw_10_self_exclusion_never_in_knn() {
-        // Verify that the self-exclusion (dist_y[i] = INFINITY) prevents point i
-        // from appearing in its own k-NN result. Catching a regression where the
-        // INFINITY assignment is accidentally dropped.
+        // Catches a regression where the production self-exclusion
+        // (dist_y[i] = INFINITY) is dropped: point i would then be its own nearest
+        // Y-neighbour (the scoring panics or diverges from the brute-force oracle,
+        // which excludes self by construction).
         use rand::{Rng, SeedableRng};
         let mut rng = rand::rngs::SmallRng::seed_from_u64(77);
         let n = 20;
         let k = 3;
         let x = ndarray::Array2::from_shape_fn((n, 4), |_| rng.random::<f64>());
         let y = ndarray::Array2::from_shape_fn((n, 2), |_| rng.random::<f64>());
-        // Run trustworthiness — internally computes k-NN of Y for each row.
-        // We verify correctness by comparing against brute-force which also applies self-exclusion.
         let t = trustworthiness(x.view(), y.view(), k);
         let t_ref = trustworthiness_brute_force(x.view(), y.view(), k);
         assert!(
             (t - t_ref).abs() < 1e-12,
             "self-exclusion regression: combined={t} diverges from brute-force={t_ref}"
         );
-        // Additionally, verify directly via brute-force that no point is its own neighbor.
-        for i in 0..n {
-            let yi = y.row(i);
-            let mut dists: Vec<(f64, usize)> = (0..n)
-                .filter(|&j| j != i)
-                .map(|j| {
-                    let d: f64 = yi
-                        .iter()
-                        .zip(y.row(j).iter())
-                        .map(|(&a, &b)| (a - b) * (a - b))
-                        .sum();
-                    (d, j)
-                })
-                .collect();
-            dists.sort_by(|a, b| a.0.total_cmp(&b.0));
-            let knn: Vec<usize> = dists[..k].iter().map(|&(_, j)| j).collect();
-            assert!(!knn.contains(&i), "point {i} appeared in its own k-NN");
-        }
     }
 
     #[test]
