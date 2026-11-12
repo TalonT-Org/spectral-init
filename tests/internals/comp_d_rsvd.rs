@@ -4,7 +4,7 @@ macro_rules! rsvd_test {
     ($name:ident, $dataset:expr) => {
         #[test]
         fn $name() {
-            let fixture_base = crate::fixtures::fixtures_dir().join($dataset);
+            let fixture_base = crate::fixtures::fixture_path($dataset, "");
 
             // Load Laplacian
             let laplacian = crate::fixtures::load_sparse_csr(&fixture_base.join("comp_b_laplacian.npz"));
