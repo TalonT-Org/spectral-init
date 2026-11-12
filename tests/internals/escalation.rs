@@ -29,6 +29,14 @@ fn failing_iterative_gates() -> QualityGates {
     }
 }
 
+/// Gates that Levels 1–3 cannot pass and any Level 4 (rSVD) result does.
+fn rsvd_only_gates() -> QualityGates {
+    QualityGates {
+        rsvd: f64::INFINITY,
+        ..failing_iterative_gates()
+    }
+}
+
 /// Asserts that `result` is `DenseBudgetExceeded` reporting exactly these sizes.
 fn assert_budget_exceeded<T: std::fmt::Debug>(
     result: Result<T, SpectralError>,
@@ -128,15 +136,9 @@ fn level_0_over_budget_escalates_to_an_iterative_level() {
 #[test]
 fn level_4_runs_within_budget_and_is_skipped_over_it() {
     // Levels 1–3 are made to fail; any Level 4 result is accepted.
-    let gates = QualityGates {
-        lobpcg: 0.0,
-        sinv: 0.0,
-        rsvd: f64::INFINITY,
-        ..QualityGates::default()
-    };
     let within = SolverParams {
         dense_n_threshold: 0,
-        gates,
+        gates: rsvd_only_gates(),
         dense_memory_budget: SKETCH_BYTES,
         ..SolverParams::default()
     };
@@ -171,12 +173,7 @@ fn config_budget_reaches_level_0() {
 fn config_budget_reaches_level_4() {
     let with_budget = |budget| SolverParams {
         dense_n_threshold: 0,
-        gates: QualityGates {
-            lobpcg: 0.0,
-            sinv: 0.0,
-            rsvd: f64::INFINITY,
-            ..QualityGates::default()
-        },
+        gates: rsvd_only_gates(),
         ..params_with_config_budget(budget)
     };
     assert_eq!(
