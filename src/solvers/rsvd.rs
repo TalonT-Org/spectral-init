@@ -14,7 +14,7 @@
 //! residual threshold (1e-2) means Level 4 rarely fails its quality gate. In every
 //! failing case Level 5 (forced dense EVD) is the final fallback.
 
-use super::{EigenResult, SolverParams, dense_bytes};
+use super::{EigenResult, SolverParams, check_dense_budget};
 use faer::linalg::solvers::{Qr, SelfAdjointEigen};
 use faer::{Mat as FaerMat, Side};
 use ndarray::{Array1, Array2};
@@ -132,13 +132,15 @@ pub fn rsvd_solve(
 ) -> Option<EigenResult> {
     let n = laplacian.rows();
     if n_components == 0 || n_components >= n {
+        log::debug!("[spectral] rSVD skipped: n_components={n_components} is not in 1..{n}");
         return None;
     }
     // rank = n_components + 1: request one extra so we can discard the trivial vector
     let rank = n_components + 1;
     // k = total random vectors; see rsvd_k_sub for the oversampling formula.
     let k = rsvd_k_sub(n, rank, params.rsvd_oversampling);
-    if dense_bytes(n, k) > params.dense_memory_budget {
+    if let Err(e) = check_dense_budget(n, k, params.dense_memory_budget) {
+        log::debug!("[spectral] rSVD sketch skipped ({e})");
         return None;
     }
     let nbiter = params.rsvd_nbiter; // QR-stabilized subspace iterations (Halko-Tropp Algorithm 4.4)
