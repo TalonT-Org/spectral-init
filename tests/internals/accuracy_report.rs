@@ -278,23 +278,19 @@ fn process_dataset(
     let pn_isolated_err =
         diagnostics::sign_agnostic_max_error(&rust_pre_noise_isolated, &ref_pre_noise);
 
-    let e2e_max_residual = if is_connected {
-        let result = spectral_init(
-            graph.view(),
-            None,
-            &SpectralInitConfig::new(n_components_dim).with_seed(42),
-        )
-        .unwrap_or_else(|e| panic!("{dataset}: spectral_init failed: {e}"));
-        let e2e_max = (0..n_components_dim)
-            .map(|col| {
-                let evec: Array1<f64> = result.column(col).mapv(|v| v as f64 / expansion_val);
-                internals::residual_spmv(&laplacian, evec.view(), ref_eigenvalues[col + 1])
-            })
-            .fold(0.0f64, f64::max);
-        Some(e2e_max)
-    } else {
-        None
-    };
+    // Disconnected datasets returned above, so this graph is connected.
+    let result = spectral_init(
+        graph.view(),
+        None,
+        &SpectralInitConfig::new(n_components_dim).with_seed(42),
+    )
+    .unwrap_or_else(|e| panic!("{dataset}: spectral_init failed: {e}"));
+    let e2e_max_residual = (0..n_components_dim)
+        .map(|col| {
+            let evec: Array1<f64> = result.column(col).mapv(|v| v as f64 / expansion_val);
+            internals::residual_spmv(&laplacian, evec.view(), ref_eigenvalues[col + 1])
+        })
+        .fold(0.0f64, f64::max);
 
     let (_, rust_n_components) = find_components(graph.view());
     let component_count_matches = rust_n_components == expected_n_components;
@@ -315,7 +311,7 @@ fn process_dataset(
         subspace_gram_det,
         pre_noise_max_err: pn_max_err,
         pre_noise_isolated_err: pn_isolated_err,
-        e2e_max_residual,
+        e2e_max_residual: Some(e2e_max_residual),
         component_count_matches,
         disconnected_path: None,
     }
