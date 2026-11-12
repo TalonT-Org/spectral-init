@@ -34,7 +34,8 @@ macro_rules! rsvd_test {
                 n_components,
                 42,
                 &spectral_init::__internal::SolverParams::default(),
-            );
+            )
+            .expect("rsvd_solve failed");
 
             // Check eigenvalue accuracy. The production rsvd_solve uses nbiter=2
             // and n/10 oversampling, trading precision for speed. On graphs with tiny

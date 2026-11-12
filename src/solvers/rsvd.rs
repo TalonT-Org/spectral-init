@@ -8,15 +8,18 @@
 //! **Chain position:** Level 4 — approximate but highly robust fallback for large `n`
 //! after Levels 1–3 fail. Quality threshold: 1e-2 (looser than other levels).
 //!
-//! **Failure mode:** `rsvd_solve` is infallible (returns directly). The looser
-//! residual threshold (1e-2) means Level 4 rarely fails its quality gate. If it does,
-//! Level 5 (forced dense EVD) is the final fallback.
+//! **Failure mode:** `rsvd_solve` returns `None` when its dense `n × k` sketch would
+//! exceed the dense memory budget, when the problem is too small for the requested
+//! number of components, or when the small projected eigenproblem fails. The looser
+//! residual threshold (1e-2) means Level 4 rarely fails its quality gate. In every
+//! failing case Level 5 (forced dense EVD) is the final fallback.
 
-use super::{EigenResult, SolverParams};
+use super::{EigenResult, SolverParams, dense_bytes};
 use faer::linalg::solvers::{Qr, SelfAdjointEigen};
 use faer::{Mat as FaerMat, Side};
 use ndarray::{Array1, Array2};
 use rand::SeedableRng;
+use rand_chacha::ChaCha12Rng;
 use rand_distr::{Distribution, StandardNormal};
 use sprs::{CsMatI, TriMat};
 
@@ -80,17 +83,17 @@ fn qr_thin_q(y: &Array2<f64>) -> Array2<f64> {
 /// Compute symmetric eigendecomposition of the small matrix B using `faer`.
 ///
 /// Returns `(eigenvalues, eigenvectors)` where eigenvalues are in ASCENDING order
-/// and eigenvectors are columns of the returned Array2.
-fn sym_eig(b: &Array2<f64>) -> (Vec<f64>, Array2<f64>) {
+/// and eigenvectors are columns of the returned Array2, or `None` if the
+/// decomposition fails.
+fn sym_eig(b: &Array2<f64>) -> Option<(Vec<f64>, Array2<f64>)> {
     let faer_b = to_faer(b);
-    let eigen = SelfAdjointEigen::new(faer_b.as_ref(), Side::Lower)
-        .expect("rsvd_solve: SelfAdjointEigen failed on B = Q^T M Q");
+    let eigen = SelfAdjointEigen::new(faer_b.as_ref(), Side::Lower).ok()?;
     // Eigenvalues in ASCENDING order (smallest first).
     // Use for_each since ColRef may have non-contiguous stride (no as_slice guarantee).
     let mut eigenvalues: Vec<f64> = Vec::new();
     eigen.S().for_each(|x| eigenvalues.push(*x));
     let eigenvectors = from_faer(&eigen.U().to_owned());
-    (eigenvalues, eigenvectors)
+    Some((eigenvalues, eigenvectors))
 }
 
 /// Default number of QR-stabilized power-iteration passes.
@@ -115,32 +118,34 @@ fn rsvd_k_sub(n: usize, rank: usize, oversampling: Option<usize>) -> usize {
 /// - Computes the top-(n_components+1) eigenvalues/vectors of M via randomized SVD
 /// - Discards the trivial eigenvector (column 0, corresponding to λ_L ≈ 0)
 /// - Maps eigenvalues back to L eigenvalues via λ_L = 2 − σ_M
+///
+/// Returns `None` when `n_components` is 0 or not below `n`, when the dense `n × k`
+/// sketch needs more than `params.dense_memory_budget` bytes, or when the projected
+/// eigenproblem fails.
 pub fn rsvd_solve(
     laplacian: &CsMatI<f64, usize>,
     n_components: usize,
     seed: u64,
     params: &SolverParams,
-) -> EigenResult {
+) -> Option<EigenResult> {
     let n = laplacian.rows();
-    assert!(
-        n_components > 0,
-        "rsvd_solve: n_components must be >= 1, got 0"
-    );
-    assert!(
-        n_components < n,
-        "rsvd_solve: n_components ({n_components}) must be < n ({n})"
-    );
+    if n_components == 0 || n_components >= n {
+        return None;
+    }
     // rank = n_components + 1: request one extra so we can discard the trivial vector
     let rank = n_components + 1;
     // k = total random vectors; see rsvd_k_sub for the oversampling formula.
     let k = rsvd_k_sub(n, rank, params.rsvd_oversampling);
+    if dense_bytes(n, k) > params.dense_memory_budget {
+        return None;
+    }
     let nbiter = params.rsvd_nbiter; // QR-stabilized subspace iterations (Halko-Tropp Algorithm 4.4)
 
     // ── Step A: Form M = 2I - L ──────────────────────────────────────────────
     let m = two_i_minus_laplacian(laplacian);
 
     // ── Step B: Generate random Gaussian sketch matrix Ω ∈ ℝ^{n × k} ────────
-    let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+    let mut rng = ChaCha12Rng::seed_from_u64(seed);
     let normal = StandardNormal;
     let mut omega = Array2::from_shape_fn((n, k), |_| normal.sample(&mut rng));
 
@@ -164,7 +169,7 @@ pub fn rsvd_solve(
 
     // ── Step F: Eigendecompose B (small k×k symmetric matrix) ─────────────────
     // eigenvalues ascending (smallest M eigenvalue first = largest L eigenvalue)
-    let (m_eigenvals, u_b) = sym_eig(&b); // m_eigenvals[k-1] ≈ 2 (trivial)
+    let (m_eigenvals, u_b) = sym_eig(&b)?; // m_eigenvals[k-1] ≈ 2 (trivial)
 
     // ── Step G: Recover full eigenvectors V = Q U_B ───────────────────────────
     let v = q.dot(&u_b); // [n, k]
@@ -173,7 +178,8 @@ pub fn rsvd_solve(
     //
     // M eigenvalues (ascending): index actual_n-1 is the trivial (λ_M ≈ 2.0 → λ_L ≈ 0).
     // Non-trivial L eigenvalues (ascending): indices actual_n-2, actual_n-3, ...,
-    //   actual_n-1-n_components in the M ascending array.
+    //   actual_n-1-n_components in the M ascending array. `k >= rank` (because
+    // `rank <= n`), so all of these indices exist.
     let actual_n = m_eigenvals.len();
     let trivial_m_idx = actual_n - 1;
     let mut eig_vals_vec: Vec<f64> = Vec::with_capacity(n_components + 1);
@@ -196,7 +202,7 @@ pub fn rsvd_solve(
     }
 
     let eigenvalues = Array1::from_vec(eig_vals_vec);
-    (eigenvalues, eigenvectors)
+    Some((eigenvalues, eigenvectors))
 }
 
 /// Accurate eigensolver via random subspace + direct L-projection.
@@ -212,7 +218,9 @@ pub fn rsvd_solve(
 /// `n_components` non-trivial pairs in ascending eigenvalue order).
 ///
 /// `k_sub` controls the subspace size; larger values give higher accuracy at
-/// higher cost.  Must satisfy `k_sub > n_components + 1`.
+/// higher cost.  Returns `None` unless `k_sub > n_components + 1` and the subspace,
+/// capped at `n`, still holds `n_components + 1` vectors, or if the projected
+/// eigenproblem fails.
 #[cfg(feature = "__internal")]
 pub fn rsvd_solve_accurate(
     laplacian: &CsMatI<f64, usize>,
@@ -220,14 +228,17 @@ pub fn rsvd_solve_accurate(
     seed: u64,
     k_sub: usize,
     nbiter: usize,
-) -> (Array1<f64>, Array2<f64>) {
+) -> Option<EigenResult> {
     let n = laplacian.rows();
-    assert!(k_sub > n_components + 1, "k_sub must be > n_components + 1");
+    let n_out = n_components + 1;
     let k = k_sub.min(n);
+    if k_sub <= n_out || k < n_out {
+        return None;
+    }
 
     // ── Step A: Build power-iteration subspace using M = 2I − L ─────────────
     let m = two_i_minus_laplacian(laplacian);
-    let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+    let mut rng = ChaCha12Rng::seed_from_u64(seed);
     let normal = StandardNormal;
     let mut omega = Array2::from_shape_fn((n, k), |_| normal.sample(&mut rng));
 
@@ -246,20 +257,19 @@ pub fn rsvd_solve_accurate(
     let b_l = q.t().dot(&lq); // B_L [k, k]  symmetric PSD
 
     // ── Step C: Dense EVD of B_L (ascending = smallest L eigenvalue first) ──
-    let (l_eigenvals, u_b) = sym_eig(&b_l);
+    let (l_eigenvals, u_b) = sym_eig(&b_l)?;
 
     // ── Step D: Recover full Ritz vectors V = Q U_B ──────────────────────────
     let v = q.dot(&u_b); // [n, k]
 
     // ── Step E: Build output — trivial first (index 0), then non-trivials ────
     // l_eigenvals[0] ≈ 0 (trivial), l_eigenvals[1..=n_components] non-trivials
-    let n_out = n_components + 1;
     let eigenvalues = Array1::from_iter(l_eigenvals[..n_out].iter().copied());
     let mut eigenvectors = Array2::<f64>::zeros((n, n_out));
     for i in 0..n_out {
         eigenvectors.column_mut(i).assign(&v.column(i));
     }
-    (eigenvalues, eigenvectors)
+    Some((eigenvalues, eigenvectors))
 }
 
 #[cfg(test)]
@@ -291,9 +301,10 @@ mod tests {
     #[test]
     fn test_two_i_minus_laplacian_path_3() {
         let graph = make_graph(3, &[(0, 1, 1.0), (1, 2, 1.0)]);
-        let (_, sqrt_deg) = crate::laplacian::compute_degrees(&graph, ComputeMode::PythonCompat);
+        let (_, sqrt_deg) =
+            crate::laplacian::compute_degrees(graph.view(), ComputeMode::PythonCompat);
         let inv_sqrt_deg = sqrt_deg.mapv(|x| if x == 0.0 { 0.0 } else { 1.0 / x });
-        let l = build_normalized_laplacian(&graph, inv_sqrt_deg.as_slice().unwrap());
+        let l = build_normalized_laplacian(graph.view(), inv_sqrt_deg.as_slice().unwrap());
         let m = two_i_minus_laplacian(&l);
 
         let n = l.rows();
@@ -342,13 +353,14 @@ mod tests {
             .flat_map(|i| (i + 1..n).map(move |j| (i, j, 1.0f32)))
             .collect();
         let graph = make_graph(n, &edges);
-        let (_, sqrt_deg) = crate::laplacian::compute_degrees(&graph, ComputeMode::PythonCompat);
+        let (_, sqrt_deg) =
+            crate::laplacian::compute_degrees(graph.view(), ComputeMode::PythonCompat);
         let inv_sqrt_deg = sqrt_deg.mapv(|x| if x == 0.0 { 0.0 } else { 1.0 / x });
-        let l = build_normalized_laplacian(&graph, inv_sqrt_deg.as_slice().unwrap());
+        let l = build_normalized_laplacian(graph.view(), inv_sqrt_deg.as_slice().unwrap());
 
         let n_components = 2;
         let (eigenvalues, eigenvectors) =
-            rsvd_solve(&l, n_components, 42, &SolverParams::default());
+            rsvd_solve(&l, n_components, 42, &SolverParams::default()).expect("rsvd_solve failed");
 
         assert_eq!(
             eigenvalues.shape(),
@@ -395,12 +407,14 @@ mod tests {
         let n = 6;
         let edges: Vec<(usize, usize, f32)> = (0..n).map(|i| (i, (i + 1) % n, 1.0f32)).collect();
         let graph = make_graph(n, &edges);
-        let (_, sqrt_deg) = crate::laplacian::compute_degrees(&graph, ComputeMode::PythonCompat);
+        let (_, sqrt_deg) =
+            crate::laplacian::compute_degrees(graph.view(), ComputeMode::PythonCompat);
         let inv_sqrt_deg = sqrt_deg.mapv(|x| if x == 0.0 { 0.0 } else { 1.0 / x });
-        let l = build_normalized_laplacian(&graph, inv_sqrt_deg.as_slice().unwrap());
+        let l = build_normalized_laplacian(graph.view(), inv_sqrt_deg.as_slice().unwrap());
 
         let n_components = 2;
-        let (eigenvalues, eigenvectors) = rsvd_solve(&l, n_components, 0, &SolverParams::default());
+        let (eigenvalues, eigenvectors) =
+            rsvd_solve(&l, n_components, 0, &SolverParams::default()).expect("rsvd_solve failed");
 
         let eig_slice = eigenvalues.as_slice().unwrap();
 
@@ -464,19 +478,56 @@ mod tests {
         let n = 6;
         let edges: Vec<(usize, usize, f32)> = (0..n).map(|i| (i, (i + 1) % n, 1.0f32)).collect();
         let graph = make_graph(n, &edges);
-        let (_, sqrt_deg) = crate::laplacian::compute_degrees(&graph, ComputeMode::PythonCompat);
+        let (_, sqrt_deg) =
+            crate::laplacian::compute_degrees(graph.view(), ComputeMode::PythonCompat);
         let inv_sqrt_deg = sqrt_deg.mapv(|x| if x == 0.0 { 0.0 } else { 1.0 / x });
-        let l = build_normalized_laplacian(&graph, inv_sqrt_deg.as_slice().unwrap());
+        let l = build_normalized_laplacian(graph.view(), inv_sqrt_deg.as_slice().unwrap());
 
         let params = SolverParams {
             rsvd_oversampling: Some(2),
             rsvd_nbiter: 4,
             ..SolverParams::default()
         };
-        let (eigenvalues, eigenvectors) = rsvd_solve(&l, 2, 0, &params);
+        let (eigenvalues, eigenvectors) = rsvd_solve(&l, 2, 0, &params).expect("rsvd_solve failed");
         assert_eq!(eigenvectors.shape(), &[n, 3]);
         assert!(eigenvalues[0].abs() < 1e-3);
         assert!((eigenvalues[1] - 0.5).abs() < 1e-4);
         assert!((eigenvalues[2] - 0.5).abs() < 1e-4);
+    }
+
+    /// 6-node ring Laplacian, as in the residual test above.
+    fn ring_6_laplacian() -> CsMatI<f64, usize> {
+        let n = 6;
+        let edges: Vec<(usize, usize, f32)> = (0..n).map(|i| (i, (i + 1) % n, 1.0f32)).collect();
+        let graph = make_graph(n, &edges);
+        let (_, sqrt_deg) =
+            crate::laplacian::compute_degrees(graph.view(), ComputeMode::PythonCompat);
+        let inv_sqrt_deg = sqrt_deg.mapv(|x| if x == 0.0 { 0.0 } else { 1.0 / x });
+        build_normalized_laplacian(graph.view(), inv_sqrt_deg.as_slice().unwrap())
+    }
+
+    #[test]
+    fn rsvd_solve_returns_none_for_unsolvable_requests() {
+        let l = ring_6_laplacian();
+        let params = SolverParams::default();
+        assert!(rsvd_solve(&l, 0, 42, &params).is_none(), "n_components = 0");
+        assert!(rsvd_solve(&l, 6, 42, &params).is_none(), "n_components = n");
+        assert!(rsvd_solve(&l, 7, 42, &params).is_none(), "n_components > n");
+    }
+
+    #[test]
+    fn rsvd_solve_returns_none_over_the_dense_memory_budget() {
+        let l = ring_6_laplacian();
+        // n = 6, rank = 3, default oversampling 3 → a 6 × 6 sketch of 288 bytes.
+        let within = SolverParams {
+            dense_memory_budget: 288,
+            ..SolverParams::default()
+        };
+        let over = SolverParams {
+            dense_memory_budget: 287,
+            ..SolverParams::default()
+        };
+        assert!(rsvd_solve(&l, 2, 42, &within).is_some());
+        assert!(rsvd_solve(&l, 2, 42, &over).is_none());
     }
 }

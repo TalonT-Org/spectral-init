@@ -119,8 +119,12 @@ fn test_inv_sign_convention() {
     for dataset in &["blobs_50", "blobs_connected_2000"] {
         let graph_path = fixtures::fixture_path(dataset, "step5a_pruned.npz");
         let graph = fixtures::load_sparse_csr_f32_u32(&graph_path);
-        let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
-            .unwrap_or_else(|e| panic!("spectral_init failed for {dataset}: {e}"));
+        let result = spectral_init(
+            graph.view(),
+            None,
+            &SpectralInitConfig::new(2).with_seed(42),
+        )
+        .unwrap_or_else(|e| panic!("spectral_init failed for {dataset}: {e}"));
         let (nrows, ncols) = (result.shape()[0], result.shape()[1]);
         for col in 0..ncols {
             // Check the argmax-absolute-value element is positive (the sign convention).
@@ -155,8 +159,12 @@ fn test_inv_multi_component_completeness() {
     let graph = make_two_component_graph(N1, N2);
     let total = (N1 + N2) as usize;
 
-    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
-        .unwrap_or_else(|e| panic!("spectral_init failed on synthetic 2-component graph: {e}"));
+    let result = spectral_init(
+        graph.view(),
+        None,
+        &SpectralInitConfig::new(2).with_seed(42),
+    )
+    .unwrap_or_else(|e| panic!("spectral_init failed on synthetic 2-component graph: {e}"));
 
     assert_eq!(result.shape()[0], total, "expected {total} rows in output");
 
@@ -243,7 +251,8 @@ fn test_inv_lobpcg_convergence_ill_conditioned() {
 fn test_inv_rsvd_eigenvector_distinctness() {
     let lap_path = fixtures::fixture_path("blobs_5000", "comp_b_laplacian.npz");
     let lap = fixtures::load_sparse_csr(&lap_path);
-    let (_eigvals, eigvecs) = rsvd_solve(&lap, 2, 42, &SolverParams::default());
+    let (_eigvals, eigvecs) =
+        rsvd_solve(&lap, 2, 42, &SolverParams::default()).expect("rsvd_solve failed");
 
     let v0 = eigvecs.column(0);
     let v1 = eigvecs.column(1);

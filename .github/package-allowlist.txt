@@ -10,6 +10,7 @@ examples/compute_modes.rs
 examples/from_adjacency_list.rs
 src/components.rs
 src/config.rs
+src/error.rs
 src/laplacian.rs
 src/lib.rs
 src/multi_component.rs
@@ -22,3 +23,4 @@ src/solvers/mod.rs
 src/solvers/quality.rs
 src/solvers/rsvd.rs
 src/solvers/sinv.rs
+src/validate.rs

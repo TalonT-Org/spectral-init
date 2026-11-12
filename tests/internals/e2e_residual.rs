@@ -9,8 +9,12 @@ fn run_e2e_residual_check(dataset: &str, n: usize) {
     let graph_path = fixtures::fixture_path(dataset, "step5a_pruned.npz");
     let graph = fixtures::load_sparse_csr_f32_u32(&graph_path);
 
-    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
-        .unwrap_or_else(|e| panic!("spectral_init failed for {dataset}: {e}"));
+    let result = spectral_init(
+        graph.view(),
+        None,
+        &SpectralInitConfig::new(2).with_seed(42),
+    )
+    .unwrap_or_else(|e| panic!("spectral_init failed for {dataset}: {e}"));
     assert_eq!(result.shape(), &[n, 2]);
     for &v in result.iter() {
         assert!(v.is_finite(), "non-finite in {dataset}: {v}");

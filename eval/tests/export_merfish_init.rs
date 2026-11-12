@@ -42,12 +42,12 @@ fn export_merfish_init_10k() {
     // Emit solver level via the internal seam so the Python sweep harness can parse it.
     // Builds the Laplacian independently of spectral_init(); the actual embedding below
     // still uses spectral_init() as the authoritative pipeline path.
-    let (_degrees, sqrt_deg) = compute_degrees(&graph, ComputeMode::PythonCompat);
+    let (_degrees, sqrt_deg) = compute_degrees(graph.view(), ComputeMode::PythonCompat);
     let inv_sqrt_deg: Vec<f64> = sqrt_deg
         .iter()
         .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
         .collect();
-    let lap = build_normalized_laplacian(&graph, &inv_sqrt_deg);
+    let lap = build_normalized_laplacian(graph.view(), &inv_sqrt_deg);
     let (_, report) = solve_with_unit_hint(
         &lap,
         2,
@@ -58,8 +58,12 @@ fn export_merfish_init_10k() {
     println!("SOLVER_LEVEL={}", report.level as u8);
 
     let start = Instant::now();
-    let coords = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
-        .unwrap_or_else(|e| panic!("spectral_init failed on merfish_10k: {e}"));
+    let coords = spectral_init(
+        graph.view(),
+        None,
+        &SpectralInitConfig::new(2).with_seed(42),
+    )
+    .unwrap_or_else(|e| panic!("spectral_init failed on merfish_10k: {e}"));
     let elapsed = start.elapsed();
 
     assert_eq!(
@@ -116,12 +120,12 @@ fn export_merfish_init_20k() {
     println!("=====================================");
     println!("Graph: {} nodes", n);
 
-    let (_degrees, sqrt_deg) = compute_degrees(&graph, ComputeMode::PythonCompat);
+    let (_degrees, sqrt_deg) = compute_degrees(graph.view(), ComputeMode::PythonCompat);
     let inv_sqrt_deg: Vec<f64> = sqrt_deg
         .iter()
         .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
         .collect();
-    let lap = build_normalized_laplacian(&graph, &inv_sqrt_deg);
+    let lap = build_normalized_laplacian(graph.view(), &inv_sqrt_deg);
     let (_, report) = solve_with_unit_hint(
         &lap,
         2,
@@ -132,8 +136,12 @@ fn export_merfish_init_20k() {
     println!("SOLVER_LEVEL={}", report.level as u8);
 
     let start = Instant::now();
-    let coords = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
-        .unwrap_or_else(|e| panic!("spectral_init failed on merfish_20k: {e}"));
+    let coords = spectral_init(
+        graph.view(),
+        None,
+        &SpectralInitConfig::new(2).with_seed(42),
+    )
+    .unwrap_or_else(|e| panic!("spectral_init failed on merfish_20k: {e}"));
     let elapsed = start.elapsed();
 
     // Measure peak RSS via /proc/self/status (Linux only)
@@ -213,12 +221,12 @@ fn export_merfish_init_100k() {
     // Emit solver level via the internal seam so the Python sweep harness can parse it.
     // Builds the Laplacian independently of spectral_init(); the actual embedding below
     // still uses spectral_init() as the authoritative pipeline path.
-    let (_degrees, sqrt_deg) = compute_degrees(&graph, ComputeMode::PythonCompat);
+    let (_degrees, sqrt_deg) = compute_degrees(graph.view(), ComputeMode::PythonCompat);
     let inv_sqrt_deg: Vec<f64> = sqrt_deg
         .iter()
         .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
         .collect();
-    let lap = build_normalized_laplacian(&graph, &inv_sqrt_deg);
+    let lap = build_normalized_laplacian(graph.view(), &inv_sqrt_deg);
     let (_, report) = solve_with_unit_hint(
         &lap,
         2,
@@ -229,8 +237,12 @@ fn export_merfish_init_100k() {
     println!("SOLVER_LEVEL={}", report.level as u8);
 
     let start = Instant::now();
-    let coords = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
-        .unwrap_or_else(|e| panic!("spectral_init failed on merfish_100k: {e}"));
+    let coords = spectral_init(
+        graph.view(),
+        None,
+        &SpectralInitConfig::new(2).with_seed(42),
+    )
+    .unwrap_or_else(|e| panic!("spectral_init failed on merfish_100k: {e}"));
     let elapsed = start.elapsed();
 
     assert_eq!(
@@ -305,12 +317,12 @@ fn export_merfish_init_250k() {
     println!("======================================");
     println!("Graph: {} nodes", n);
 
-    let (_degrees, sqrt_deg) = compute_degrees(&graph, ComputeMode::PythonCompat);
+    let (_degrees, sqrt_deg) = compute_degrees(graph.view(), ComputeMode::PythonCompat);
     let inv_sqrt_deg: Vec<f64> = sqrt_deg
         .iter()
         .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
         .collect();
-    let lap = build_normalized_laplacian(&graph, &inv_sqrt_deg);
+    let lap = build_normalized_laplacian(graph.view(), &inv_sqrt_deg);
     let (_, report) = solve_with_unit_hint(
         &lap,
         2,
@@ -321,8 +333,12 @@ fn export_merfish_init_250k() {
     println!("SOLVER_LEVEL={}", report.level as u8);
 
     let start = Instant::now();
-    let coords = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
-        .unwrap_or_else(|e| panic!("spectral_init failed on merfish_250k: {e}"));
+    let coords = spectral_init(
+        graph.view(),
+        None,
+        &SpectralInitConfig::new(2).with_seed(42),
+    )
+    .unwrap_or_else(|e| panic!("spectral_init failed on merfish_250k: {e}"));
     let elapsed = start.elapsed();
 
     assert_eq!(

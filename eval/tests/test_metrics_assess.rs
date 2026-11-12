@@ -245,10 +245,10 @@ fn assess_accuracy() {
 
         if !is_connected {
             let graph = fixtures::load_sparse_csr_f32_u32(&base.join("step5a_pruned.npz"));
-            let (rust_labels, rust_n_components) = find_components(&graph);
+            let (rust_labels, rust_n_components) = find_components(graph.view());
 
             let embedding = embed_disconnected(
-                &graph,
+                graph.view(),
                 &rust_labels,
                 rust_n_components,
                 n_components_dim,

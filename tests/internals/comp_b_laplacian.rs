@@ -16,7 +16,7 @@ fn run_comp_b_test(dataset: &str, expected_n: usize) {
         .collect();
 
     // Call function under test
-    let l = build_normalized_laplacian(&graph, &inv_sqrt_deg);
+    let l = build_normalized_laplacian(graph.view(), &inv_sqrt_deg);
 
     assert_eq!(l.rows(), expected_n, "Laplacian rows");
     assert_eq!(l.cols(), expected_n, "Laplacian cols");

@@ -111,7 +111,7 @@ fn process_disconnected_path(dataset: &str, n_embedding_dims: usize) -> Disconne
         f64_data.mapv(|x| x as f32)
     };
 
-    let (labels, n_conn_components) = find_components(&graph);
+    let (labels, n_conn_components) = find_components(graph.view());
 
     let mut component_members: Vec<Vec<usize>> = vec![Vec::new(); n_conn_components];
     for (node, &label) in labels.iter().enumerate() {
@@ -119,7 +119,7 @@ fn process_disconnected_path(dataset: &str, n_embedding_dims: usize) -> Disconne
     }
 
     let embedding = embed_disconnected(
-        &graph,
+        graph.view(),
         &labels,
         n_conn_components,
         n_embedding_dims,
@@ -142,12 +142,12 @@ fn process_disconnected_path(dataset: &str, n_embedding_dims: usize) -> Disconne
                 return 0.0;
             }
             let sub_graph = extract_subgraph_local(&graph, members);
-            let (_, sqrt_deg_c) = compute_degrees(&sub_graph, ComputeMode::PythonCompat);
+            let (_, sqrt_deg_c) = compute_degrees(sub_graph.view(), ComputeMode::PythonCompat);
             let inv_sqrt_c: Vec<f64> = sqrt_deg_c
                 .iter()
                 .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
                 .collect();
-            let lap_c = build_normalized_laplacian(&sub_graph, &inv_sqrt_c);
+            let lap_c = build_normalized_laplacian(sub_graph.view(), &inv_sqrt_c);
 
             let ((evals, evecs), _) = internals::solve_with_unit_hint(
                 &lap_c,
@@ -165,11 +165,9 @@ fn process_disconnected_path(dataset: &str, n_embedding_dims: usize) -> Disconne
     let separation_ratio = diagnostics::separation_ratio(embedding.view(), &labels);
 
     let e2e_result = spectral_init(
-        &graph,
-        n_embedding_dims,
-        42,
+        graph.view(),
         Some(raw_data.view()),
-        SpectralInitConfig::default(),
+        &SpectralInitConfig::new(n_embedding_dims).with_seed(42),
     )
     .unwrap_or_else(|e| panic!("{dataset}: spectral_init failed: {e}"));
     let e2e_output_is_finite = e2e_result.iter().all(|&v: &f32| v.is_finite());
@@ -209,7 +207,7 @@ fn process_dataset(
     let n_components_dim = k - 1;
 
     if !is_connected {
-        let (_, rust_n_components) = find_components(&graph);
+        let (_, rust_n_components) = find_components(graph.view());
         let component_count_matches = rust_n_components == expected_n_components;
         let disconnected_path = Some(process_disconnected_path(dataset, n_components_dim));
         return DatasetMetrics {
@@ -290,11 +288,9 @@ fn process_dataset(
 
     let e2e_max_residual = if is_connected {
         let result = spectral_init(
-            &graph,
-            n_components_dim,
-            42,
+            graph.view(),
             None,
-            SpectralInitConfig::default(),
+            &SpectralInitConfig::new(n_components_dim).with_seed(42),
         )
         .unwrap_or_else(|e| panic!("{dataset}: spectral_init failed: {e}"));
         let e2e_max = (0..n_components_dim)
@@ -308,7 +304,7 @@ fn process_dataset(
         None
     };
 
-    let (_, rust_n_components) = find_components(&graph);
+    let (_, rust_n_components) = find_components(graph.view());
     let component_count_matches = rust_n_components == expected_n_components;
 
     DatasetMetrics {
@@ -341,7 +337,7 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
     for metric in all_metrics {
         let base = fixtures::fixture_path(&metric.dataset, "");
         let graph = fixtures::load_sparse_csr_f32_u32(&base.join("step5a_pruned.npz"));
-        let (degrees, _) = compute_degrees(&graph, ComputeMode::PythonCompat);
+        let (degrees, _) = compute_degrees(graph.view(), ComputeMode::PythonCompat);
         let ref_deg: Array1<f64> =
             fixtures::load_dense(&base.join("comp_a_degrees.npz"), "degrees");
         for (&got, &want) in degrees.iter().zip(ref_deg.iter()) {
@@ -373,7 +369,7 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
             .iter()
             .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
             .collect();
-        let rust_lap = build_normalized_laplacian(&graph, &inv_sqrt_deg);
+        let rust_lap = build_normalized_laplacian(graph.view(), &inv_sqrt_deg);
         let ref_lap = fixtures::load_sparse_csr(&base.join("comp_b_laplacian.npz"));
         for (val, (row, col)) in ref_lap.iter() {
             let rust_val = rust_lap.get(row, col).copied().unwrap_or(0.0);
@@ -398,12 +394,12 @@ fn build_tolerance_margin_table(all_metrics: &[DatasetMetrics]) -> Vec<Tolerance
     for metric in all_metrics {
         let base = fixtures::fixture_path(&metric.dataset, "");
         let graph = fixtures::load_sparse_csr_f32_u32(&base.join("step5a_pruned.npz"));
-        let (_, sqrt_deg) = compute_degrees(&graph, ComputeMode::PythonCompat);
+        let (_, sqrt_deg) = compute_degrees(graph.view(), ComputeMode::PythonCompat);
         let inv_sqrt_deg: Vec<f64> = sqrt_deg
             .iter()
             .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
             .collect();
-        let rust_lap = build_normalized_laplacian(&graph, &inv_sqrt_deg);
+        let rust_lap = build_normalized_laplacian(graph.view(), &inv_sqrt_deg);
         let ref_lap = fixtures::load_sparse_csr(&base.join("comp_b_laplacian.npz"));
         for (val, (row, col)) in ref_lap.iter() {
             let rust_val = rust_lap.get(row, col).copied().unwrap_or(0.0);

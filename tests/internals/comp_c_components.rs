@@ -9,7 +9,7 @@ fn run_comp_c_test(dataset: &str, expected_n_components: usize) {
 
     // Run the function under test
     let graph = fixtures::load_sparse_csr_f32_u32(&base.join("step5a_pruned.npz"));
-    let (labels, n_components) = find_components(&graph);
+    let (labels, n_components) = find_components(graph.view());
 
     // Load Python reference
     let ref_path = base.join("comp_c_components.npz");

@@ -19,11 +19,7 @@ pub fn select_eigenvectors(
         eigenvalues.len()
     );
     let mut indices: Vec<usize> = (0..eigenvalues.len()).collect();
-    indices.sort_by(|&a, &b| {
-        eigenvalues[a]
-            .partial_cmp(&eigenvalues[b])
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
+    indices.sort_by(|&a, &b| eigenvalues[a].total_cmp(&eigenvalues[b]));
 
     eigenvectors.select(Axis(1), &indices[1..1 + n_components])
 }

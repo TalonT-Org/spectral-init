@@ -5,8 +5,8 @@
 //!
 //! Run with: cargo run --example compute_modes
 
+use spectral_init::sprs::{CsMatI, TriMatI};
 use spectral_init::{ComputeMode, SpectralInitConfig, spectral_init};
-use sprs::{CsMatI, TriMatI};
 
 fn make_ring(n: usize) -> CsMatI<f32, u32, usize> {
     let mut tri: TriMatI<f32, u32> = TriMatI::new((n, n));
@@ -22,15 +22,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let graph = make_ring(20);
 
     // PythonCompat: matches Python UMAP's degree accumulation and solver path.
-    let mut cfg_compat = SpectralInitConfig::default();
-    cfg_compat.compute_mode = ComputeMode::PythonCompat;
-    let emb_compat = spectral_init(&graph, 2, 42, None, cfg_compat)?;
+    let cfg_compat = SpectralInitConfig::new(2)
+        .with_seed(42)
+        .with_compute_mode(ComputeMode::PythonCompat);
+    let emb_compat = spectral_init(graph.view(), None, &cfg_compat)?;
 
     // RustNative: uses AVX2+FMA SIMD kernel on x86_64; falls back on other platforms.
     // Eigenvectors are subspace-equivalent to PythonCompat (same span, may differ by sign).
-    let mut cfg_native = SpectralInitConfig::default();
-    cfg_native.compute_mode = ComputeMode::RustNative;
-    let emb_native = spectral_init(&graph, 2, 42, None, cfg_native)?;
+    let cfg_native = SpectralInitConfig::new(2)
+        .with_seed(42)
+        .with_compute_mode(ComputeMode::RustNative);
+    let emb_native = spectral_init(graph.view(), None, &cfg_native)?;
 
     println!("PythonCompat shape: {:?}", emb_compat.shape());
     println!("RustNative shape:   {:?}", emb_native.shape());

@@ -35,6 +35,10 @@ forbid "the library must not print or read the environment (src/)" \
     'println!|eprintln!|dbg!|env::var|SPECTRAL_' \
     src
 
+forbid "random numbers come from the named generator ChaCha12Rng, not StdRng (src/)" \
+    'StdRng' \
+    src
+
 forbid "no package has a 'testing' feature" \
     'feature *= *"testing"' \
     src tests examples eval trustworthiness

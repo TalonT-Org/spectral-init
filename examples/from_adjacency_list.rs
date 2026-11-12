@@ -5,8 +5,8 @@
 //!
 //! Run with: cargo run --example from_adjacency_list
 
+use spectral_init::sprs::{CsMatI, TriMatI};
 use spectral_init::{SpectralInitConfig, spectral_init};
-use sprs::{CsMatI, TriMatI};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Represent an undirected weighted graph as (src, dst, weight) triplets.
@@ -33,8 +33,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let graph: CsMatI<f32, u32, usize> = tri.to_csr();
 
-    let config = SpectralInitConfig::default();
-    let embedding = spectral_init(&graph, 2, 42, None, config)?;
+    let config = SpectralInitConfig::new(2).with_seed(42);
+    let embedding = spectral_init(graph.view(), None, &config)?;
 
     println!(
         "Nodes: {}, Embedding dims: {}",

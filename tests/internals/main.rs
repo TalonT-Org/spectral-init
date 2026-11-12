@@ -2,6 +2,9 @@
 
 #![cfg(feature = "__internal")]
 
+#[macro_use]
+#[path = "../common/assertions.rs"]
+mod assertions;
 #[path = "../common/diagnostics.rs"]
 mod diagnostics;
 #[path = "../common/fixtures.rs"]
@@ -21,6 +24,9 @@ mod comp_f_lobpcg;
 mod comp_g_sinv;
 mod diagnostic_metrics;
 mod e2e_residual;
+mod escalation;
+mod laplacian;
+mod no_panic;
 mod operator_fixtures;
 mod property_tests;
 mod psd_contract;

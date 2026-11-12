@@ -28,10 +28,13 @@ use faer::{Mat as FaerMat, Side};
 use linfa_linalg::lobpcg::{Order, lobpcg};
 use ndarray::{Array1, Array2};
 use rand::SeedableRng;
-use rand::rngs::StdRng;
+use rand_chacha::ChaCha12Rng;
 use rand_distr::{Distribution, StandardNormal};
 
 // ─── ndarray 0.16 ↔ 0.17 conversion helpers ──────────────────────────────────
+//
+// Each helper rebuilds an array from exactly `rows * cols` elements read off the source,
+// so the `from_shape_vec` calls cannot fail.
 
 /// Convert an owned ndarray 0.17 `Array2<f64>` to ndarray 0.16 `Array2<f64>`.
 fn to_nd16_array2(a: Array2<f64>) -> nd16::Array2<f64> {
@@ -256,7 +259,7 @@ pub fn lobpcg_solve<O: LinearOperator>(
     }
 
     // Build random initial block [n, k] in ndarray 0.17, then convert to 0.16 for lobpcg.
-    let mut rng = StdRng::seed_from_u64(seed);
+    let mut rng = ChaCha12Rng::seed_from_u64(seed);
     let mut x_init_17: Array2<f64> =
         Array2::from_shape_fn((n, k), |_| StandardNormal.sample(&mut rng));
 
@@ -337,6 +340,7 @@ pub fn lobpcg_solve<O: LinearOperator>(
         };
 
         // Extract x_init for this iteration (moved into lobpcg; repopulated on warm restart).
+        // Every path that reaches the next iteration stores a new starting block first.
         debug_assert!(
             x_init_opt.is_some(),
             "x_init_opt must be set at every loop entry"
@@ -426,6 +430,7 @@ pub fn lobpcg_solve<O: LinearOperator>(
         }
 
         // ── Rayleigh-Ritz refinement ─────────────────────────────────────────
+        // `raw_opt` is `Some` here: the `None` case continued or broke out above.
         let (_, raw_eigvecs) = raw_opt.unwrap();
         let refined_opt = rayleigh_ritz_refine(op, raw_eigvecs.clone());
 

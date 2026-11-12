@@ -24,8 +24,12 @@ fn vec_dot(a: ndarray::ArrayView1<f64>, b: ndarray::ArrayView1<f64>) -> f64 {
 fn run_e2e_exact_knn_check(dataset: &str, n: usize) {
     let graph_path = fixtures::fixture_path(dataset, "step5a_pruned_exact.npz");
     let graph = fixtures::load_sparse_csr_f32_u32(&graph_path);
-    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
-        .unwrap_or_else(|e| panic!("exact-KNN spectral_init failed for {dataset}: {e}"));
+    let result = spectral_init(
+        graph.view(),
+        None,
+        &SpectralInitConfig::new(2).with_seed(42),
+    )
+    .unwrap_or_else(|e| panic!("exact-KNN spectral_init failed for {dataset}: {e}"));
     assert_eq!(result.shape(), &[n, 2]);
     for &v in result.iter() {
         assert!(v.is_finite(), "non-finite in exact-KNN {dataset}: {v}");
@@ -40,8 +44,12 @@ fn test_e2e_subspace_circles_300() {
 
     let graph_path = fixtures::fixture_path(dataset, "step5a_pruned.npz");
     let graph = fixtures::load_sparse_csr_f32_u32(&graph_path);
-    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
-        .unwrap_or_else(|e| panic!("spectral_init failed for {dataset}: {e}"));
+    let result = spectral_init(
+        graph.view(),
+        None,
+        &SpectralInitConfig::new(2).with_seed(42),
+    )
+    .unwrap_or_else(|e| panic!("spectral_init failed for {dataset}: {e}"));
 
     let scaling_path = fixtures::fixture_path(dataset, "comp_f_scaling.npz");
     let expansion: ndarray::Array0<f64> = fixtures::load_dense(&scaling_path, "expansion");
@@ -89,8 +97,12 @@ fn test_e2e_subspace_near_dupes_100() {
 
     let graph_path = fixtures::fixture_path(dataset, "step5a_pruned.npz");
     let graph = fixtures::load_sparse_csr_f32_u32(&graph_path);
-    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
-        .unwrap_or_else(|e| panic!("spectral_init failed for {dataset}: {e}"));
+    let result = spectral_init(
+        graph.view(),
+        None,
+        &SpectralInitConfig::new(2).with_seed(42),
+    )
+    .unwrap_or_else(|e| panic!("spectral_init failed for {dataset}: {e}"));
 
     let scaling_path = fixtures::fixture_path(dataset, "comp_f_scaling.npz");
     let expansion: ndarray::Array0<f64> = fixtures::load_dense(&scaling_path, "expansion");
@@ -158,8 +170,12 @@ fn test_e2e_disconnected_200_component_separation() {
 
     let graph_path = fixtures::fixture_path(dataset, "step5a_pruned.npz");
     let graph = fixtures::load_sparse_csr_f32_u32(&graph_path);
-    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
-        .unwrap_or_else(|e| panic!("spectral_init failed for {dataset}: {e}"));
+    let result = spectral_init(
+        graph.view(),
+        None,
+        &SpectralInitConfig::new(2).with_seed(42),
+    )
+    .unwrap_or_else(|e| panic!("spectral_init failed for {dataset}: {e}"));
 
     let n = result.shape()[0];
     assert!(result.shape()[1] == 2);
@@ -230,8 +246,12 @@ fn test_e2e_performance_blobs_5000() {
     let path = fixtures::fixture_path("blobs_5000", "step5a_pruned.npz");
     let graph = fixtures::load_sparse_csr_f32_u32(&path);
     let start = std::time::Instant::now();
-    let result = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
-        .expect("blobs_5000 spectral_init failed");
+    let result = spectral_init(
+        graph.view(),
+        None,
+        &SpectralInitConfig::new(2).with_seed(42),
+    )
+    .expect("blobs_5000 spectral_init failed");
     let elapsed = start.elapsed();
     assert_eq!(result.shape()[1], 2);
     let budget_secs: u64 = std::env::var("CI_PERF_BUDGET_SECS")

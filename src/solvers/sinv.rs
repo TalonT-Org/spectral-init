@@ -23,7 +23,7 @@ use faer::prelude::Solve;
 use linfa_linalg::lobpcg::{Order, lobpcg};
 use ndarray::{Array1, Array2, ArrayView2};
 use rand::SeedableRng;
-use rand::rngs::StdRng;
+use rand_chacha::ChaCha12Rng;
 use rand_distr::{Distribution, StandardNormal};
 use sprs::CsMatI;
 
@@ -34,6 +34,9 @@ use super::quality::{SINV_LINFA_TOL, SINV_LOBPCG_QUALITY_THRESHOLD};
 pub(crate) const SINV_SHIFT: f64 = 1e-4;
 
 // ─── ndarray 0.16 ↔ 0.17 conversion helpers ──────────────────────────────────
+//
+// Each helper rebuilds an array from exactly `rows * cols` elements read off the source,
+// so the `from_shape_vec` calls cannot fail.
 
 fn to_nd16_array2(a: Array2<f64>) -> nd16::Array2<f64> {
     let (rows, cols) = (a.nrows(), a.ncols());
@@ -83,6 +86,8 @@ fn sprs_csc_to_faer(
         }
     }
 
+    // `col_ptr` and `row_idx` come straight from a valid sprs CSC matrix, so they
+    // satisfy the structure `new_checked` verifies.
     let symbolic =
         faer::sparse::SymbolicSparseColMat::<usize>::new_checked(n, n, col_ptr, None, row_idx);
     faer::sparse::SparseColMat::<usize, f64>::new(symbolic, values)
@@ -140,7 +145,7 @@ pub fn lobpcg_sinv_solve(
     let chol = m_faer.sp_cholesky(faer::Side::Lower).ok()?;
 
     // Build random initial block [n, k] with trivial eigenvector injected at col 0.
-    let mut rng = StdRng::seed_from_u64(seed);
+    let mut rng = ChaCha12Rng::seed_from_u64(seed);
     let mut x_init_17: Array2<f64> =
         Array2::from_shape_fn((n, k), |_| StandardNormal.sample(&mut rng));
     let sqrt_deg_norm = sqrt_deg.dot(sqrt_deg).sqrt();
@@ -198,7 +203,7 @@ pub fn lobpcg_sinv_solve(
             .enumerate()
             .map(|(i, v)| (v, i))
             .collect();
-        pairs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        pairs.sort_by(|a, b| a.0.total_cmp(&b.0));
 
         let sorted_vals = Array1::from_iter(pairs.iter().map(|&(v, _)| v));
         let sorted_vecs = Array2::from_shape_fn((eigvecs.nrows(), eigvecs.ncols()), |(i, j)| {

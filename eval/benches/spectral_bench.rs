@@ -52,12 +52,12 @@ fn make_ring_graph(n: usize, half: usize) -> sprs::CsMatI<f32, u32, usize> {
 /// to SpMV, dense EVD, LOBPCG, and rSVD benchmarks.
 fn make_laplacian(n: usize, half: usize) -> sprs::CsMatI<f64, usize> {
     let graph = make_ring_graph(n, half);
-    let (_deg, sqrt_deg) = compute_degrees(&graph, ComputeMode::PythonCompat);
+    let (_deg, sqrt_deg) = compute_degrees(graph.view(), ComputeMode::PythonCompat);
     let inv_sqrt_deg: Vec<f64> = sqrt_deg
         .iter()
         .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
         .collect();
-    build_normalized_laplacian(&graph, &inv_sqrt_deg)
+    build_normalized_laplacian(graph.view(), &inv_sqrt_deg)
 }
 
 // ─── Benchmark Groups ─────────────────────────────────────────────────────────
@@ -93,14 +93,14 @@ fn bench_spmv(c: &mut Criterion) {
 fn bench_dense_evd(c: &mut Criterion) {
     let lap = make_laplacian(200, 2);
     c.bench_function("dense_evd_200", |b| {
-        b.iter(|| black_box(dense_evd(black_box(&lap), black_box(3))))
+        b.iter(|| black_box(dense_evd(black_box(&lap), black_box(3), u64::MAX)))
     });
 }
 
 /// LOBPCG: iterative eigensolver for large n. Production Level 1.
 fn bench_lobpcg(c: &mut Criterion) {
     let graph = make_ring_graph(2000, 2);
-    let (_, sqrt_deg) = compute_degrees(&graph, ComputeMode::PythonCompat);
+    let (_, sqrt_deg) = compute_degrees(graph.view(), ComputeMode::PythonCompat);
     let lap = make_laplacian(2000, 2);
     let op = CsrOperator(&lap);
     c.bench_function("lobpcg_2000", |b| {
@@ -135,7 +135,7 @@ fn bench_rsvd(c: &mut Criterion) {
 /// Laplacian construction: degrees + D^{-1/2} W D^{-1/2} build.
 fn bench_laplacian_build(c: &mut Criterion) {
     let graph = make_ring_graph(2000, 2);
-    let (_deg, sqrt_deg) = compute_degrees(&graph, ComputeMode::PythonCompat);
+    let (_deg, sqrt_deg) = compute_degrees(graph.view(), ComputeMode::PythonCompat);
     let inv_sqrt_deg: Vec<f64> = sqrt_deg
         .iter()
         .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
@@ -143,7 +143,7 @@ fn bench_laplacian_build(c: &mut Criterion) {
     c.bench_function("laplacian_build_2000", |b| {
         b.iter(|| {
             black_box(build_normalized_laplacian(
-                black_box(&graph),
+                black_box(graph.view()),
                 black_box(&inv_sqrt_deg),
             ))
         })
@@ -154,7 +154,7 @@ fn bench_laplacian_build(c: &mut Criterion) {
 fn bench_components(c: &mut Criterion) {
     let graph = make_ring_graph(2000, 2);
     c.bench_function("components_bfs_2000", |b| {
-        b.iter(|| black_box(find_components(black_box(&graph))))
+        b.iter(|| black_box(find_components(black_box(graph.view()))))
     });
 }
 
@@ -168,11 +168,9 @@ fn bench_full_pipeline(c: &mut Criterion) {
             b.iter(|| {
                 black_box(
                     spectral_init(
-                        black_box(&graph),
-                        black_box(2),
-                        black_box(42_u64),
-                        black_box(None),
-                        SpectralInitConfig::default(),
+                        graph.view(),
+                        None,
+                        &SpectralInitConfig::new(2).with_seed(42_u64),
                     )
                     .expect("bench: spectral_init failed on synthetic ring graph"),
                 )

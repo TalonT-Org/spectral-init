@@ -53,7 +53,11 @@ fn export_all_rust_inits() {
         let n = graph.rows();
 
         let start = Instant::now();
-        match spectral_init(&graph, 2, 42, None, SpectralInitConfig::default()) {
+        match spectral_init(
+            graph.view(),
+            None,
+            &SpectralInitConfig::new(2).with_seed(42),
+        ) {
             Ok(coords) => {
                 let elapsed = start.elapsed();
                 let out_path = output_dir.join(format!("{name}_rust_init.npy"));

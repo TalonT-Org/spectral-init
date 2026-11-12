@@ -4,6 +4,7 @@ generate_fixtures.py — Fixture orchestrator for spectral-init tests.
 
 Usage:
     python tests/generate_fixtures.py [--output-dir DIR] [--datasets NAME ...] [--verify]
+    python tests/generate_fixtures.py [--output-dir DIR] --selfloop
 """
 from __future__ import annotations
 
@@ -595,6 +596,56 @@ def generate_all_for_dataset(
 
 
 # ---------------------------------------------------------------------------
+# Self-loop mini-fixture (not part of the DATASETS registry)
+# ---------------------------------------------------------------------------
+
+SELFLOOP_DIR = "selfloop"
+
+
+def make_selfloop_graph(n: int = 12, seed: int = 42) -> scipy.sparse.csr_matrix:
+    """
+    Build a small connected, symmetric f32 graph with non-zero diagonal weights.
+
+    A ring plus a few chords keeps the graph connected; every third node carries
+    a self-loop.
+    """
+    rng = RandomState(seed)
+    W = np.zeros((n, n), dtype=np.float32)
+    for i in range(n):
+        j = (i + 1) % n
+        W[i, j] = W[j, i] = np.float32(rng.uniform(0.2, 1.0))
+    for i in range(0, n, 4):
+        j = (i + 5) % n
+        W[i, j] = W[j, i] = np.float32(rng.uniform(0.2, 1.0))
+    for i in range(0, n, 3):
+        W[i, i] = np.float32(rng.uniform(0.1, 0.9))
+    return scipy.sparse.csr_matrix(W)
+
+
+def generate_selfloop_fixture(outdir: Path, n_components: int = 2) -> None:
+    """
+    Write the self-loop mini-fixture to `outdir`/selfloop.
+
+    Reference data for graphs with diagonal weights. umap-learn keeps self-loops
+    in both the degree and the adjacency, so L = I - D^{-1/2} A D^{-1/2} has
+    L[i,i] = 1 - w_ii / d_i.
+
+    Files (formats as for the registry datasets): graph.npz (scipy CSR, f32),
+    comp_a_degrees.npz, comp_b_laplacian.npz, comp_d_eigensolver.npz and
+    full_spectral.npz.
+    """
+    fixture_dir = outdir / SELFLOOP_DIR
+    fixture_dir.mkdir(parents=True, exist_ok=True)
+
+    graph = make_selfloop_graph()
+    scipy.sparse.save_npz(str(fixture_dir / "graph"), graph)
+    _, sqrt_deg = generate_comp_a_degrees(graph, fixture_dir)
+    L = generate_comp_b_laplacian(graph, sqrt_deg, fixture_dir)
+    generate_comp_d_eigensolver(L, n_components, fixture_dir)
+    generate_full_spectral(graph, None, 1, n_components, fixture_dir)
+
+
+# ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
 
@@ -632,10 +683,19 @@ def main() -> None:
             "'both' generates approx and exact fixture sets."
         ),
     )
+    parser.add_argument(
+        "--selfloop", action="store_true",
+        help="Generate only the self-loop mini-fixture (<output-dir>/selfloop) and exit",
+    )
     args = parser.parse_args()
 
     outdir = Path(args.output_dir)
     outdir.mkdir(parents=True, exist_ok=True)
+
+    if args.selfloop:
+        generate_selfloop_fixture(outdir, n_components=args.n_components)
+        print(f"self-loop fixture → {outdir / SELFLOOP_DIR}")
+        return
 
     selected = DATASETS
     if args.datasets:

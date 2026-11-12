@@ -9,7 +9,7 @@ fn run_comp_a_test(dataset: &str, expected_n: usize, mode: ComputeMode, tol: f64
     let graph = fixtures::load_sparse_csr_f32_u32(&base.join("step5a_pruned.npz"));
 
     // Call the function under test
-    let (degrees, sqrt_deg) = compute_degrees(&graph, mode);
+    let (degrees, sqrt_deg) = compute_degrees(graph.view(), mode);
 
     // Load Python reference
     let ref_path = base.join("comp_a_degrees.npz");

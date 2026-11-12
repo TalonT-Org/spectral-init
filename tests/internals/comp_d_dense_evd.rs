@@ -20,7 +20,7 @@ fn run_comp_d_test(dataset: &str, expected_n: usize) {
     let k = ref_eigenvalues.len();
 
     // Call dense_evd
-    let (eigenvalues, eigenvectors) = dense_evd(&laplacian, k).expect("dense_evd failed");
+    let (eigenvalues, eigenvectors) = dense_evd(&laplacian, k, u64::MAX).expect("dense_evd failed");
 
     // Eigenvalue accuracy check
     for i in 0..k {

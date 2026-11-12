@@ -3,8 +3,8 @@
 //! The chain tries progressively more robust (and expensive) solvers in order,
 //! accepting a result as soon as the max eigenpair residual
 //! `‖Lv − λv‖ / ‖v‖` falls below the level's quality threshold.
-//! Level 5 (forced dense EVD) is the nuclear option — it cannot fail mathematically
-//! and is always accepted regardless of residual.
+//! Level 5 (forced dense EVD) is the last resort: it runs for any `n` that fits the
+//! dense memory budget, and its result is held to the same residual gate as Level 0.
 //!
 //! ## Escalation Chain
 //!
@@ -15,14 +15,16 @@
 //! | 2 | Level 1 quality failed | Shift-invert LOBPCG (`sinv`) via faer Cholesky | 1e-6 |
 //! | 3 | Level 2 quality failed | LOBPCG (`lobpcg`) with ε·I regularization | 2e-5 |
 //! | 4 | Level 3 quality failed | Randomized SVD (`rsvd`) via 2I−L trick | 1e-2 |
-//! | 5 | Level 4 quality failed | Forced dense EVD — always accepted | — |
+//! | 5 | Level 4 quality failed | Forced dense EVD | 1e-6 |
 //!
-//! A level "fails" when its residual exceeds the threshold, not when it returns an
-//! error. Errors (e.g., Cholesky factorization failure in Level 2) also cause
-//! escalation, but are treated as silent fallbacks, not panics.
+//! A level "fails" when its residual exceeds the threshold, when it returns no result
+//! (e.g., Cholesky factorization failure in Level 2), or when the dense matrix it needs
+//! (Levels 0 and 4) would exceed the dense memory budget. Each of these escalates to the
+//! next level.
 //!
-//! The only panic in this module occurs if Level 5's forced dense EVD returns `Err`,
-//! which would indicate an OOM or a faer bug — both are unrecoverable.
+//! The chain never panics. It returns an error only from Level 5:
+//! `DenseBudgetExceeded` when the dense `n × n` matrix does not fit the budget, and
+//! `ConvergenceFailure` when the dense result is not finite or misses its residual gate.
 
 mod dense;
 pub(crate) mod lobpcg;
@@ -33,7 +35,7 @@ pub(crate) mod sinv;
 pub use dense::dense_evd;
 
 use crate::SpectralError;
-use crate::config::ComputeMode;
+use crate::config::{ComputeMode, SpectralInitConfig};
 use crate::operator::CsrOperator;
 use ndarray::{Array1, Array2};
 use quality::{
@@ -85,7 +87,7 @@ impl SolverLevel {
 /// max eigenpair residual is strictly below the level's gate.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct QualityGates {
-    /// Gate for Level 0 (dense EVD).
+    /// Gate for Levels 0 and 5 (dense EVD).
     pub dense: f64,
     /// Gate for Levels 1 and 3 (LOBPCG, plain and regularized).
     pub lobpcg: f64,
@@ -117,6 +119,8 @@ pub struct SolverParams {
     pub rsvd_nbiter: usize,
     /// Per-level residual acceptance thresholds.
     pub gates: QualityGates,
+    /// Largest dense matrix, in bytes, a solver may allocate.
+    pub dense_memory_budget: u64,
 }
 
 impl Default for SolverParams {
@@ -126,8 +130,44 @@ impl Default for SolverParams {
             rsvd_oversampling: None,
             rsvd_nbiter: rsvd::DEFAULT_NBITER,
             gates: QualityGates::default(),
+            dense_memory_budget: SpectralInitConfig::DEFAULT_DENSE_MEMORY_BUDGET,
         }
     }
+}
+
+impl SolverParams {
+    /// The parameters `spectral_init` runs the chain with for `config`.
+    pub fn from_config(config: &SpectralInitConfig) -> Self {
+        Self {
+            dense_memory_budget: config.dense_memory_budget(),
+            ..Self::default()
+        }
+    }
+}
+
+/// Bytes a dense `rows × cols` f64 matrix occupies, saturating at `u64::MAX`.
+pub(crate) fn dense_bytes(rows: usize, cols: usize) -> u64 {
+    (rows as u64)
+        .checked_mul(cols as u64)
+        .and_then(|cells| cells.checked_mul(8))
+        .unwrap_or(u64::MAX)
+}
+
+/// Errors with `DenseBudgetExceeded` unless a dense `rows × cols` f64 matrix fits in
+/// `budget_bytes`.
+pub(crate) fn check_dense_budget(
+    rows: usize,
+    cols: usize,
+    budget_bytes: u64,
+) -> Result<(), SpectralError> {
+    let required_bytes = dense_bytes(rows, cols);
+    if required_bytes > budget_bytes {
+        return Err(SpectralError::DenseBudgetExceeded {
+            required_bytes,
+            budget_bytes,
+        });
+    }
+    Ok(())
 }
 
 /// What the escalation chain did to produce a result.
@@ -198,12 +238,11 @@ fn accepted(
 /// Level 2: Shift-and-invert LOBPCG via sparse Cholesky.
 /// Level 3: LOBPCG with ε·I regularization.
 /// Level 4: Randomized SVD via 2I-L trick.
-/// Level 5: Forced dense EVD (nuclear option, cannot fail).
+/// Level 5: Forced dense EVD.
 ///
-/// # Panics
+/// # Errors
 ///
-/// Panics at Level 5 exhaustion — this represents a bug, not a user error.
-/// The spectral theorem guarantees eigenvectors exist for any symmetric PSD matrix.
+/// Only Level 5 produces errors; see the module documentation.
 fn solve_eigenproblem_with_op<O: crate::operator::LinearOperator>(
     laplacian: &CsMatI<f64, usize>,
     op: O,
@@ -219,7 +258,7 @@ fn solve_eigenproblem_with_op<O: crate::operator::LinearOperator>(
     // Level 0: Dense EVD — exact, used for small n where O(n³) is acceptable.
     if n < params.dense_n_threshold {
         let started = Instant::now();
-        let l0_result = dense_evd(laplacian, n_components + 1);
+        let l0_result = dense_evd(laplacian, n_components + 1, params.dense_memory_budget);
         level_elapsed[SolverLevel::DenseEvd as usize] = Some(started.elapsed());
         match l0_result {
             Ok((eigs, vecs)) => {
@@ -239,6 +278,9 @@ fn solve_eigenproblem_with_op<O: crate::operator::LinearOperator>(
                     "[spectral] Level 0 (dense EVD) poor quality \
                      (max_residual={quality:.2e}), escalating to Level 1"
                 );
+            }
+            Err(e @ SpectralError::DenseBudgetExceeded { .. }) => {
+                log::debug!("[spectral] Level 0 (dense EVD) skipped ({e}), escalating to Level 1");
             }
             Err(e) => {
                 log::warn!("[spectral] Level 0 (dense EVD) failed ({e}), escalating to Level 1");
@@ -321,48 +363,54 @@ fn solve_eigenproblem_with_op<O: crate::operator::LinearOperator>(
         );
     }
 
-    // Level 4: Randomized SVD via 2I-L trick.
-    // rsvd_solve is infallible; gate on output quality via residual check.
-    {
-        let started = Instant::now();
-        let (eigs, vecs) = rsvd::rsvd_solve(laplacian, n_components, seed, params);
-        level_elapsed[SolverLevel::Rsvd as usize] = Some(started.elapsed());
-        let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
-        if quality < gates.rsvd {
-            log::debug!("[spectral] Level 4 (rSVD) succeeded (n={n}, max_residual={quality:.2e})");
-            return Ok(accepted(
-                (eigs, vecs),
-                SolverLevel::Rsvd,
-                quality,
-                level_elapsed,
-            ));
+    // Level 4: Randomized SVD via 2I-L trick. Produces no result when its dense sketch
+    // would exceed the dense memory budget.
+    let started = Instant::now();
+    let l4 = rsvd::rsvd_solve(laplacian, n_components, seed, params);
+    level_elapsed[SolverLevel::Rsvd as usize] = Some(started.elapsed());
+    match l4 {
+        Some((eigs, vecs)) => {
+            let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
+            if quality < gates.rsvd {
+                log::debug!(
+                    "[spectral] Level 4 (rSVD) succeeded (n={n}, max_residual={quality:.2e})"
+                );
+                return Ok(accepted(
+                    (eigs, vecs),
+                    SolverLevel::Rsvd,
+                    quality,
+                    level_elapsed,
+                ));
+            }
+            log::debug!(
+                "[spectral] Level 4 (rSVD) poor quality (max_residual={quality:.2e}), \
+                 escalating to Level 5"
+            );
         }
-        log::debug!(
-            "[spectral] Level 4 (rSVD) poor quality (max_residual={quality:.2e}), \
-             escalating to Level 5"
-        );
+        None => {
+            log::debug!("[spectral] Level 4 (rSVD) produced no result, escalating to Level 5");
+        }
     }
 
-    // Level 5: Forced dense EVD — O(n³) nuclear option.
-    // This level CANNOT fail mathematically (spectral theorem).
-    // If it returns Err, that indicates an OOM or a faer bug — both are
-    // unrecoverable and should surface as an assertion failure, not a silent
-    // ConvergenceFailure that would produce a garbage embedding.
+    // Level 5: Forced dense EVD — O(n³) last resort. Over budget it reports
+    // DenseBudgetExceeded; a result that is not finite or misses the dense gate is a
+    // ConvergenceFailure rather than a silently wrong embedding.
     log::debug!("[spectral] Level 5 (forced dense EVD) (n={n})");
     let started = Instant::now();
-    let (eigs, vecs) = dense_evd(laplacian, n_components + 1).expect(
-        "solve_eigenproblem: Level 5 forced dense EVD failed — \
-         this is a bug; the spectral theorem guarantees eigenvectors \
-         exist for any symmetric positive semidefinite matrix",
-    );
+    let (eigs, vecs) = dense_evd(laplacian, n_components + 1, params.dense_memory_budget)?;
     level_elapsed[SolverLevel::ForcedDense as usize] = Some(started.elapsed());
     let quality = max_eigenpair_residual(laplacian, &eigs, &vecs);
-    Ok(accepted(
-        (eigs, vecs),
-        SolverLevel::ForcedDense,
-        quality,
-        level_elapsed,
-    ))
+    let finite = eigs.iter().all(|v| v.is_finite()) && vecs.iter().all(|v| v.is_finite());
+    if finite && quality < gates.dense {
+        return Ok(accepted(
+            (eigs, vecs),
+            SolverLevel::ForcedDense,
+            quality,
+            level_elapsed,
+        ));
+    }
+    log::debug!("[spectral] Level 5 (forced dense EVD) rejected (max_residual={quality:.2e})");
+    Err(SpectralError::ConvergenceFailure { n })
 }
 
 /// Solver escalation chain with runtime operator dispatch.
@@ -373,9 +421,13 @@ fn solve_eigenproblem_with_op<O: crate::operator::LinearOperator>(
 ///
 /// Returns the `n_components + 1` smallest eigenpairs together with a [`SolveReport`].
 ///
-/// # Panics
+/// # Errors
 ///
-/// Panics at Level 5 exhaustion — this represents a bug, not a user error.
+/// - `DenseBudgetExceeded` — every earlier level failed and the dense `n × n` matrix of
+///   the forced dense EVD does not fit `params.dense_memory_budget`.
+/// - `ConvergenceFailure` — the forced dense EVD produced a result that is not finite or
+///   misses its residual gate.
+/// - `TooFewNodes` — the problem has fewer than `n_components + 1` rows.
 pub fn solve_eigenproblem(
     laplacian: &CsMatI<f64, usize>,
     n_components: usize,
@@ -652,6 +704,44 @@ mod tests {
         assert_eq!(params.gates.lobpcg, LOBPCG_QUALITY_THRESHOLD);
         assert_eq!(params.gates.sinv, SINV_LOBPCG_QUALITY_THRESHOLD);
         assert_eq!(params.gates.rsvd, RSVD_QUALITY_THRESHOLD);
+        assert_eq!(
+            params.dense_memory_budget,
+            SpectralInitConfig::DEFAULT_DENSE_MEMORY_BUDGET
+        );
+    }
+
+    #[test]
+    fn from_config_carries_the_dense_memory_budget() {
+        let config = SpectralInitConfig::new(2).with_dense_memory_budget(12_345);
+        let params = SolverParams::from_config(&config);
+        assert_eq!(params.dense_memory_budget, 12_345);
+        assert_eq!(
+            SolverParams {
+                dense_memory_budget: SpectralInitConfig::DEFAULT_DENSE_MEMORY_BUDGET,
+                ..params
+            },
+            SolverParams::default()
+        );
+    }
+
+    #[test]
+    fn dense_bytes_saturates_instead_of_overflowing() {
+        assert_eq!(dense_bytes(3, 5), 120);
+        assert_eq!(dense_bytes(0, 5), 0);
+        assert_eq!(dense_bytes(usize::MAX, usize::MAX), u64::MAX);
+        assert_eq!(dense_bytes(usize::MAX, 1), u64::MAX);
+    }
+
+    #[test]
+    fn check_dense_budget_reports_both_sizes() {
+        assert_eq!(check_dense_budget(10, 10, 800), Ok(()));
+        assert_eq!(
+            check_dense_budget(10, 10, 799),
+            Err(SpectralError::DenseBudgetExceeded {
+                required_bytes: 800,
+                budget_bytes: 799
+            })
+        );
     }
 
     #[test]

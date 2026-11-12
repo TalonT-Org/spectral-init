@@ -16,7 +16,7 @@ body:
       label: Steps to Reproduce
       placeholder: |
         1. Build graph with N nodes, K neighbors
-        2. Call spectral_init(graph, 2, config)
+        2. Call spectral_init(graph.view(), None, &SpectralInitConfig::new(2))
         3. Observe ...
     validations:
       required: true

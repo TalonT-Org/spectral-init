@@ -190,6 +190,17 @@ Sparse `.npz` files (scipy format): these are not directly loadable by standard 
 readers; for Rust tests, prefer loading the dense intermediate steps (comp_a through
 comp_f) which are all standard numpy `.npz` archives.
 
+### Self-loop mini-fixture
+
+`tests/fixtures/selfloop/` holds reference data for a 12-node graph with non-zero
+diagonal weights (`graph.npz`, `comp_a_degrees.npz`, `comp_b_laplacian.npz`,
+`comp_d_eigensolver.npz`, `full_spectral.npz`, in the formats above). It is not part of
+the dataset registry; regenerate it with:
+
+```bash
+python tests/generate_fixtures.py --selfloop
+```
+
 ---
 
 ## Datasets

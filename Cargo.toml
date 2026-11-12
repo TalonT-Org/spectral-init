@@ -27,6 +27,7 @@ sprs = "0.11"
 ndarray = "0.17"
 faer = "0.24"
 rand = "0.9"
+rand_chacha = "0.9"       # the named generator behind the reproducibility contract
 rand_distr = "0.5"
 thiserror = "2"
 linfa-linalg = "0.2"        # pure-Rust LOBPCG; no LAPACK backend required

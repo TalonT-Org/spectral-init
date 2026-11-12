@@ -121,7 +121,7 @@ proptest! {
     #[test]
     fn proptest_finite_output(n in 50usize..=200) {
         let graph = fixtures::make_ring(n as u32);
-        let coords = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
+        let coords = spectral_init(graph.view(), None, &SpectralInitConfig::new(2).with_seed(42))
             .expect("spectral_init failed");
         for &v in coords.iter() {
             prop_assert!(v.is_finite(), "non-finite value {} in output, n={}", v, n);
@@ -131,7 +131,7 @@ proptest! {
     #[test]
     fn proptest_output_variance(n in 50usize..=200) {
         let graph = fixtures::make_ring(n as u32);
-        let coords = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
+        let coords = spectral_init(graph.view(), None, &SpectralInitConfig::new(2).with_seed(42))
             .expect("spectral_init failed");
         for col_idx in 0..coords.ncols() {
             let col = coords.column(col_idx);
@@ -148,9 +148,9 @@ proptest! {
     #[test]
     fn proptest_subspace_stable(n in 50usize..=200) {
         let graph = fixtures::make_ring(n as u32);
-        let out1 = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
+        let out1 = spectral_init(graph.view(), None, &SpectralInitConfig::new(2).with_seed(42))
             .expect("spectral_init run 1 failed");
-        let out2 = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
+        let out2 = spectral_init(graph.view(), None, &SpectralInitConfig::new(2).with_seed(42))
             .expect("spectral_init run 2 failed");
         prop_assert!(
             out1 == out2,

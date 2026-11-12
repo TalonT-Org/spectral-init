@@ -67,9 +67,11 @@ fn run_solver(
                 rsvd_nbiter: nbiter,
                 ..SolverParams::default()
             };
-            rsvd_solve(lap, nc, SEED, &params)
+            rsvd_solve(lap, nc, SEED, &params).expect("rsvd_solve failed")
         }
-        "direct_l" => rsvd_solve_accurate(lap, nc, SEED, k_sub, nbiter),
+        "direct_l" => {
+            rsvd_solve_accurate(lap, nc, SEED, k_sub, nbiter).expect("rsvd_solve_accurate failed")
+        }
         _ => panic!("unknown method: {method}"),
     }
 }
@@ -134,7 +136,8 @@ fn direction_c_subspace() {
     for (fixture, (lap, n, nc)) in &fixture_data {
         // Reference: high-accuracy solve at nbiter=10, p=100.
         let k_sub_ref = (nc + 1 + 100).min(*n);
-        let (_, ref_vecs) = rsvd_solve_accurate(lap, *nc, SEED, k_sub_ref, 10);
+        let (_, ref_vecs) =
+            rsvd_solve_accurate(lap, *nc, SEED, k_sub_ref, 10).expect("rsvd_solve_accurate failed");
         let ref_nt_vecs = ref_vecs.slice(s![.., 1..]).to_owned();
         let ref_f32: ndarray::Array2<f32> = ref_nt_vecs.mapv(|x| x as f32);
 

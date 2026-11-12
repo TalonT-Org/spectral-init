@@ -37,7 +37,8 @@ fn accurate_sweep() {
         for &p in P_VALUES_ACCURATE {
             let k_sub = N_COMPONENTS + 1 + p; // rank=3, so k_sub = 3 + p
             let t0 = std::time::Instant::now();
-            let (eigs, vecs) = rsvd_solve_accurate(&laplacian, N_COMPONENTS, SEED, k_sub, 6);
+            let (eigs, vecs) = rsvd_solve_accurate(&laplacian, N_COMPONENTS, SEED, k_sub, 6)
+                .expect("rsvd_solve_accurate failed");
             let wall_time = t0.elapsed().as_secs_f64();
 
             // max residual over non-trivial pairs (indices 1..=n_components)
@@ -80,7 +81,8 @@ fn production_sweep() {
         };
 
         let t0 = std::time::Instant::now();
-        let (eigs, vecs) = rsvd_solve(&laplacian, N_COMPONENTS, SEED, &params);
+        let (eigs, vecs) =
+            rsvd_solve(&laplacian, N_COMPONENTS, SEED, &params).expect("rsvd_solve failed");
         let wall_time = t0.elapsed().as_secs_f64();
 
         let max_res = (1..=N_COMPONENTS)
