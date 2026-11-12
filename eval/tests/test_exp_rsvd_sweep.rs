@@ -52,9 +52,12 @@ fn accurate_sweep() {
 #[test]
 fn production_sweep() {
     // The outer shell scripts choose the oversampling count through the environment.
-    let env_p: Option<usize> = std::env::var("SPECTRAL_RSVD_OVERSAMPLING")
-        .ok()
-        .and_then(|s| s.parse::<usize>().ok());
+    // A malformed value fails here instead of silently sweeping the default.
+    let env_p: Option<usize> = std::env::var("SPECTRAL_RSVD_OVERSAMPLING").ok().map(|raw| {
+        raw.parse::<usize>().unwrap_or_else(|e| {
+            panic!("SPECTRAL_RSVD_OVERSAMPLING={raw:?} is not a non-negative integer: {e}")
+        })
+    });
     let params = SolverParams {
         rsvd_oversampling: env_p,
         ..SolverParams::default()
