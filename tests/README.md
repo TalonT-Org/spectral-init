@@ -185,17 +185,6 @@ let degrees: ndarray::Array1<f64> = fixtures::load_dense(
 );
 ```
 
-### Self-loop mini-fixture
-
-`tests/fixtures/selfloop/` holds reference data for a 12-node graph with non-zero
-diagonal weights (`graph.npz`, `comp_a_degrees.npz`, `comp_b_laplacian.npz`,
-`comp_d_eigensolver.npz`, `full_spectral.npz`, in the formats above). It is not part of
-the dataset registry; regenerate it with:
-
-```bash
-python tests/generate_fixtures.py --selfloop
-```
-
 ---
 
 ## Datasets
@@ -211,3 +200,16 @@ python tests/generate_fixtures.py --selfloop
 | `disconnected_200` | (200, 2) | 4 isolated clusters | Tests multi-component graph handling |
 | `blobs_connected_200` | (200, 2) | Gaussian blobs | Connected graph; tests the dense eigensolver |
 | `blobs_connected_2000` | (2000, 10) | Gaussian blobs | Connected graph; tests the iterative eigensolvers |
+
+---
+
+## Self-loop Mini-Fixture
+
+`tests/fixtures/selfloop/` holds reference data for a 12-node graph with non-zero
+diagonal weights (`graph.npz`, `comp_a_degrees.npz`, `comp_b_laplacian.npz`,
+`comp_d_eigensolver.npz`, `full_spectral.npz`, in the formats above). It is not part of
+the dataset registry; regenerate it with:
+
+```bash
+python tests/generate_fixtures.py --selfloop
+```
