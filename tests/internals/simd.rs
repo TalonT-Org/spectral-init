@@ -81,11 +81,12 @@ fn rust_native_and_python_compat_solver_outputs_agree() {
             .map(|(a, b)| (a - b).abs())
             .fold(0.0f32, f32::max);
 
-        // 4 * f32::EPSILON ≈ 4.77e-7; allows one rounding-budget above zero for
-        // any residual scalar/SIMD divergence that survives normalize_signs.
+        // Coordinates are scaled to max |x| = 10, where one f32 ULP is 2^-20 ≈ 9.54e-7.
+        // 1e-6 allows a single-ULP rounding difference that survives normalize_signs,
+        // but not a sign flip (a difference of up to ~20).
         assert!(
-            f32_max_abs_diff <= 4.77e-7,
-            "fixture {fixture}: max_abs_diff={f32_max_abs_diff:.3e} > 4.77e-7 after normalize_signs — \
+            f32_max_abs_diff <= 1.0e-6,
+            "fixture {fixture}: max_abs_diff={f32_max_abs_diff:.3e} > 1e-6 after normalize_signs — \
              sign flip not resolved; SIMD kernel must be gated behind ComputeMode::RustNative"
         );
     }
