@@ -19,13 +19,16 @@ use std::path::{Path, PathBuf};
 /// visual-evaluation data live under it.
 pub const WORKSPACE_ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
 
-/// Directory the harness writes its results to: `$RESULTS_DIR` when that variable is
-/// set, otherwise `temp/eval/` under the workspace root.
+/// Directory the harness writes its results to, created if absent: `$RESULTS_DIR` when
+/// that variable is set, otherwise `temp/eval/` under the workspace root.
 pub fn results_dir() -> PathBuf {
-    match std::env::var_os("RESULTS_DIR") {
+    let dir = match std::env::var_os("RESULTS_DIR") {
         Some(dir) => PathBuf::from(dir),
         None => Path::new(WORKSPACE_ROOT).join("temp").join("eval"),
-    }
+    };
+    std::fs::create_dir_all(&dir)
+        .unwrap_or_else(|e| panic!("cannot create the results directory {dir:?}: {e}"));
+    dir
 }
 
 /// One measured quantity with the threshold it was judged against.

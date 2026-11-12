@@ -40,7 +40,6 @@ fn test_spmv_divergence() {
     }
 
     let results_dir = results_dir();
-    std::fs::create_dir_all(&results_dir).expect("cannot create RESULTS_DIR");
 
     let mut records: Vec<serde_json::Value> = Vec::new();
 
@@ -122,7 +121,6 @@ fn test_solver_divergence() {
     }
 
     let results_dir = results_dir();
-    std::fs::create_dir_all(&results_dir).expect("cannot create RESULTS_DIR");
     std::fs::create_dir_all(results_dir.join("eigenvectors")).expect("cannot create eigenvectors/");
 
     let mut records: Vec<serde_json::Value> = Vec::new();
@@ -220,7 +218,6 @@ fn test_solver_divergence() {
 #[test]
 fn test_spectral_gaps() {
     let results_dir = results_dir();
-    std::fs::create_dir_all(&results_dir).expect("cannot create RESULTS_DIR");
 
     let mut records: Vec<serde_json::Value> = Vec::new();
 

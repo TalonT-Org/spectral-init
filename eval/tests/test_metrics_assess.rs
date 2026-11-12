@@ -291,7 +291,6 @@ fn assess_accuracy() {
         datasets: all_reports,
     };
     let dir = results_dir();
-    std::fs::create_dir_all(&dir).expect("cannot create RESULTS_DIR");
     let json_str = accuracy_to_json(&experiment, &solver_levels);
     let md_str = accuracy_to_markdown(&experiment, &solver_levels);
     std::fs::write(dir.join("accuracy_metrics.json"), &json_str).expect("write accuracy json");
@@ -391,7 +390,6 @@ fn assess_parity() {
         datasets: all_reports,
     };
     let dir = results_dir();
-    std::fs::create_dir_all(&dir).expect("cannot create RESULTS_DIR");
     let json_str = parity_to_json(&experiment, &solver_levels);
     let md_str = parity_to_markdown(&experiment, &solver_levels);
     std::fs::write(dir.join("parity_metrics.json"), &json_str).expect("write parity json");

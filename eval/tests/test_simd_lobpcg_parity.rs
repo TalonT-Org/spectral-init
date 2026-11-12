@@ -6,6 +6,7 @@ use spectral_init_eval::diagnostics::{
 };
 use spectral_init_eval::fixtures::epsilon_bridge_laplacian;
 use spectral_init_eval::internals::solve_with_unit_hint;
+use spectral_init_eval::results_dir;
 use sprs::CsMatI;
 
 const SUBSPACE_ANGLE_SENSITIVITY_RAD: f64 = 1e-6;
@@ -21,12 +22,6 @@ fn cluster_size() -> usize {
         .ok()
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or(1000)
-}
-
-fn results_dir() -> std::path::PathBuf {
-    let p = spectral_init_eval::results_dir();
-    std::fs::create_dir_all(&p).expect("results dir");
-    p
 }
 
 fn dk_bound_predicted(gap: f64, n_iterations: u32, avg_nnz_per_row: usize) -> f64 {
