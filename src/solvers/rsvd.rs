@@ -8,15 +8,18 @@
 //! **Chain position:** Level 4 — approximate but highly robust fallback for large `n`
 //! after Levels 1–3 fail. Quality threshold: 1e-2 (looser than other levels).
 //!
-//! **Failure mode:** `rsvd_solve` is infallible (returns directly). The looser
-//! residual threshold (1e-2) means Level 4 rarely fails its quality gate. If it does,
-//! Level 5 (forced dense EVD) is the final fallback.
+//! **Failure mode:** `rsvd_solve` returns `None` when its dense `n × k` sketch would
+//! exceed the dense memory budget, when the problem is too small for the requested
+//! number of components, or when the small projected eigenproblem fails. The looser
+//! residual threshold (1e-2) means Level 4 rarely fails its quality gate. In every
+//! failing case Level 5 (forced dense EVD) is the final fallback.
 
-use super::EigenResult;
+use super::{EigenResult, SolverParams, check_dense_budget};
 use faer::linalg::solvers::{Qr, SelfAdjointEigen};
 use faer::{Mat as FaerMat, Side};
 use ndarray::{Array1, Array2};
 use rand::SeedableRng;
+use rand_chacha::ChaCha12Rng;
 use rand_distr::{Distribution, StandardNormal};
 use sprs::{CsMatI, TriMat};
 
@@ -80,116 +83,98 @@ fn qr_thin_q(y: &Array2<f64>) -> Array2<f64> {
 /// Compute symmetric eigendecomposition of the small matrix B using `faer`.
 ///
 /// Returns `(eigenvalues, eigenvectors)` where eigenvalues are in ASCENDING order
-/// and eigenvectors are columns of the returned Array2.
-fn sym_eig(b: &Array2<f64>) -> (Vec<f64>, Array2<f64>) {
+/// and eigenvectors are columns of the returned Array2, or `None` if the
+/// decomposition fails.
+fn sym_eig(b: &Array2<f64>) -> Option<(Vec<f64>, Array2<f64>)> {
     let faer_b = to_faer(b);
     let eigen = SelfAdjointEigen::new(faer_b.as_ref(), Side::Lower)
-        .expect("rsvd_solve: SelfAdjointEigen failed on B = Q^T M Q");
+        .inspect_err(|e| log::warn!("rsvd: faer self_adjoint_eigen failed: {e:?}"))
+        .ok()?;
     // Eigenvalues in ASCENDING order (smallest first).
     // Use for_each since ColRef may have non-contiguous stride (no as_slice guarantee).
     let mut eigenvalues: Vec<f64> = Vec::new();
     eigen.S().for_each(|x| eigenvalues.push(*x));
     let eigenvectors = from_faer(&eigen.U().to_owned());
-    (eigenvalues, eigenvectors)
+    Some((eigenvalues, eigenvectors))
 }
+
+/// Orthonormal basis `Q` [n, k] for the dominant range of the symmetric matrix `m`.
+///
+/// Draws a seeded Gaussian sketch Ω ∈ ℝ^{n × k}, runs `nbiter` QR-stabilized power
+/// iterations (Halko-Tropp Algorithm 4.4), and returns the thin Q factor of the final
+/// sketch M Ω.
+fn power_iteration_basis(
+    m: &CsMatI<f64, usize>,
+    k: usize,
+    seed: u64,
+    nbiter: usize,
+) -> Array2<f64> {
+    let mut rng = ChaCha12Rng::seed_from_u64(seed);
+    let normal = StandardNormal;
+    let mut omega: Array2<f64> = Array2::from_shape_fn((m.rows(), k), |_| normal.sample(&mut rng));
+
+    // Each iteration squares the effective singular value decay of M,
+    // improving accuracy for clustered eigenvalues.
+    for _ in 0..nbiter {
+        let y = sparse_dense_mult(m, &omega); // Y = M Ω [n, k]
+        omega = qr_thin_q(&y); // Ω ← QR(Y).Q [n, k]
+        let z = sparse_dense_mult(m, &omega); // Z = M Ω [n, k]
+        omega = qr_thin_q(&z); // Ω ← QR(Z).Q [n, k]
+    }
+
+    let y = sparse_dense_mult(m, &omega); // Y = M Ω [n, k]
+    qr_thin_q(&y) // Q = QR(Y).Q [n, k]
+}
+
+/// Default number of QR-stabilized power-iteration passes.
+pub(crate) const DEFAULT_NBITER: usize = 2;
 
 /// Returns the subspace size k for randomized SVD.
 ///
-/// Oversampling scales with n/10 so large graphs get a subspace large enough to
-/// produce residuals below `RSVD_QUALITY_THRESHOLD`, avoiding fallthrough to the
-/// O(n³) Level 5 dense EVD.
-fn rsvd_k_sub(n: usize, rank: usize) -> usize {
-    let oversampling = (n / 10).max(rank.max(5)).min(n.saturating_sub(rank));
-    (rank + oversampling).min(n)
+/// With `oversampling = None` the oversampling scales with n/10 so large graphs get a
+/// subspace large enough to produce residuals below `RSVD_QUALITY_THRESHOLD`, avoiding
+/// fallthrough to the O(n³) Level 5 dense EVD. An explicit oversampling count is used
+/// as given. The result never exceeds `n`.
+fn rsvd_k_sub(n: usize, rank: usize, oversampling: Option<usize>) -> usize {
+    let oversampling = oversampling.unwrap_or_else(|| (n / 10).max(rank.max(5)));
+    rank.saturating_add(oversampling).min(n)
 }
 
-/// Returns the effective subspace size k for randomized SVD.
-///
-/// In test builds (`--features testing`), reads the `SPECTRAL_RSVD_OVERSAMPLING`
-/// environment variable as the oversampling count, falling back to `rsvd_k_sub`
-/// on absence or parse error. In release builds the function is a trivial delegate
-/// that the compiler inlines away entirely.
-#[cfg(feature = "testing")]
-fn rsvd_k_sub_effective(n: usize, rank: usize) -> usize {
-    std::env::var("SPECTRAL_RSVD_OVERSAMPLING")
-        .ok()
-        .and_then(|s| s.parse::<usize>().ok())
-        .map(|oversampling| (rank + oversampling).min(n))
-        .unwrap_or_else(|| rsvd_k_sub(n, rank))
-}
-
-#[cfg(not(feature = "testing"))]
-fn rsvd_k_sub_effective(n: usize, rank: usize) -> usize {
-    rsvd_k_sub(n, rank)
-}
-
-/// Returns the effective number of power-iteration passes for randomized SVD.
-///
-/// In test builds (`--features testing`), reads the `SPECTRAL_RSVD_NBITER`
-/// environment variable as the iteration count, falling back to `2` on absence
-/// or parse error. In release builds the function always returns `2` and the
-/// compiler inlines it away entirely.
-#[cfg(feature = "testing")]
-fn rsvd_nbiter_effective() -> usize {
-    std::env::var("SPECTRAL_RSVD_NBITER")
-        .ok()
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or(2)
-}
-
-#[cfg(not(feature = "testing"))]
-fn rsvd_nbiter_effective() -> usize {
-    2
-}
-
-/// Randomized SVD eigensolver via the 2I − L trick (Level 3).
+/// Randomized SVD eigensolver via the 2I − L trick (Level 4).
 ///
 /// Implements Algorithm 5.1 (Halko-Tropp) with power iteration:
 /// - Forms M = 2I − L (eigenvalues of M = 2 − eigenvalues of L)
 /// - Computes the top-(n_components+1) eigenvalues/vectors of M via randomized SVD
 /// - Discards the trivial eigenvector (column 0, corresponding to λ_L ≈ 0)
 /// - Maps eigenvalues back to L eigenvalues via λ_L = 2 − σ_M
-pub(crate) fn rsvd_solve(
+///
+/// Returns `None` when `n_components` is 0 or not below `n`, when the dense `n × k`
+/// sketch needs more than `params.dense_memory_budget` bytes, or when the projected
+/// eigenproblem fails.
+pub fn rsvd_solve(
     laplacian: &CsMatI<f64, usize>,
     n_components: usize,
     seed: u64,
-) -> EigenResult {
+    params: &SolverParams,
+) -> Option<EigenResult> {
     let n = laplacian.rows();
-    assert!(
-        n_components > 0,
-        "rsvd_solve: n_components must be >= 1, got 0"
-    );
-    assert!(
-        n_components < n,
-        "rsvd_solve: n_components ({n_components}) must be < n ({n})"
-    );
+    if n_components == 0 || n_components >= n {
+        log::debug!("[spectral] rSVD skipped: n_components={n_components} is not in 1..{n}");
+        return None;
+    }
     // rank = n_components + 1: request one extra so we can discard the trivial vector
     let rank = n_components + 1;
     // k = total random vectors; see rsvd_k_sub for the oversampling formula.
-    let k = rsvd_k_sub_effective(n, rank);
-    let nbiter = rsvd_nbiter_effective(); // QR-stabilized subspace iterations (Halko-Tropp Algorithm 4.4)
-
+    let k = rsvd_k_sub(n, rank, params.rsvd_oversampling);
+    if let Err(e) = check_dense_budget(n, k, params.dense_memory_budget) {
+        log::debug!("[spectral] rSVD sketch skipped ({e})");
+        return None;
+    }
     // ── Step A: Form M = 2I - L ──────────────────────────────────────────────
     let m = two_i_minus_laplacian(laplacian);
 
-    // ── Step B: Generate random Gaussian sketch matrix Ω ∈ ℝ^{n × k} ────────
-    let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
-    let normal = StandardNormal;
-    let mut omega = Array2::from_shape_fn((n, k), |_| normal.sample(&mut rng));
-
-    // ── Step C: Power iteration (Algorithm 4.4) to amplify signal ────────────
-    // Each iteration squares the effective singular value decay of M,
-    // improving accuracy for clustered eigenvalues.
-    for _ in 0..nbiter {
-        let y = sparse_dense_mult(&m, &omega); // Y = M Ω [n, k]
-        omega = qr_thin_q(&y); // Ω ← QR(Y).Q [n, k]
-        let z = sparse_dense_mult(&m, &omega); // Z = M Ω [n, k]
-        omega = qr_thin_q(&z); // Ω ← QR(Z).Q [n, k]
-    }
-
-    // ── Step D: Final sketch and orthonormal basis ────────────────────────────
-    let y = sparse_dense_mult(&m, &omega); // Y = M Ω [n, k]
-    let q = qr_thin_q(&y); // Q = QR(Y).Q [n, k]
+    // ── Steps B–D: Gaussian sketch, power iteration, orthonormal basis ───────
+    let q = power_iteration_basis(&m, k, seed, params.rsvd_nbiter); // [n, k]
 
     // ── Step E: Form small projected matrix B = Q^T M Q ──────────────────────
     let mq = sparse_dense_mult(&m, &q); // M Q [n, k]
@@ -197,7 +182,7 @@ pub(crate) fn rsvd_solve(
 
     // ── Step F: Eigendecompose B (small k×k symmetric matrix) ─────────────────
     // eigenvalues ascending (smallest M eigenvalue first = largest L eigenvalue)
-    let (m_eigenvals, u_b) = sym_eig(&b); // m_eigenvals[k-1] ≈ 2 (trivial)
+    let (m_eigenvals, u_b) = sym_eig(&b)?; // m_eigenvals[k-1] ≈ 2 (trivial)
 
     // ── Step G: Recover full eigenvectors V = Q U_B ───────────────────────────
     let v = q.dot(&u_b); // [n, k]
@@ -206,7 +191,8 @@ pub(crate) fn rsvd_solve(
     //
     // M eigenvalues (ascending): index actual_n-1 is the trivial (λ_M ≈ 2.0 → λ_L ≈ 0).
     // Non-trivial L eigenvalues (ascending): indices actual_n-2, actual_n-3, ...,
-    //   actual_n-1-n_components in the M ascending array.
+    //   actual_n-1-n_components in the M ascending array. `k >= rank` (because
+    // `rank <= n`), so all of these indices exist.
     let actual_n = m_eigenvals.len();
     let trivial_m_idx = actual_n - 1;
     let mut eig_vals_vec: Vec<f64> = Vec::with_capacity(n_components + 1);
@@ -229,7 +215,7 @@ pub(crate) fn rsvd_solve(
     }
 
     let eigenvalues = Array1::from_vec(eig_vals_vec);
-    (eigenvalues, eigenvectors)
+    Some((eigenvalues, eigenvectors))
 }
 
 /// Accurate eigensolver via random subspace + direct L-projection.
@@ -245,33 +231,27 @@ pub(crate) fn rsvd_solve(
 /// `n_components` non-trivial pairs in ascending eigenvalue order).
 ///
 /// `k_sub` controls the subspace size; larger values give higher accuracy at
-/// higher cost.  Must satisfy `k_sub > n_components + 1`.
-#[cfg(feature = "testing")]
-pub(crate) fn rsvd_solve_accurate(
+/// higher cost.  Returns `None` unless `k_sub > n_components + 1` and the subspace,
+/// capped at `n`, still holds `n_components + 1` vectors, or if the projected
+/// eigenproblem fails.
+#[cfg(feature = "__internal")]
+pub fn rsvd_solve_accurate(
     laplacian: &CsMatI<f64, usize>,
     n_components: usize,
     seed: u64,
     k_sub: usize,
     nbiter: usize,
-) -> (Array1<f64>, Array2<f64>) {
+) -> Option<EigenResult> {
     let n = laplacian.rows();
-    assert!(k_sub > n_components + 1, "k_sub must be > n_components + 1");
+    let n_out = n_components + 1;
     let k = k_sub.min(n);
+    if k_sub <= n_out || k < n_out {
+        return None;
+    }
 
     // ── Step A: Build power-iteration subspace using M = 2I − L ─────────────
     let m = two_i_minus_laplacian(laplacian);
-    let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
-    let normal = StandardNormal;
-    let mut omega = Array2::from_shape_fn((n, k), |_| normal.sample(&mut rng));
-
-    for _ in 0..nbiter {
-        let y = sparse_dense_mult(&m, &omega);
-        omega = qr_thin_q(&y);
-        let z = sparse_dense_mult(&m, &omega);
-        omega = qr_thin_q(&z);
-    }
-    let y = sparse_dense_mult(&m, &omega);
-    let q = qr_thin_q(&y); // [n, k] orthonormal subspace basis
+    let q = power_iteration_basis(&m, k, seed, nbiter); // [n, k] orthonormal subspace basis
 
     // ── Step B: Project L directly onto subspace: B_L = Q^T L Q ─────────────
     // This avoids the λ_L = 2 − λ_M cancellation for near-zero eigenvalues.
@@ -279,20 +259,19 @@ pub(crate) fn rsvd_solve_accurate(
     let b_l = q.t().dot(&lq); // B_L [k, k]  symmetric PSD
 
     // ── Step C: Dense EVD of B_L (ascending = smallest L eigenvalue first) ──
-    let (l_eigenvals, u_b) = sym_eig(&b_l);
+    let (l_eigenvals, u_b) = sym_eig(&b_l)?;
 
     // ── Step D: Recover full Ritz vectors V = Q U_B ──────────────────────────
     let v = q.dot(&u_b); // [n, k]
 
     // ── Step E: Build output — trivial first (index 0), then non-trivials ────
     // l_eigenvals[0] ≈ 0 (trivial), l_eigenvals[1..=n_components] non-trivials
-    let n_out = n_components + 1;
     let eigenvalues = Array1::from_iter(l_eigenvals[..n_out].iter().copied());
     let mut eigenvectors = Array2::<f64>::zeros((n, n_out));
     for i in 0..n_out {
         eigenvectors.column_mut(i).assign(&v.column(i));
     }
-    (eigenvalues, eigenvectors)
+    Some((eigenvalues, eigenvectors))
 }
 
 #[cfg(test)]
@@ -324,9 +303,10 @@ mod tests {
     #[test]
     fn test_two_i_minus_laplacian_path_3() {
         let graph = make_graph(3, &[(0, 1, 1.0), (1, 2, 1.0)]);
-        let (_, sqrt_deg) = crate::laplacian::compute_degrees(&graph, ComputeMode::PythonCompat);
+        let (_, sqrt_deg) =
+            crate::laplacian::compute_degrees(graph.view(), ComputeMode::PythonCompat);
         let inv_sqrt_deg = sqrt_deg.mapv(|x| if x == 0.0 { 0.0 } else { 1.0 / x });
-        let l = build_normalized_laplacian(&graph, inv_sqrt_deg.as_slice().unwrap());
+        let l = build_normalized_laplacian(graph.view(), inv_sqrt_deg.as_slice().unwrap());
         let m = two_i_minus_laplacian(&l);
 
         let n = l.rows();
@@ -375,12 +355,14 @@ mod tests {
             .flat_map(|i| (i + 1..n).map(move |j| (i, j, 1.0f32)))
             .collect();
         let graph = make_graph(n, &edges);
-        let (_, sqrt_deg) = crate::laplacian::compute_degrees(&graph, ComputeMode::PythonCompat);
+        let (_, sqrt_deg) =
+            crate::laplacian::compute_degrees(graph.view(), ComputeMode::PythonCompat);
         let inv_sqrt_deg = sqrt_deg.mapv(|x| if x == 0.0 { 0.0 } else { 1.0 / x });
-        let l = build_normalized_laplacian(&graph, inv_sqrt_deg.as_slice().unwrap());
+        let l = build_normalized_laplacian(graph.view(), inv_sqrt_deg.as_slice().unwrap());
 
         let n_components = 2;
-        let (eigenvalues, eigenvectors) = rsvd_solve(&l, n_components, 42);
+        let (eigenvalues, eigenvectors) =
+            rsvd_solve(&l, n_components, 42, &SolverParams::default()).expect("rsvd_solve failed");
 
         assert_eq!(
             eigenvalues.shape(),
@@ -396,7 +378,7 @@ mod tests {
         // Eigenvalue range: [0, 2] for normalized Laplacian
         for &lambda in eigenvalues.iter() {
             assert!(
-                lambda >= -1e-10 && lambda <= 2.0 + 1e-10,
+                (-1e-10..=2.0 + 1e-10).contains(&lambda),
                 "eigenvalue {lambda:.6} out of [0, 2]"
             );
         }
@@ -427,12 +409,14 @@ mod tests {
         let n = 6;
         let edges: Vec<(usize, usize, f32)> = (0..n).map(|i| (i, (i + 1) % n, 1.0f32)).collect();
         let graph = make_graph(n, &edges);
-        let (_, sqrt_deg) = crate::laplacian::compute_degrees(&graph, ComputeMode::PythonCompat);
+        let (_, sqrt_deg) =
+            crate::laplacian::compute_degrees(graph.view(), ComputeMode::PythonCompat);
         let inv_sqrt_deg = sqrt_deg.mapv(|x| if x == 0.0 { 0.0 } else { 1.0 / x });
-        let l = build_normalized_laplacian(&graph, inv_sqrt_deg.as_slice().unwrap());
+        let l = build_normalized_laplacian(graph.view(), inv_sqrt_deg.as_slice().unwrap());
 
         let n_components = 2;
-        let (eigenvalues, eigenvectors) = rsvd_solve(&l, n_components, 0);
+        let (eigenvalues, eigenvectors) =
+            rsvd_solve(&l, n_components, 0, &SolverParams::default()).expect("rsvd_solve failed");
 
         let eig_slice = eigenvalues.as_slice().unwrap();
 
@@ -444,20 +428,19 @@ mod tests {
         );
 
         // Non-trivial eigenvalues of the 6-ring are 0.5 (indices 1..=n_components)
-        for i in 1..=n_components {
-            let err = (eig_slice[i] - 0.5_f64).abs();
+        for (i, &lambda) in eig_slice.iter().enumerate().skip(1) {
+            let err = (lambda - 0.5_f64).abs();
             assert!(
                 err < 1e-4,
                 "eigenvalue[{i}] = {:.8}, expected 0.5, err = {:.2e} (threshold 1e-4)",
-                eig_slice[i],
+                lambda,
                 err
             );
         }
 
         // Residual checks for non-trivial eigenpairs (index 1..=n_components)
-        for i in 1..=n_components {
+        for (i, &lambda) in eig_slice.iter().enumerate().skip(1) {
             let v = eigenvectors.column(i).to_owned();
-            let lambda = eig_slice[i];
 
             // L·v via SpMV
             let lv = &l * &v;
@@ -473,87 +456,100 @@ mod tests {
         }
     }
 
-    // T1 — formula preserved when env var is absent
     #[test]
-    fn rsvd_k_sub_returns_default_when_env_unset() {
-        // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
-        unsafe {
-            std::env::remove_var("SPECTRAL_RSVD_OVERSAMPLING");
-        }
-        let n = 200_usize;
-        let rank = 3_usize;
-        let oversampling = (n / 10).max(rank.max(5)).min(n.saturating_sub(rank));
-        let expected = (rank + oversampling).min(n);
-        assert_eq!(rsvd_k_sub_effective(n, rank), expected);
+    fn rsvd_k_sub_default_oversampling_scales_with_n() {
+        // n/10 dominates for large n; the floor of 5 applies for small n.
+        assert_eq!(rsvd_k_sub(200, 3, None), 3 + 20);
+        assert_eq!(rsvd_k_sub(20, 3, None), 3 + 5);
+        // Never larger than n.
+        assert_eq!(rsvd_k_sub(6, 3, None), 6);
     }
 
-    // T2 — env override is respected
-    #[cfg(feature = "testing")]
     #[test]
-    fn rsvd_k_sub_reads_env_override() {
-        // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
-        unsafe {
-            std::env::set_var("SPECTRAL_RSVD_OVERSAMPLING", "10");
-        }
-        let n = 200_usize;
-        let rank = 3_usize;
-        assert_eq!(rsvd_k_sub_effective(n, rank), rank + 10);
-        unsafe {
-            std::env::remove_var("SPECTRAL_RSVD_OVERSAMPLING");
-        }
+    fn rsvd_k_sub_uses_explicit_oversampling() {
+        assert_eq!(rsvd_k_sub(200, 3, Some(10)), 13);
+        assert_eq!(rsvd_k_sub(200, 3, Some(0)), 3);
+        // Clamped to n, even when rank + oversampling overflows usize.
+        assert_eq!(rsvd_k_sub(8, 3, Some(100)), 8);
+        assert_eq!(rsvd_k_sub(200, 3, Some(usize::MAX)), 200);
     }
 
-    // T3 — unparseable value falls back to formula
     #[test]
-    fn rsvd_k_sub_falls_back_on_parse_error() {
-        // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
-        unsafe {
-            std::env::set_var("SPECTRAL_RSVD_OVERSAMPLING", "abc");
-        }
-        let n = 200_usize;
-        let rank = 3_usize;
-        let oversampling = (n / 10).max(rank.max(5)).min(n.saturating_sub(rank));
-        let expected = (rank + oversampling).min(n);
-        assert_eq!(rsvd_k_sub_effective(n, rank), expected);
-        unsafe {
-            std::env::remove_var("SPECTRAL_RSVD_OVERSAMPLING");
-        }
+    fn rsvd_solve_applies_the_oversampling_param() {
+        // Oversampling 0 sketches k = rank = 3 columns; the default sketches k = n = 6.
+        // A budget that fits only the smaller sketch tells the two apart.
+        let l = ring_6_laplacian();
+        let budget = crate::solvers::dense_bytes(l.rows(), rsvd_k_sub(l.rows(), 3, Some(0)));
+        let explicit = SolverParams {
+            rsvd_oversampling: Some(0),
+            dense_memory_budget: budget,
+            ..SolverParams::default()
+        };
+        let default = SolverParams {
+            dense_memory_budget: budget,
+            ..SolverParams::default()
+        };
+        assert!(rsvd_solve(&l, 2, 42, &explicit).is_some());
+        assert!(rsvd_solve(&l, 2, 42, &default).is_none());
     }
 
-    // T-NBE-1 — rsvd_nbiter_effective returns 2 when env var is absent
     #[test]
-    fn rsvd_nbiter_returns_default_when_env_unset() {
-        // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
-        unsafe {
-            std::env::remove_var("SPECTRAL_RSVD_NBITER");
-        }
-        assert_eq!(rsvd_nbiter_effective(), 2);
+    fn rsvd_solve_applies_the_nbiter_param() {
+        // With a rank-sized sketch (k = 3) only power iteration separates the wanted
+        // eigenvectors of M = 2I − L (eigenvalues 2, 1.5, 1.5 | 0.5, 0.5, 0): each pass
+        // shrinks the unwanted components by (0.5 / 1.5)² = 1/9.
+        let l = ring_6_laplacian();
+        let residual = |nbiter| {
+            let params = SolverParams {
+                rsvd_oversampling: Some(0),
+                rsvd_nbiter: nbiter,
+                ..SolverParams::default()
+            };
+            let (vals, vecs) = rsvd_solve(&l, 2, 42, &params).expect("rsvd_solve failed");
+            crate::solvers::quality::max_eigenpair_residual(&l, &vals, &vecs)
+        };
+        // Measured: 5.0e-1 without passes, 1.1e-4 after four (theory: 9⁴ ≈ 6561×).
+        let (no_passes, four_passes) = (residual(0), residual(4));
+        assert!(
+            four_passes < no_passes * 1e-3,
+            "four passes: residual {four_passes:.3e}, no passes: {no_passes:.3e}"
+        );
     }
 
-    // T-NBE-2 — rsvd_nbiter_effective reads SPECTRAL_RSVD_NBITER env var (testing only)
-    #[cfg(feature = "testing")]
-    #[test]
-    fn rsvd_nbiter_reads_env_override() {
-        // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
-        unsafe {
-            std::env::set_var("SPECTRAL_RSVD_NBITER", "4");
-        }
-        assert_eq!(rsvd_nbiter_effective(), 4);
-        unsafe {
-            std::env::remove_var("SPECTRAL_RSVD_NBITER");
-        }
+    /// 6-node ring Laplacian, as in the residual test above.
+    fn ring_6_laplacian() -> CsMatI<f64, usize> {
+        let n = 6;
+        let edges: Vec<(usize, usize, f32)> = (0..n).map(|i| (i, (i + 1) % n, 1.0f32)).collect();
+        let graph = make_graph(n, &edges);
+        let (_, sqrt_deg) =
+            crate::laplacian::compute_degrees(graph.view(), ComputeMode::PythonCompat);
+        let inv_sqrt_deg = sqrt_deg.mapv(|x| if x == 0.0 { 0.0 } else { 1.0 / x });
+        build_normalized_laplacian(graph.view(), inv_sqrt_deg.as_slice().unwrap())
     }
 
-    // T-NBE-3 — rsvd_nbiter_effective falls back to 2 on parse error
     #[test]
-    fn rsvd_nbiter_falls_back_on_parse_error() {
-        // SAFETY: single-threaded test (--test-threads=1), no concurrent env readers
-        unsafe {
-            std::env::set_var("SPECTRAL_RSVD_NBITER", "xyz");
-        }
-        assert_eq!(rsvd_nbiter_effective(), 2);
-        unsafe {
-            std::env::remove_var("SPECTRAL_RSVD_NBITER");
-        }
+    fn rsvd_solve_returns_none_for_unsolvable_requests() {
+        let l = ring_6_laplacian();
+        let params = SolverParams::default();
+        assert!(rsvd_solve(&l, 0, 42, &params).is_none(), "n_components = 0");
+        assert!(rsvd_solve(&l, 6, 42, &params).is_none(), "n_components = n");
+        assert!(rsvd_solve(&l, 7, 42, &params).is_none(), "n_components > n");
+    }
+
+    #[test]
+    fn rsvd_solve_returns_none_over_the_dense_memory_budget() {
+        let l = ring_6_laplacian();
+        // The dense n × k sketch of the default subspace size for rank = n_components + 1.
+        let sketch_bytes = crate::solvers::dense_bytes(l.rows(), rsvd_k_sub(l.rows(), 3, None));
+        let within = SolverParams {
+            dense_memory_budget: sketch_bytes,
+            ..SolverParams::default()
+        };
+        let over = SolverParams {
+            dense_memory_budget: sketch_bytes - 1,
+            ..SolverParams::default()
+        };
+        assert!(rsvd_solve(&l, 2, 42, &within).is_some());
+        assert!(rsvd_solve(&l, 2, 42, &over).is_none());
     }
 }

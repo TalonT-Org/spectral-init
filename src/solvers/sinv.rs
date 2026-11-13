@@ -11,58 +11,32 @@
 //!
 //! **Failure mode:** Returns `None` if the sparse Cholesky factorization fails
 //! (e.g., numerically degenerate edges prevent M from being SPD despite the shift).
-//! In that case, execution falls through silently to Level 3 (LOBPCG + ε·I
-//! regularization).
-
-// linfa-linalg 0.2 uses ndarray 0.16, while this crate uses ndarray 0.17.
-// We alias ndarray 0.16 as `nd16` for use at the linfa-linalg boundary only.
-extern crate ndarray16;
-use ndarray16 as nd16;
+//! In that case, the chain escalates to Level 3 (LOBPCG + ε·I regularization).
 
 use faer::prelude::Solve;
-use linfa_linalg::lobpcg::{Order, lobpcg};
 use ndarray::{Array1, Array2, ArrayView2};
 use rand::SeedableRng;
-use rand::rngs::StdRng;
+use rand_chacha::ChaCha12Rng;
 use rand_distr::{Distribution, StandardNormal};
 use sprs::CsMatI;
 
 use super::EigenResult;
-use crate::metrics::{SINV_LINFA_TOL, SINV_LOBPCG_QUALITY_THRESHOLD};
+use super::nd16_bridge::{self, LobpcgOutcome, Order, from_nd16_view2, nd16, to_nd16_array2};
+use super::quality::SINV_LOBPCG_QUALITY_THRESHOLD;
 
-/// Diagonal shift ε making M = L + εI strictly SPD (REQ-SINV-002).
+/// Diagonal shift ε making M = L + εI strictly SPD.
 pub(crate) const SINV_SHIFT: f64 = 1e-4;
 
-// ─── ndarray 0.16 ↔ 0.17 conversion helpers ──────────────────────────────────
-
-fn to_nd16_array2(a: Array2<f64>) -> nd16::Array2<f64> {
-    let (rows, cols) = (a.nrows(), a.ncols());
-    let raw: Vec<f64> = a.iter().copied().collect();
-    nd16::Array2::from_shape_vec((rows, cols), raw)
-        .expect("shape/data mismatch converting nd17→nd16 Array2")
-}
-
-fn from_nd16_view2(v: nd16::ArrayView2<f64>) -> Array2<f64> {
-    let (rows, cols) = (v.nrows(), v.ncols());
-    let raw: Vec<f64> = v.iter().copied().collect();
-    Array2::from_shape_vec((rows, cols), raw)
-        .expect("shape/data mismatch converting nd16→nd17 ArrayView2")
-}
-
-fn from_nd16_array1(a: nd16::Array1<f64>) -> Array1<f64> {
-    Array1::from_iter(a.iter().copied())
-}
-
-fn from_nd16_array2(a: nd16::Array2<f64>) -> Array2<f64> {
-    let (rows, cols) = (a.nrows(), a.ncols());
-    let raw: Vec<f64> = a.iter().copied().collect();
-    Array2::from_shape_vec((rows, cols), raw)
-        .expect("shape/data mismatch converting nd16→nd17 Array2")
-}
+/// Convergence tolerance passed to linfa-linalg as `tol` for the M⁻¹ problem: 1e-8.
+///
+/// It is the solver's own per-step stopping criterion. A partially converged
+/// result is accepted against `SINV_LOBPCG_QUALITY_THRESHOLD`, and the chain's
+/// residual gate then decides whether the result is used.
+const SINV_LINFA_TOL: f64 = 1e-8;
 
 // ─── sprs ↔ faer sparse conversion ───────────────────────────────────────────
 
-/// Convert a sprs CsMat<f64> (CSR or CSC) to a faer SparseColMat<usize, f64>,
+/// Convert a sprs `CsMat<f64>` (CSR or CSC) to a faer `SparseColMat<usize, f64>`,
 /// adding `diag_shift` to every diagonal entry (used to build M = L + εI).
 ///
 /// The conversion goes CSR/CSC → sprs CSC → raw arrays → faer CSC.
@@ -83,6 +57,8 @@ fn sprs_csc_to_faer(
         }
     }
 
+    // `col_ptr` and `row_idx` come straight from a valid sprs CSC matrix, so they
+    // satisfy the structure `new_checked` verifies.
     let symbolic =
         faer::sparse::SymbolicSparseColMat::<usize>::new_checked(n, n, col_ptr, None, row_idx);
     faer::sparse::SparseColMat::<usize, f64>::new(symbolic, values)
@@ -90,20 +66,20 @@ fn sprs_csc_to_faer(
 
 // ─── ndarray 0.17 ↔ faer dense bridge helpers ────────────────────────────────
 
-/// Convert ndarray 0.17 ArrayView2<f64> [n, k] to a faer Mat<f64> [n, k].
+/// Convert ndarray 0.17 `ArrayView2<f64>` `[n, k]` to a faer `Mat<f64>` `[n, k]`.
 /// Copies element-by-element to handle ndarray row-major vs faer column-major.
 fn nd17_view_to_faer(x: ArrayView2<f64>) -> faer::Mat<f64> {
     let (nrows, ncols) = x.dim();
     faer::Mat::<f64>::from_fn(nrows, ncols, |i, j| x[[i, j]])
 }
 
-/// Convert a faer Mat<f64> [n, k] to ndarray 0.17 Array2<f64>.
+/// Convert a faer `Mat<f64>` `[n, k]` to ndarray 0.17 `Array2<f64>`.
 fn faer_to_nd17(x: &faer::Mat<f64>) -> Array2<f64> {
     let (nrows, ncols) = (x.nrows(), x.ncols());
     Array2::from_shape_fn((nrows, ncols), |(i, j)| x[(i, j)])
 }
 
-/// Convert a faer Mat<f64> [n, k] to ndarray 0.16 Array2<f64>.
+/// Convert a faer `Mat<f64>` `[n, k]` to ndarray 0.16 `Array2<f64>`.
 fn faer_to_nd17_nd16(x: &faer::Mat<f64>) -> nd16::Array2<f64> {
     to_nd16_array2(faer_to_nd17(x))
 }
@@ -135,12 +111,12 @@ pub fn lobpcg_sinv_solve(
     // Build faer shifted matrix M = L + SINV_SHIFT·I.
     let m_faer = sprs_csc_to_faer(laplacian, SINV_SHIFT);
 
-    // Sparse Cholesky factorization of M (REQ-SINV-001).
+    // Sparse Cholesky factorization of M.
     // If Cholesky fails (M not SPD despite shift — pathological case), return None.
     let chol = m_faer.sp_cholesky(faer::Side::Lower).ok()?;
 
     // Build random initial block [n, k] with trivial eigenvector injected at col 0.
-    let mut rng = StdRng::seed_from_u64(seed);
+    let mut rng = ChaCha12Rng::seed_from_u64(seed);
     let mut x_init_17: Array2<f64> =
         Array2::from_shape_fn((n, k), |_| StandardNormal.sample(&mut rng));
     let sqrt_deg_norm = sqrt_deg.dot(sqrt_deg).sqrt();
@@ -149,11 +125,10 @@ pub fn lobpcg_sinv_solve(
             .column_mut(0)
             .assign(&sqrt_deg.mapv(|x| x / sqrt_deg_norm));
     }
-    let x_init = to_nd16_array2(x_init_17);
 
     // Run LOBPCG with M⁻¹ operator — finds k largest eigenvalues of M⁻¹,
-    // i.e. the k smallest eigenvalues of L (REQ-SINV-003).
-    let result = lobpcg(
+    // i.e. the k smallest eigenvalues of L.
+    let outcome = nd16_bridge::lobpcg(
         |x: nd16::ArrayView2<f64>| -> nd16::Array2<f64> {
             let x17 = from_nd16_view2(x);
             let mut rhs = nd17_view_to_faer(x17.view());
@@ -161,32 +136,26 @@ pub fn lobpcg_sinv_solve(
             chol.solve_in_place(&mut rhs);
             faer_to_nd17_nd16(&rhs)
         },
-        x_init,
-        |_: nd16::ArrayViewMut2<f64>| {},
-        None,
+        x_init_17,
         SINV_LINFA_TOL as f32,
         (n * 5).min(300),
         Order::Largest,
     );
 
-    // Extract result; accept partially-converged results if all residuals are small.
-    let extract = |r: linfa_linalg::lobpcg::Lobpcg<f64>| -> EigenResult {
-        (from_nd16_array1(r.eigvals), from_nd16_array2(r.eigvecs))
-    };
-
-    let result_opt = match result {
-        Ok(r) => Some(extract(r)),
-        Err((_, Some(r)))
-            if r.rnorm
+    // Accept partially-converged results if all residuals are small.
+    let result_opt = match outcome {
+        LobpcgOutcome::Converged(eigenpairs) => Some(eigenpairs),
+        LobpcgOutcome::Partial { eigenpairs, rnorm }
+            if rnorm
                 .iter()
                 .all(|&norm| norm < SINV_LOBPCG_QUALITY_THRESHOLD) =>
         {
-            Some(extract(r))
+            Some(eigenpairs)
         }
         _ => None,
     };
 
-    // Eigenvalue recovery (REQ-SINV-004): λ_k = 1/μ_k − ε
+    // Eigenvalue recovery: λ_k = 1/μ_k − ε
     // LOBPCG Order::Largest returns eigenvalues in some order; sort ascending.
     result_opt.map(|(mut eigvals, mut eigvecs)| {
         eigvals.mapv_inplace(|mu| 1.0 / mu - SINV_SHIFT);
@@ -198,7 +167,7 @@ pub fn lobpcg_sinv_solve(
             .enumerate()
             .map(|(i, v)| (v, i))
             .collect();
-        pairs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        pairs.sort_by(|a, b| a.0.total_cmp(&b.0));
 
         let sorted_vals = Array1::from_iter(pairs.iter().map(|&(v, _)| v));
         let sorted_vecs = Array2::from_shape_fn((eigvecs.nrows(), eigvecs.ncols()), |(i, j)| {
@@ -281,8 +250,11 @@ mod tests {
 
         // All residuals < 1e-8.
         for i in 0..eigvals.len() {
-            let r =
-                crate::metrics::eigenpair_residual(&mat, &eigvecs.column(i).to_owned(), eigvals[i]);
+            let r = crate::solvers::quality::eigenpair_residual(
+                &mat,
+                &eigvecs.column(i).to_owned(),
+                eigvals[i],
+            );
             assert!(r < 1e-8, "residual for eigenpair {i}: {r} >= 1e-8");
         }
     }

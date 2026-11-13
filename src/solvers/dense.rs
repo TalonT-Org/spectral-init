@@ -1,28 +1,43 @@
-//! Dense eigendecomposition via faer (Level 0 of the solver escalation chain).
+//! Dense eigendecomposition via faer (Levels 0 and 5 of the solver escalation chain).
 //!
-//! Used when `n < 2000`. Converts the sparse Laplacian to a dense `faer::Mat<f64>`,
-//! calls `self_adjoint_eigen`, and returns the `k` smallest eigenpairs sorted ascending.
+//! Converts the sparse Laplacian to a dense `faer::Mat<f64>`, calls `self_adjoint_eigen`,
+//! and returns the `k` smallest eigenpairs sorted ascending.
 //!
-//! **Chain position:** Level 0 — exact, O(n³). Skipped for `n ≥ 2000`.
+//! **Chain position:** Level 0 — exact, O(n³), tried first for `n < 2000` — and Level 5,
+//! the last resort for any `n`.
 //!
-//! **Failure mode:** Returns [`SpectralError::ConvergenceFailure`] if faer's
-//! self-adjoint EVD fails (practically impossible for a valid PSD matrix).
-//! The residual quality gate (`< 1e-6`) then determines whether to accept the result
-//! or escalate to Level 1.
+//! **Failure modes:** Returns [`SpectralError::DenseBudgetExceeded`] when the dense
+//! `n × n` matrix would exceed the dense memory budget, and
+//! [`SpectralError::ConvergenceFailure`] if faer's self-adjoint EVD fails (practically
+//! impossible for a valid PSD matrix). The residual quality gate (`< 1e-6`) then
+//! determines whether the chain accepts the result.
 
-use super::EigenResult;
+use super::{EigenResult, check_dense_budget};
 use crate::SpectralError;
 use faer::{Mat, Side};
 use ndarray::{Array1, Array2};
 use sprs::CsMatI;
 
-/// Dense eigendecomposition via faer for small n.
-/// Returns (eigenvalues shape [k], eigenvectors shape [n, k]) sorted ascending by eigenvalue.
-pub fn dense_evd(laplacian: &CsMatI<f64, usize>, k: usize) -> Result<EigenResult, SpectralError> {
+/// Dense eigendecomposition via faer.
+/// Returns (eigenvalues of shape `[k]`, eigenvectors of shape `[n, k]`) sorted ascending by
+/// eigenvalue.
+///
+/// `k` is the number of eigenpairs, i.e. the embedding dimensionality plus one. Errors
+/// with `TooFewNodes` when `k > n` and with `DenseBudgetExceeded` when the dense `n × n`
+/// matrix needs more than `dense_memory_budget` bytes.
+pub fn dense_evd(
+    laplacian: &CsMatI<f64, usize>,
+    k: usize,
+    dense_memory_budget: u64,
+) -> Result<EigenResult, SpectralError> {
     let n = laplacian.rows();
     if k > n {
-        return Err(SpectralError::TooFewNodes { n, dims: k });
+        return Err(SpectralError::TooFewNodes {
+            n,
+            n_components: k.saturating_sub(1),
+        });
     }
+    check_dense_budget(n, n, dense_memory_budget)?;
 
     let mut dense = Mat::<f64>::zeros(n, n);
     for (val, (row, col)) in laplacian.iter() {
@@ -30,8 +45,8 @@ pub fn dense_evd(laplacian: &CsMatI<f64, usize>, k: usize) -> Result<EigenResult
     }
 
     let evd = dense.self_adjoint_eigen(Side::Lower).map_err(|e| {
-        eprintln!("dense_evd: faer self_adjoint_eigen failed: {e:?}");
-        SpectralError::ConvergenceFailure
+        log::warn!("dense_evd: faer self_adjoint_eigen failed: {e:?}");
+        SpectralError::ConvergenceFailure { n }
     })?;
 
     let s = evd.S();
@@ -53,6 +68,8 @@ pub fn dense_evd(laplacian: &CsMatI<f64, usize>, k: usize) -> Result<EigenResult
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const NO_LIMIT: u64 = u64::MAX;
 
     fn make_csr(n: usize, triplets: &[(usize, usize, f64)]) -> CsMatI<f64, usize> {
         let mut mat = sprs::TriMat::new((n, n));
@@ -86,7 +103,7 @@ mod tests {
     fn dense_evd_trivial_2x2() {
         // L = [[1, -1], [-1, 1]]  eigenvalues: 0.0, 2.0
         let l = make_csr(2, &[(0, 0, 1.0), (0, 1, -1.0), (1, 0, -1.0), (1, 1, 1.0)]);
-        let (eigenvalues, eigenvectors) = dense_evd(&l, 2).expect("dense_evd failed");
+        let (eigenvalues, eigenvectors) = dense_evd(&l, 2, NO_LIMIT).expect("dense_evd failed");
 
         assert_eq!(eigenvalues.len(), 2);
         assert!(
@@ -110,7 +127,7 @@ mod tests {
     fn dense_evd_identity_3x3() {
         // L = I_3, all eigenvalues = 1.0
         let l = make_csr(3, &[(0, 0, 1.0), (1, 1, 1.0), (2, 2, 1.0)]);
-        let (eigenvalues, eigenvectors) = dense_evd(&l, 3).expect("dense_evd failed");
+        let (eigenvalues, eigenvectors) = dense_evd(&l, 3, NO_LIMIT).expect("dense_evd failed");
 
         assert_eq!(eigenvalues.len(), 3);
         for i in 0..3 {
@@ -140,7 +157,7 @@ mod tests {
                 (2, 2, 1.0),
             ],
         );
-        let (eigenvalues, eigenvectors) = dense_evd(&l, 2).expect("dense_evd failed");
+        let (eigenvalues, eigenvectors) = dense_evd(&l, 2, NO_LIMIT).expect("dense_evd failed");
 
         assert_eq!(eigenvalues.len(), 2);
         assert_eq!(eigenvectors.shape(), &[3, 2]);
@@ -160,6 +177,26 @@ mod tests {
     #[test]
     fn dense_evd_k_greater_than_n_returns_error() {
         let l = make_csr(2, &[(0, 0, 1.0), (0, 1, -1.0), (1, 0, -1.0), (1, 1, 1.0)]);
-        assert!(dense_evd(&l, 3).is_err(), "expected Err when k > n");
+        assert_eq!(
+            dense_evd(&l, 3, NO_LIMIT),
+            Err(SpectralError::TooFewNodes {
+                n: 2,
+                n_components: 2
+            })
+        );
+    }
+
+    #[test]
+    fn dense_evd_respects_the_dense_memory_budget() {
+        let l = make_csr(2, &[(0, 0, 1.0), (0, 1, -1.0), (1, 0, -1.0), (1, 1, 1.0)]);
+        // A 2 × 2 f64 matrix needs 32 bytes.
+        assert!(dense_evd(&l, 2, 32).is_ok());
+        assert_eq!(
+            dense_evd(&l, 2, 31),
+            Err(SpectralError::DenseBudgetExceeded {
+                required_bytes: 32,
+                budget_bytes: 31
+            })
+        );
     }
 }

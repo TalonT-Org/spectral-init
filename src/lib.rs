@@ -1,16 +1,19 @@
 //! Spectral initialization for UMAP embeddings.
 //!
-//! Computes the Laplacian eigenvectors of a fuzzy k-NN graph to provide
-//! globally-aware starting coordinates for the SGD optimization phase of UMAP.
-//! This is the primary reason Python UMAP produces superior embeddings compared to
-//! random or PCA initialization: eigenvectors of the graph Laplacian encode the
-//! global manifold structure before a single gradient step is taken.
+//! Computes the spectral layout that umap-learn uses as its default starting point for
+//! stochastic gradient descent: the eigenvectors of the normalized graph Laplacian that
+//! belong to its smallest non-zero eigenvalues. These eigenvectors vary slowly across the
+//! graph, so the coordinates reflect its large-scale structure before the optimizer
+//! takes a step.
+//!
+//! The input is a symmetric, non-negative sparse graph in [`sprs`] storage, such as the
+//! fuzzy k-nearest-neighbour graph of UMAP. The crate depends on no UMAP implementation.
 //!
 //! # Quick Start
 //!
 //! ```
-//! use sprs::CsMatI;
-//! use spectral_init::{spectral_init, SpectralInitConfig};
+//! use spectral_init::sprs::CsMatI;
+//! use spectral_init::{SpectralInitConfig, spectral_init};
 //!
 //! // 4-node path graph: 0 – 1 – 2 – 3 (symmetric, f32 weights)
 //! let graph = CsMatI::<f32, u32, usize>::new(
@@ -19,8 +22,8 @@
 //!     vec![1u32, 0u32, 2u32, 1u32, 3u32, 2u32],
 //!     vec![1.0f32; 6],
 //! );
-//! let coords = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())
-//!     .expect("spectral_init failed");
+//! let config = SpectralInitConfig::new(2).with_seed(42);
+//! let coords = spectral_init(graph.view(), None, &config).expect("spectral_init failed");
 //! assert_eq!(coords.shape(), &[4, 2]);
 //! for &v in coords.iter() {
 //!     assert!(v.is_finite());
@@ -33,239 +36,219 @@
 //!
 //! $$L = I - D^{-1/2} W D^{-1/2}$$
 //!
-//! where $W$ is the fuzzy k-NN adjacency matrix and $D$ is the degree matrix.
-//! The $k$ smallest non-trivial eigenvectors of $L$ (skipping the all-ones trivial
-//! eigenvector at $\lambda = 0$) form the initial coordinate matrix. Coordinates are
-//! then scaled to $[-10, 10]$ and perturbed with $\mathcal{N}(0, 10^{-4})$ noise to
-//! break symmetry.
+//! where $W$ is the weighted adjacency matrix and $D$ the diagonal matrix of its row
+//! sums, in double precision. The eigenvectors of the $k$ smallest non-zero eigenvalues
+//! of $L$ form the coordinate matrix; the eigenvector of $\lambda = 0$, proportional to
+//! $\sqrt{d}$, is skipped. Each column is given a fixed sign, all coordinates are scaled
+//! by one factor so that the largest magnitude is 10, and Gaussian noise with standard
+//! deviation $10^{-4}$ is added.
 //!
-//! The eigensolver uses a 6-level escalation chain (dense EVD → LOBPCG →
-//! shift-invert LOBPCG → LOBPCG+regularization → randomized SVD → forced dense EVD)
-//! to guarantee convergence on any valid graph. See [`solvers`] for details.
+//! A graph with several connected components is embedded component by component, and
+//! the components are then placed relative to one another; see [`spectral_init`].
+//!
+//! The eigenvectors come from a chain of six solvers of increasing cost: a dense
+//! eigendecomposition for small graphs, then LOBPCG, shift-and-invert LOBPCG, regularized
+//! LOBPCG, a randomized SVD and, last, a dense eigendecomposition for any size that fits
+//! the [dense memory budget](SpectralInitConfig::with_dense_memory_budget). A result is
+//! accepted only if its residual $\lVert L v - \lambda v \rVert / \lVert v \rVert$ is
+//! below the threshold of its solver; when no solver produces one, the call returns an
+//! error.
 //!
 //! # Compute Mode
 //!
-//! [`ComputeMode::PythonCompat`] (default) matches Python UMAP's degree accumulation
-//! order and solver paths exactly, enabling bit-for-bit validation against reference
-//! outputs. [`ComputeMode::RustNative`] routes large-graph LOBPCG levels through an
-//! AVX2+FMA SIMD matrix-vector kernel (~1 ULP divergence from Python), offering
-//! improved throughput on x86_64 hardware with AVX2 support.
+//! [`ComputeMode::PythonCompat`] (default) follows umap-learn's arithmetic where it
+//! affects the result: degrees are accumulated in single precision, in SciPy's order, and
+//! the iterative solvers use a scalar matrix-vector product.
+//! [`ComputeMode::RustNative`] sums degrees in double precision on every target and, on
+//! x86_64 CPUs with AVX2 and FMA, runs the matrix-vector product of the iterative solvers
+//! through a SIMD kernel. The two modes span the same embedding subspace and differ in
+//! the coordinates by rounding.
+//!
+//! The reference for `PythonCompat` is the spectral layout of umap-learn 0.5.x, which
+//! umap-learn 0.6 keeps as its default. The test suite compares every stage with values
+//! recorded from umap-learn 0.5.11: degrees within $10^{-15}$, Laplacian entries within
+//! $10^{-14}$, eigenvalues within the threshold of the solver that produced them, and
+//! coordinates up to the sign of each column. Where eigenvalues nearly coincide, the
+//! spanned subspace is compared instead of the individual vectors.
 //!
 //! # Feature Flags
 //!
-//! | Flag | Purpose |
-//! |------|---------|
-//! | `testing` | Exposes internal solver functions for integration tests. Not part of the stable public API. |
-//! | `cli` | Builds the `trustworthiness` and `tw_profiler` binaries for embedding quality evaluation. |
-//! | `profiling` | Enables timing instrumentation in the solver escalation chain. |
+//! The crate has no public Cargo features.
 //!
-//! # Integration with umap-rs
+//! # Use with a UMAP Implementation
 //!
-//! Pass the graph returned by `umap_rs::Umap::graph()` directly — its type
-//! `CsMatI<f32, u32, usize>` matches this crate's input type exactly.
+//! `umap-rs` exposes the graph this crate needs: `Umap::learn_manifold(..).graph()` is a
+//! `CsMatI<f32, u32, usize>`, and its `Optimizer` takes the initial coordinates. The
+//! [integration guide] has the full sequence, and `examples/umap_rs.rs` is a runnable
+//! version. An implementation that keeps its graph as raw CSR arrays can lend them to
+//! [`spectral_init`] as a [`sprs::CsMatViewI`] without copying.
+//!
+//! [integration guide]: https://github.com/TalonT-Org/spectral-init/blob/main/docs/umap-rs-integration.md
 //!
 //! # Error Handling
 //!
-//! All errors are returned as [`SpectralError`] variants. The most common are
-//! [`SpectralError::InvalidGraph`] (malformed input) and
-//! [`SpectralError::TooFewNodes`] (embedding dimensionality exceeds graph size).
-//! [`SpectralError::ConvergenceFailure`] should not occur in practice; if it does,
-//! it indicates a degenerate graph or a bug — please file an issue.
+//! Every failure is a [`SpectralError`] variant; the crate never substitutes a random
+//! layout. Inputs are validated before any computation: the graph must be square,
+//! symmetric and have finite, non-negative weights
+//! ([`SpectralError::NotSquare`], [`SpectralError::NotSymmetric`],
+//! [`SpectralError::NonFiniteWeight`], [`SpectralError::NegativeWeight`]), with more
+//! nodes than embedding dimensions ([`SpectralError::TooFewNodes`]).
+//! [`SpectralError::DenseBudgetExceeded`] and [`SpectralError::ConvergenceFailure`]
+//! report that no solver could produce acceptable eigenvectors within the configured
+//! dense memory budget. See [`spectral_init`] for the full list and a fallback example.
+//!
+//! # Reproducibility
+//!
+//! For a fixed `Cargo.lock`, target, CPU feature set and thread configuration, the output
+//! is a deterministic function of the graph, the data and the configuration. Random
+//! numbers come from the ChaCha12 generator (`rand_chacha::ChaCha12Rng`), seeded with
+//! [`SpectralInitConfig::with_seed`].
+//!
+//! Across thread configurations the output agrees to rounding, not bit for bit: the dense
+//! eigensolver splits larger problems across threads. Measured on x86_64 with faer 0.24.4,
+//! one thread against four changed no coordinate for a 500-node graph and changed
+//! coordinates by at most 1.2 × 10⁻¹⁰ for a 1500-node graph (coordinates are scaled to a
+//! maximum magnitude of 10); the test suite accepts differences up to 10⁻⁵. To pin the
+//! thread configuration, call `faer::set_global_parallelism` before [`spectral_init`], or
+//! set the `RAYON_NUM_THREADS` environment variable, which sizes the thread pool the
+//! solvers share. A different target or CPU feature set can change results by rounding in
+//! the same way; no bitwise agreement is promised across them.
+//!
+//! # Public Dependencies
+//!
+//! The graph and array types in the signature of [`spectral_init`] come from the
+//! [`sprs`] and [`ndarray`] crates, which are re-exported so that callers can name the
+//! exact versions this crate was built against. Moving to a semver-incompatible release
+//! of either is a breaking change of this crate.
 //!
 //! # User Guide
 //!
-//! For step-by-step integration instructions with `umap-rs` and standalone usage,
-//! see the [user guide](https://github.com/TalonT-Org/spectral-init/blob/main/docs/user-guide.md).
-#![warn(missing_docs)]
+//! The [user guide](https://github.com/TalonT-Org/spectral-init/blob/main/docs/user-guide.md)
+//! covers building the input graph, configuration, disconnected graphs and
+//! troubleshooting.
 
 mod components;
 mod config;
+mod error;
 mod laplacian;
-#[doc(hidden)]
-pub mod metrics;
 mod multi_component;
-#[doc(hidden)]
-pub mod operator;
+mod operator;
 mod scaling;
 mod selection;
-#[doc(hidden)]
-pub mod solvers;
+mod solvers;
+mod validate;
 
 pub use config::{ComputeMode, SpectralInitConfig};
+pub use error::SpectralError;
+pub use {ndarray, sprs};
 
-// Re-exported for component-level integration tests. These are internal pipeline
-// functions, not part of the stable public API.
-pub use crate::laplacian::build_normalized_laplacian;
-pub use crate::laplacian::compute_degrees;
-pub use crate::selection::select_eigenvectors;
-/// Dense EVD solver. Exposed for component-level integration tests; not part of the
-/// stable public API and may change without notice.
-pub use crate::solvers::dense_evd;
-
-#[cfg(feature = "testing")]
-#[doc(hidden)]
-pub fn find_components(graph: &sprs::CsMatI<f32, u32, usize>) -> (Vec<usize>, usize) {
-    components::find_components(graph)
-}
-
-#[cfg(feature = "testing")]
-#[doc(hidden)]
-pub fn rsvd_solve(
-    laplacian: &sprs::CsMatI<f64, usize>,
-    n_components: usize,
-    seed: u64,
-) -> (ndarray::Array1<f64>, ndarray::Array2<f64>) {
-    crate::solvers::rsvd::rsvd_solve(laplacian, n_components, seed)
-}
-
-#[cfg(feature = "testing")]
-#[doc(hidden)]
-pub fn rsvd_solve_accurate(
-    laplacian: &sprs::CsMatI<f64, usize>,
-    n_components: usize,
-    seed: u64,
-    k_sub: usize,
-    nbiter: usize,
-) -> (ndarray::Array1<f64>, ndarray::Array2<f64>) {
-    crate::solvers::rsvd::rsvd_solve_accurate(laplacian, n_components, seed, k_sub, nbiter)
-}
-
-#[cfg(feature = "testing")]
-#[doc(hidden)]
-/// Exposes `solve_eigenproblem` for integration tests that need to assert which
-/// solver level was reached.
+/// Internal pipeline pieces for this crate's own integration tests and research harness.
 ///
-/// **Test-only seam — not part of the stable public API.**  The returned `u8`
-/// encodes the solver level (0 = dense EVD, 1 = LOBPCG, 2 = sinv LOBPCG,
-/// 3 = LOBPCG+reg, 4 = rSVD, 5 = forced dense EVD) and may change if the
-/// escalation chain is reordered or extended.  Test code that asserts on this
-/// value is intentionally coupled to the current chain ordering.
-pub fn solve_eigenproblem_pub(
-    laplacian: &sprs::CsMatI<f64, usize>,
-    n_components: usize,
-    seed: u64,
-    compute_mode: ComputeMode,
-) -> ((ndarray::Array1<f64>, ndarray::Array2<f64>), u8) {
-    let n = laplacian.rows();
-    let sqrt_deg = ndarray::Array1::ones(n);
-    crate::solvers::solve_eigenproblem(laplacian, n_components, seed, &sqrt_deg, compute_mode)
+/// Exempt from semver: anything in this module may change or disappear in any release.
+#[cfg(feature = "__internal")]
+#[doc(hidden)]
+pub mod __internal {
+    pub use crate::components::find_components;
+    pub use crate::laplacian::{build_normalized_laplacian, compute_degrees};
+    pub use crate::multi_component::{embed_disconnected, extract_subgraph};
+    pub use crate::operator::{CsrOperator, LinearOperator, spmv_csr};
+    #[cfg(target_arch = "x86_64")]
+    pub use crate::operator::{CsrOperatorSimd, simd_index_fits, spmv_avx2_gather};
+    pub use crate::scaling::{normalize_signs, scale_and_add_noise, scale_coords};
+    pub use crate::selection::select_eigenvectors;
+    pub use crate::solvers::dense_evd;
+    pub use crate::solvers::lobpcg::{lobpcg_solve, lobpcg_solve_with_restarts};
+    pub use crate::solvers::quality::{
+        DENSE_EVD_QUALITY_THRESHOLD, LOBPCG_QUALITY_THRESHOLD, RSVD_QUALITY_THRESHOLD,
+        SINV_LOBPCG_QUALITY_THRESHOLD, eigenpair_residual, max_eigenpair_residual,
+    };
+    pub use crate::solvers::rsvd::{rsvd_solve, rsvd_solve_accurate};
+    pub use crate::solvers::sinv::lobpcg_sinv_solve;
+    pub use crate::solvers::{
+        EigenResult, QualityGates, SolveReport, SolverLevel, SolverParams, solve_eigenproblem,
+    };
 }
 
-#[cfg(feature = "testing")]
-#[doc(hidden)]
-pub use crate::solvers::lobpcg::lobpcg_solve;
+/// The README and the guides shipped with the crate, attached as documentation so that
+/// their Rust snippets are compiled and run as doctests.
+#[cfg(doctest)]
+mod guides {
+    #[doc = include_str!("../README.md")]
+    struct Readme;
 
-#[cfg(feature = "testing")]
-#[doc(hidden)]
-pub fn embed_disconnected(
-    graph: &sprs::CsMatI<f32, u32, usize>,
-    component_labels: &[usize],
-    n_conn_components: usize,
-    n_embedding_dims: usize,
-    seed: u64,
-    data: Option<ndarray::ArrayView2<'_, f32>>,
-    compute_mode: ComputeMode,
-) -> Result<ndarray::Array2<f64>, SpectralError> {
-    crate::multi_component::embed_disconnected(
-        graph,
-        component_labels,
-        n_conn_components,
-        n_embedding_dims,
-        seed,
-        data,
-        compute_mode,
-    )
+    #[doc = include_str!("../docs/user-guide.md")]
+    struct UserGuide;
+
+    #[doc = include_str!("../docs/umap-rs-integration.md")]
+    struct UmapRsIntegration;
 }
-
-#[cfg(feature = "testing")]
-#[doc(hidden)]
-pub use crate::solvers::sinv::lobpcg_sinv_solve;
-
-#[cfg(feature = "testing")]
-#[doc(hidden)]
-pub fn scale_and_add_noise_pub(
-    coords: ndarray::Array2<f64>,
-    seed: u64,
-) -> Result<ndarray::Array2<f32>, SpectralError> {
-    crate::scaling::scale_and_add_noise(coords, seed)
-}
-
-#[cfg(feature = "testing")]
-#[doc(hidden)]
-pub fn normalize_signs_pub(coords: &mut ndarray::Array2<f64>) {
-    crate::scaling::normalize_signs(coords)
-}
-
-#[cfg(feature = "testing")]
-#[doc(hidden)]
-pub use crate::metrics::{
-    AssessmentReport, DEGENERATE_GAP_THRESHOLD, DENSE_EVD_QUALITY_THRESHOLD, ExperimentMetrics,
-    LOBPCG_QUALITY_THRESHOLD, MetricResult, RSVD_QUALITY_THRESHOLD, SINV_LOBPCG_QUALITY_THRESHOLD,
-    SUBSPACE_GRAM_DET_THRESHOLD, check_eigenvalue_bounds, eigenpair_residual,
-    eigenvalue_abs_errors, eigenvalue_condition_number, max_eigenpair_residual,
-    orthogonality_error, separation_ratio, sign_agnostic_max_error, spectral_gap,
-    subspace_gram_det_kd, tolerance_margin, trustworthiness, trustworthiness_subsampled,
-};
-
-// Re-export trustworthiness for the CLI binary when built with the `cli` feature.
-// The `testing` block above already covers test builds; this separate cfg avoids
-// double-export when both features are active.
-#[cfg(all(feature = "cli", not(feature = "testing")))]
-pub use crate::metrics::{trustworthiness, trustworthiness_subsampled};
 
 use ndarray::{Array2, ArrayView2};
-use sprs::CsMatI;
+use sprs::CsMatViewI;
 
-/// Errors returned by the spectral initialization pipeline.
-#[derive(Debug, thiserror::Error)]
-pub enum SpectralError {
-    /// The eigensolver escalation chain exhausted all levels without converging.
-    /// This should never occur in practice; if seen, it indicates a degenerate graph.
-    /// This indicates a degenerate graph or a bug in the solver chain. If encountered
-    /// in production, please file an issue at the repository.
-    #[error("eigensolver failed to converge after full escalation chain")]
-    ConvergenceFailure,
-
-    /// The graph adjacency matrix is malformed (non-square, negative weights, NaN/Inf).
-    /// Verify that the adjacency matrix is square, has non-negative finite weights,
-    /// and that `n > 0` and `n_components > 0`.
-    #[error("invalid graph: {0}")]
-    InvalidGraph(String),
-
-    /// The graph has fewer nodes than the requested embedding dimensionality.
-    /// Reduce `n_components` or provide a graph with more nodes than the requested
-    /// embedding dimensionality.
-    #[error("graph has too few nodes ({n}) for {dims}-dimensional embedding")]
-    TooFewNodes {
-        /// Number of nodes in the graph.
-        n: usize,
-        /// Requested number of embedding dimensions.
-        dims: usize,
-    },
-}
-
-/// Compute spectral initialization coordinates for a UMAP fuzzy k-NN graph.
+/// Computes spectral initialization coordinates for a symmetric, non-negative graph.
 ///
 /// Builds the symmetric normalized Laplacian of `graph`, computes its `n_components`
 /// smallest non-trivial eigenvectors via an automatic solver escalation chain, scales
-/// coordinates to `[-10, 10]`, and adds small Gaussian noise.
+/// the coordinates so that the largest magnitude is 10, and adds Gaussian noise with
+/// standard deviation 10⁻⁴.
+///
+/// # Inputs
+///
+/// - `graph` — the weighted adjacency matrix: square, symmetric, with finite
+///   non-negative weights, in CSR or CSC storage. Stored zeros are absent edges.
+///   Diagonal entries (self-loops) count towards both degree and adjacency.
+/// - `data` — the points the graph was built from, one row per node. It is consulted
+///   only when the graph has more than `2 · n_components` connected components, where
+///   it places the components relative to one another; otherwise it may be `None`.
+///   When supplied it is always validated, even if it ends up unused.
+/// - `config` — embedding dimensionality, seed, [`ComputeMode`] and dense memory
+///   budget; see [`SpectralInitConfig`].
+///
+/// # Returns
+///
+/// An `(n, n_components)` array in standard layout (C-contiguous, row-major), so
+/// `as_slice()` succeeds on it. For a fixed `Cargo.lock`, target, CPU feature set and
+/// thread configuration the result is deterministic in `config`.
 ///
 /// # Errors
 ///
-/// - [`SpectralError::InvalidGraph`] — `n == 0`, `n_components == 0`, or the graph
-///   adjacency matrix is malformed (non-square, negative weights, NaN/Inf values).
-///   **Fix:** validate your adjacency matrix before calling this function.
-/// - [`SpectralError::TooFewNodes`] — the graph has fewer nodes than `n_components`.
-///   **Fix:** reduce `n_components` or use a larger dataset.
-/// - [`SpectralError::ConvergenceFailure`] — the full 6-level solver escalation chain
-///   exhausted without converging. This should not occur on any valid graph.
-///   **Fix:** file a bug at <https://github.com/TalonT-Org/spectral-init/issues>.
+/// Inputs are validated first, in this order of precedence:
+///
+/// - [`SpectralError::InvalidParameter`] — `n_components` is 0.
+/// - [`SpectralError::NotSquare`] — `graph` is not square.
+/// - [`SpectralError::TooFewNodes`] — the graph does not have more nodes than
+///   `n_components` (this covers the empty graph).
+/// - [`SpectralError::NonFiniteWeight`] — a weight is NaN or infinite.
+/// - [`SpectralError::NegativeWeight`] — a weight is negative.
+/// - [`SpectralError::NotSymmetric`] — an entry has no matching mirror entry (relative
+///   differences up to 10⁻⁶ are tolerated).
+/// - [`SpectralError::DegreeOverflow`] — a node's summed weights overflow `f32`.
+/// - [`SpectralError::DataShapeMismatch`] — `data` does not have one row per node.
+/// - [`SpectralError::NonFiniteData`] — `data` contains NaN or an infinity.
+///
+/// The computation itself can fail with:
+///
+/// - [`SpectralError::DataRequired`] — the graph has more than `2 · n_components`
+///   connected components and `data` is `None`.
+/// - [`SpectralError::DenseBudgetExceeded`] — the iterative solvers did not converge and
+///   the dense fallback needs a matrix larger than the dense memory budget, or the graph
+///   has so many connected components that their affinity matrix exceeds it.
+/// - [`SpectralError::ConvergenceFailure`] — no solver produced eigenvectors of
+///   acceptable quality.
+/// - [`SpectralError::DegenerateEmbedding`] — the computed coordinates are all zero.
+///
+/// The function does not panic on any input. A dense matrix within the budget is
+/// allocated like any other Rust allocation: if the system cannot provide the memory,
+/// the process aborts. A panic inside the LOBPCG dependency (which it raises when an
+/// iterate turns NaN) is caught and treated as a solver failure; in a build with
+/// `panic = "abort"` it aborts the process instead.
 ///
 /// # Examples
 ///
 /// ```
-/// use sprs::CsMatI;
-/// use spectral_init::{spectral_init, SpectralInitConfig};
+/// use spectral_init::sprs::CsMatI;
+/// use spectral_init::{SpectralInitConfig, spectral_init};
 ///
 /// // 4-node path graph: 0 – 1 – 2 – 3
 /// let graph = CsMatI::<f32, u32, usize>::new(
@@ -274,116 +257,174 @@ pub enum SpectralError {
 ///     vec![1u32, 0u32, 2u32, 1u32, 3u32, 2u32],
 ///     vec![1.0f32; 6],
 /// );
-/// let coords = spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())?;
+/// let coords = spectral_init(graph.view(), None, &SpectralInitConfig::new(2))?;
 /// assert_eq!(coords.shape(), &[4, 2]);
+/// assert!(coords.is_standard_layout());
 /// # Ok::<(), spectral_init::SpectralError>(())
 /// ```
+///
+/// umap-learn falls back to a random layout when its spectral layout fails. This crate
+/// reports the failure instead, so the caller decides what to substitute:
+///
+/// ```
+/// use spectral_init::ndarray::Array2;
+/// use spectral_init::sprs::CsMatI;
+/// use spectral_init::{SpectralError, SpectralInitConfig, spectral_init};
+///
+/// /// The caller's own fallback layout (here: a fixed grid).
+/// fn fallback_init(n: usize, n_components: usize) -> Array2<f32> {
+///     Array2::from_shape_fn((n, n_components), |(i, j)| (i * (j + 1)) as f32)
+/// }
+///
+/// fn initial_coordinates(
+///     graph: &CsMatI<f32, u32, usize>,
+///     config: &SpectralInitConfig,
+/// ) -> Result<Array2<f32>, SpectralError> {
+///     match spectral_init(graph.view(), None, config) {
+///         Ok(coords) => Ok(coords),
+///         // The solvers gave up: substitute the fallback.
+///         Err(
+///             SpectralError::ConvergenceFailure { .. }
+///             | SpectralError::DenseBudgetExceeded { .. }
+///             | SpectralError::DegenerateEmbedding,
+///         ) => Ok(fallback_init(graph.rows(), config.n_components())),
+///         // Anything else is a problem with the inputs: report it.
+///         Err(other) => Err(other),
+///     }
+/// }
+///
+/// let graph = CsMatI::<f32, u32, usize>::new(
+///     (4, 4),
+///     vec![0usize, 1, 3, 5, 6],
+///     vec![1u32, 0u32, 2u32, 1u32, 3u32, 2u32],
+///     vec![1.0f32; 6],
+/// );
+/// let coords = initial_coordinates(&graph, &SpectralInitConfig::new(2))?;
+/// assert_eq!(coords.shape(), &[4, 2]);
+/// # Ok::<(), SpectralError>(())
+/// ```
 pub fn spectral_init(
-    graph: &CsMatI<f32, u32, usize>,
-    n_components: usize,
-    seed: u64,
+    graph: CsMatViewI<'_, f32, u32, usize>,
     data: Option<ArrayView2<'_, f32>>,
-    config: SpectralInitConfig,
+    config: &SpectralInitConfig,
 ) -> Result<Array2<f32>, SpectralError> {
-    // ── Input validation ──────────────────────────────────────────────────
+    let graph = validate::validate(graph, data, config)?;
     let n = graph.rows();
-    if n == 0 || n_components == 0 {
-        return Err(SpectralError::InvalidGraph(format!(
-            "spectral_init requires n > 0 and n_components > 0; got n={n}, n_components={n_components}"
-        )));
-    }
-    if n <= n_components {
-        return Err(SpectralError::TooFewNodes {
-            n,
-            dims: n_components,
-        });
-    }
+    let n_components = config.n_components();
+    let seed = config.seed();
+    let compute_mode = config.compute_mode();
+    let solver_params = solvers::SolverParams::from_config(config);
 
     // ── Component A: connectivity check ───────────────────────────────────
     let (labels, n_conn_components) = components::find_components(graph);
-    if n_conn_components > 1 {
-        let coords = crate::multi_component::embed_disconnected(
+    let coords = if n_conn_components > 1 {
+        multi_component::embed_disconnected(
             graph,
             &labels,
             n_conn_components,
             n_components,
             seed,
             data,
-            config.compute_mode,
+            compute_mode,
+            &solver_params,
+        )?
+    } else {
+        // ── Component B: degrees and inverse-square-root degrees ──────────
+        let (_degrees, sqrt_deg) = laplacian::compute_degrees(graph, compute_mode);
+        let inv_sqrt_deg: Vec<f64> = sqrt_deg
+            .iter()
+            .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
+            .collect();
+
+        // ── Component C: normalized Laplacian ─────────────────────────────
+        let lap = laplacian::build_normalized_laplacian(graph, &inv_sqrt_deg);
+
+        // ── Component D: eigensolver escalation chain ─────────────────────
+        let ((eigenvalues, eigenvectors), report) = solvers::solve_eigenproblem(
+            &lap,
+            n_components,
+            seed,
+            &sqrt_deg,
+            compute_mode,
+            &solver_params,
         )?;
-        return scaling::scale_and_add_noise(coords, seed);
-    }
+        report.log("connected graph", n);
 
-    // ── Component B: degrees and inverse-square-root degrees ──────────────
-    let (_degrees, sqrt_deg) = laplacian::compute_degrees(graph, config.compute_mode);
-    let inv_sqrt_deg: Vec<f64> = sqrt_deg
-        .iter()
-        .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
-        .collect();
+        // ── Component E: eigenvector selection ────────────────────────────
+        // The solver returns `n_components + 1` eigenpairs, as `select_eigenvectors` needs.
+        let mut selected =
+            selection::select_eigenvectors(&eigenvalues.to_vec(), &eigenvectors, n_components);
 
-    // ── Component C: normalized Laplacian ─────────────────────────────────
-    let lap = laplacian::build_normalized_laplacian(graph, &inv_sqrt_deg);
-
-    // ── Component D: eigensolver escalation chain ─────────────────────────
-    let ((eigenvalues, eigenvectors), _) =
-        solvers::solve_eigenproblem(&lap, n_components, seed, &sqrt_deg, config.compute_mode);
-
-    // ── Component E: eigenvector selection ────────────────────────────────
-    let mut selected = selection::select_eigenvectors(
-        eigenvalues
-            .as_slice_memory_order()
-            .expect("eigenvalues must be contiguous"),
-        &eigenvectors,
-        n_components,
-    );
-
-    // ── Component E.5: sign normalization ─────────────────────────────────
-    // Enforce argmax sign convention: element with largest absolute value must be positive.
-    // Ensures consistent signs across runs; verified by the sign-convention integration test.
-    scaling::normalize_signs(&mut selected);
+        // ── Component E.5: sign normalization ─────────────────────────────
+        // Enforce argmax sign convention: element with largest absolute value must be positive.
+        // Ensures consistent signs across runs; verified by the sign-convention integration test.
+        scaling::normalize_signs(&mut selected);
+        selected
+    };
 
     // ── Component F: scale and add noise ──────────────────────────────────
-    scaling::scale_and_add_noise(selected, seed)
+    let embedding = scaling::scale_and_add_noise(coords, seed)?;
+    Ok(into_standard_layout(embedding))
+}
+
+/// Returns `array` in standard (C-contiguous, row-major) layout, copying only when it is
+/// not already laid out that way.
+fn into_standard_layout(array: Array2<f32>) -> Array2<f32> {
+    if array.is_standard_layout() {
+        array
+    } else {
+        array.as_standard_layout().into_owned()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sprs::CsMatI;
 
-    #[cfg(all(feature = "testing", test))]
-    #[test]
-    fn scale_and_add_noise_pub_is_accessible() {
-        let coords =
-            ndarray::Array2::<f64>::from_shape_vec((2, 2), vec![1.0, 2.0, 3.0, 4.0]).unwrap();
-        let result = scale_and_add_noise_pub(coords, 42);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().shape(), &[2, 2]);
+    /// 4-node path graph: 0-1-2-3
+    fn path_4() -> CsMatI<f32, u32, usize> {
+        CsMatI::<f32, u32, usize>::new(
+            (4, 4),
+            vec![0usize, 1, 3, 5, 6],
+            vec![1u32, 0u32, 2u32, 1u32, 3u32, 2u32],
+            vec![1.0f32; 6],
+        )
+    }
+
+    fn config() -> SpectralInitConfig {
+        SpectralInitConfig::new(2).with_seed(42)
     }
 
     #[test]
     fn spectral_error_is_std_error() {
-        let e: &dyn std::error::Error = &SpectralError::ConvergenceFailure;
+        let e: &dyn std::error::Error = &SpectralError::ConvergenceFailure { n: 3 };
         assert!(!e.to_string().is_empty());
     }
 
     #[test]
     fn spectral_init_zero_components_returns_error() {
-        // 3-node path graph (0-1-2): valid CSR construction
-        let g = CsMatI::<f32, u32, usize>::new(
-            (3, 3),
-            vec![0usize, 1, 3, 4],
-            vec![1u32, 0u32, 2u32, 1u32],
-            vec![1.0f32; 4],
-        );
-        let result = spectral_init(&g, 0, 42, None, SpectralInitConfig::default());
-        assert!(matches!(result, Err(SpectralError::InvalidGraph(_))));
+        let result = spectral_init(path_4().view(), None, &SpectralInitConfig::new(0));
+        assert!(matches!(
+            result,
+            Err(SpectralError::InvalidParameter {
+                name: "n_components",
+                ..
+            })
+        ));
     }
 
     #[test]
     fn spectral_init_empty_graph_returns_error() {
         let g = CsMatI::<f32, u32, usize>::new((0, 0), vec![0usize], vec![], vec![]);
-        let result = spectral_init(&g, 2, 42, None, SpectralInitConfig::default());
-        assert!(matches!(result, Err(SpectralError::InvalidGraph(_))));
+        let result = spectral_init(g.view(), None, &config());
+        assert_eq!(
+            result,
+            Err(SpectralError::TooFewNodes {
+                n: 0,
+                n_components: 2
+            })
+        );
     }
 
     #[test]
@@ -395,23 +436,19 @@ mod tests {
             vec![1u32, 0u32],
             vec![1.0f32; 2],
         );
-        let result = spectral_init(&g, 3, 42, None, SpectralInitConfig::default());
-        assert!(matches!(
+        let result = spectral_init(g.view(), None, &SpectralInitConfig::new(3));
+        assert_eq!(
             result,
-            Err(SpectralError::TooFewNodes { n: 2, dims: 3 })
-        ));
+            Err(SpectralError::TooFewNodes {
+                n: 2,
+                n_components: 3
+            })
+        );
     }
 
     #[test]
     fn spectral_init_connected_graph_succeeds_and_has_correct_shape() {
-        // 4-node path graph: 0-1-2-3
-        let g = CsMatI::<f32, u32, usize>::new(
-            (4, 4),
-            vec![0usize, 1, 3, 5, 6],
-            vec![1u32, 0u32, 2u32, 1u32, 3u32, 2u32],
-            vec![1.0f32; 6],
-        );
-        let result = spectral_init(&g, 2, 42, None, SpectralInitConfig::default());
+        let result = spectral_init(path_4().view(), None, &config());
         let arr = result.expect("spectral_init on connected graph should succeed");
         assert_eq!(arr.shape(), &[4, 2]);
         for &v in arr.iter() {
@@ -421,15 +458,8 @@ mod tests {
 
     #[test]
     fn spectral_init_output_respects_sign_convention() {
-        // 4-node path graph: 0-1-2-3
-        let g = CsMatI::<f32, u32, usize>::new(
-            (4, 4),
-            vec![0usize, 1, 3, 5, 6],
-            vec![1u32, 0u32, 2u32, 1u32, 3u32, 2u32],
-            vec![1.0f32; 6],
-        );
-        let result = spectral_init(&g, 2, 42, None, SpectralInitConfig::default())
-            .expect("spectral_init should succeed");
+        let result =
+            spectral_init(path_4().view(), None, &config()).expect("spectral_init should succeed");
         // For each column, the element with the largest absolute value must be positive.
         // normalize_signs (argmax convention) runs before scale_and_add_noise.
         // Noise scale is 1e-4; scaled coords are ~10 — noise cannot flip the argmax sign.
@@ -450,23 +480,68 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn into_standard_layout_preserves_values() {
+        let fortran = ndarray::Array2::from_shape_vec(
+            ndarray::ShapeBuilder::f((3, 2)),
+            vec![1.0_f32, 3.0, 5.0, 2.0, 4.0, 6.0],
+        )
+        .unwrap();
+        assert!(!fortran.is_standard_layout());
+        assert_eq!(
+            fortran,
+            ndarray::array![[1.0_f32, 2.0], [3.0, 4.0], [5.0, 6.0]]
+        );
+
+        let standard = into_standard_layout(fortran);
+        assert!(standard.is_standard_layout());
+        assert_eq!(
+            standard.as_slice(),
+            Some(&[1.0_f32, 2.0, 3.0, 4.0, 5.0, 6.0][..])
+        );
+    }
 }
 
 #[cfg(test)]
 mod config_tests {
     use super::*;
+    use sprs::CsMatI;
 
     #[test]
-    fn default_config_is_python_compat() {
-        let cfg = SpectralInitConfig::default();
-        assert_eq!(cfg.compute_mode, ComputeMode::PythonCompat);
+    fn new_config_has_documented_defaults() {
+        let cfg = SpectralInitConfig::new(3);
+        assert_eq!(cfg.n_components(), 3);
+        assert_eq!(cfg.seed(), 0);
+        assert_eq!(cfg.compute_mode(), ComputeMode::PythonCompat);
+        assert_eq!(
+            cfg.dense_memory_budget(),
+            SpectralInitConfig::DEFAULT_DENSE_MEMORY_BUDGET
+        );
+        assert_eq!(SpectralInitConfig::DEFAULT_DENSE_MEMORY_BUDGET, 1 << 32);
+    }
+
+    #[test]
+    fn config_setters_change_only_their_field() {
+        let cfg = SpectralInitConfig::new(2)
+            .with_seed(7)
+            .with_compute_mode(ComputeMode::RustNative)
+            .with_dense_memory_budget(1024);
+        assert_eq!(cfg.n_components(), 2);
+        assert_eq!(cfg.seed(), 7);
+        assert_eq!(cfg.compute_mode(), ComputeMode::RustNative);
+        assert_eq!(cfg.dense_memory_budget(), 1024);
+        assert_ne!(cfg, SpectralInitConfig::new(2));
     }
 
     #[test]
     fn compute_mode_copy_clone_eq() {
+        fn clone_of<T: Clone>(value: &T) -> T {
+            value.clone()
+        }
         let a = ComputeMode::PythonCompat;
         let b = a; // Copy
-        let c = a.clone(); // Clone
+        let c = clone_of(&a); // Clone
         assert_eq!(a, b); // PartialEq, Eq
         assert_eq!(a, c);
         let _ = format!("{a:?}"); // Debug
@@ -500,18 +575,13 @@ mod config_tests {
             vec![1u32, 0u32, 2u32, 1u32, 3u32, 2u32],
             vec![1.0f32; 6],
         );
-        let r1 = spectral_init(&g, 2, 42, None, SpectralInitConfig::default())
-            .expect("PythonCompat should succeed");
-        let r2 = spectral_init(
-            &g,
-            2,
-            42,
-            None,
-            SpectralInitConfig {
-                compute_mode: ComputeMode::RustNative,
-            },
-        )
-        .expect("RustNative should succeed");
+        let python_compat = SpectralInitConfig::new(2).with_seed(42);
+        let rust_native = python_compat
+            .clone()
+            .with_compute_mode(ComputeMode::RustNative);
+        let r1 =
+            spectral_init(g.view(), None, &python_compat).expect("PythonCompat should succeed");
+        let r2 = spectral_init(g.view(), None, &rust_native).expect("RustNative should succeed");
         assert_eq!(r1.shape(), r2.shape());
         let n_cols = r1.shape()[1];
         for col in 0..n_cols {
@@ -526,17 +596,5 @@ mod config_tests {
                 "column {col}: |cos θ| = {cos_sim:.6}, expected ≈ 1.0 (same subspace up to sign)"
             );
         }
-    }
-
-    #[test]
-    fn spectral_init_with_default_config_compiles_and_runs() {
-        let g = CsMatI::<f32, u32, usize>::new(
-            (4, 4),
-            vec![0usize, 1, 3, 5, 6],
-            vec![1u32, 0u32, 2u32, 1u32, 3u32, 2u32],
-            vec![1.0f32; 6],
-        );
-        let result = spectral_init(&g, 2, 42, None, SpectralInitConfig::default());
-        assert!(result.is_ok());
     }
 }

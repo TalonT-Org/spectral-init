@@ -226,11 +226,11 @@ random_state=42, n_jobs=1`.
 ### Rust Export (between Phase 1 and Phase 2)
 
 The `export_rust_init` test loads each `{name}_graph.npz` from Phase 1, runs
-`spectral_init(&graph, 2, 42, None, SpectralInitConfig::default())`, and writes
+`spectral_init(graph.view(), None, &SpectralInitConfig::new(2).with_seed(42))`, and writes
 `{name}_rust_init.npy`. Parameters: `n_components=2, seed=42, PythonCompat` mode.
 
 ```bash
-cargo test --test export_rust_init --features testing -- --ignored --nocapture
+cargo test -p spectral-init-eval --test export_rust_init -- --ignored --nocapture
 ```
 
 ### Phase 2 — Comparison (`--phase compare`)

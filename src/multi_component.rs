@@ -1,25 +1,32 @@
 use ndarray::{Array2, ArrayView1, ArrayView2};
-use sprs::{CsMatI, TriMat};
+use sprs::{CsMatI, CsMatViewI, TriMat};
 
 use crate::{
     ComputeMode, SpectralError,
     laplacian::{build_normalized_laplacian, compute_degrees},
     scaling,
     selection::select_eigenvectors,
-    solvers::solve_eigenproblem,
+    solvers::{SolverParams, check_dense_budget, solve_eigenproblem},
 };
 
 /// Computes spectral embedding for disconnected graphs.
 /// Each component is embedded independently; component embeddings are aligned
 /// into a common coordinate frame via centroid meta-embedding.
-pub(crate) fn embed_disconnected(
-    graph: &CsMatI<f32, u32, usize>,
+///
+/// `graph` must be a square, symmetric CSR matrix, `component_labels` its component
+/// labelling with `n_conn_components` distinct labels, and `data`, when given, must have
+/// one row per node. `data` is read only when there are more than `2 * n_embedding_dims`
+/// components; without it that case returns [`SpectralError::DataRequired`].
+#[allow(clippy::too_many_arguments)]
+pub fn embed_disconnected(
+    graph: CsMatViewI<'_, f32, u32, usize>,
     component_labels: &[usize],
     n_conn_components: usize,
     n_embedding_dims: usize,
     seed: u64,
     data: Option<ArrayView2<'_, f32>>,
     compute_mode: ComputeMode,
+    params: &SolverParams,
 ) -> Result<Array2<f64>, SpectralError> {
     let n = graph.rows();
 
@@ -36,13 +43,13 @@ pub(crate) fn embed_disconnected(
                 n_embedding_dims,
                 seed,
                 compute_mode,
+                params,
             )?,
             None => {
-                return Err(SpectralError::InvalidGraph(
-                    "data is required for spectral meta-embedding when \
-                     n_conn_components > 2 * n_embedding_dims"
-                        .into(),
-                ));
+                return Err(SpectralError::DataRequired {
+                    connected_components: n_conn_components,
+                    n_components: n_embedding_dims,
+                });
             }
         }
     } else {
@@ -63,6 +70,7 @@ pub(crate) fn embed_disconnected(
             &meta_pos,
             seed,
             compute_mode,
+            params,
         )?;
         for (local_i, &orig_i) in members.iter().enumerate() {
             result.row_mut(orig_i).assign(&comp_coords.row(local_i));
@@ -79,6 +87,7 @@ pub(crate) fn embed_disconnected(
 fn collect_component_members(labels: &[usize], n_conn_components: usize) -> Vec<Vec<usize>> {
     let mut members: Vec<Vec<usize>> = vec![Vec::new(); n_conn_components];
     for (node, &label) in labels.iter().enumerate() {
+        // Labels come from `find_components`, which numbers components `0..n_conn_components`.
         members[label].push(node);
     }
     members
@@ -86,8 +95,11 @@ fn collect_component_members(labels: &[usize], n_conn_components: usize) -> Vec<
 
 /// Extracts the subgraph induced by `node_indices` from the full graph,
 /// re-indexing nodes to `0..node_indices.len()`.
-fn extract_subgraph(
-    graph: &CsMatI<f32, u32, usize>,
+///
+/// `graph` must be in CSR storage and `node_indices` distinct, ascending and below
+/// `graph.rows()`; an index at or above it panics.
+pub fn extract_subgraph(
+    graph: CsMatViewI<'_, f32, u32, usize>,
     node_indices: &[usize],
 ) -> CsMatI<f32, u32, usize> {
     let n_global = graph.rows();
@@ -104,23 +116,26 @@ fn extract_subgraph(
     let mut data: Vec<f32> = Vec::new();
 
     for (local_row, &orig_row) in node_indices.iter().enumerate() {
-        debug_assert!(
-            orig_row < n_global,
-            "node index {orig_row} out of bounds (graph has {n_global} rows)"
-        );
-        if let Some(row_vec) = graph.outer_view(orig_row) {
-            for (orig_col, &weight) in row_vec.iter() {
-                if lookup[orig_col] != usize::MAX {
-                    let local_col = u32::try_from(lookup[orig_col])
-                        .expect("local index overflows u32; component size exceeds u32::MAX");
-                    indices.push(local_col);
-                    data.push(weight);
-                }
+        // Every member is below the node count: `lookup[orig] = local` above would
+        // already have panicked otherwise.
+        let row_vec = graph
+            .outer_view(orig_row)
+            .expect("member index is below the node count");
+        for (orig_col, &weight) in row_vec.iter() {
+            if lookup[orig_col] != usize::MAX {
+                // A member's local index never exceeds its original index, and
+                // original column indices are stored as u32.
+                let local_col = u32::try_from(lookup[orig_col])
+                    .expect("local index overflows u32; component size exceeds u32::MAX");
+                indices.push(local_col);
+                data.push(weight);
             }
         }
         indptr[local_row + 1] = indices.len();
     }
 
+    // `node_indices` is ascending, so the re-indexed columns of each row stay sorted and
+    // the structure is valid CSR.
     CsMatI::<f32, u32, usize>::new((n_comp, n_comp), indptr, indices, data)
 }
 
@@ -149,8 +164,12 @@ fn spectral_meta_embedding(
     n_embedding_dims: usize,
     seed: u64,
     compute_mode: ComputeMode,
+    params: &SolverParams,
 ) -> Result<Array2<f64>, SpectralError> {
     let n_features = data.ncols();
+
+    // The centroid affinity matrix is dense: one entry per pair of components.
+    check_dense_budget(n_comp, n_comp, params.dense_memory_budget)?;
 
     // Compute per-component centroids in f64
     let mut centroids = Array2::<f64>::zeros((n_comp, n_features));
@@ -206,23 +225,21 @@ fn spectral_meta_embedding(
     let centroid_laplacian = tri.to_csr();
 
     let sqrt_deg_meta = ndarray::Array1::from_iter(degrees.iter().map(|&d| d.sqrt()));
-    let ((evals, evecs), _) = solve_eigenproblem(
+    let ((evals, evecs), report) = solve_eigenproblem(
         &centroid_laplacian,
         n_embedding_dims,
         seed,
         &sqrt_deg_meta,
         compute_mode,
-    );
-    let evals_slice = evals
-        .as_slice_memory_order()
-        .ok_or(SpectralError::ConvergenceFailure)?;
-    let selected = select_eigenvectors(evals_slice, &evecs, n_embedding_dims);
+        params,
+    )?;
+    report.log("component meta-embedding", n_comp);
+    // The solver returns `n_embedding_dims + 1` eigenpairs, as `select_eigenvectors` needs.
+    let selected = select_eigenvectors(&evals.to_vec(), &evecs, n_embedding_dims);
 
     let max_abs = selected.fold(0.0_f64, |a, &x| a.max(x.abs()));
     if max_abs == 0.0 {
-        return Err(SpectralError::InvalidGraph(
-            "spectral meta-embedding produced all-zero result".into(),
-        ));
+        return Err(SpectralError::DegenerateEmbedding);
     }
     Ok(selected / max_abs)
 }
@@ -266,14 +283,16 @@ fn compute_data_range(meta_embedding: &Array2<f64>) -> Vec<f64> {
 /// translated to its position in meta-embedding space.
 ///
 /// Tiny components (`size < 2 * n_embedding_dims`) are placed directly at `meta_pos`.
+#[allow(clippy::too_many_arguments)]
 fn embed_single_component(
-    graph: &CsMatI<f32, u32, usize>,
+    graph: CsMatViewI<'_, f32, u32, usize>,
     members: &[usize],
     n_embedding_dims: usize,
     data_range: f64,
     meta_pos: &ArrayView1<f64>,
     seed: u64,
     compute_mode: ComputeMode,
+    params: &SolverParams,
 ) -> Result<Array2<f64>, SpectralError> {
     let size = members.len();
 
@@ -290,18 +309,23 @@ fn embed_single_component(
 
     // Large component: run the standard spectral pipeline on the subgraph
     let sub_graph = extract_subgraph(graph, members);
-    let (_degrees, sqrt_deg) = compute_degrees(&sub_graph, compute_mode);
+    let (_degrees, sqrt_deg) = compute_degrees(sub_graph.view(), compute_mode);
     let inv_sqrt_deg: Vec<f64> = sqrt_deg
         .iter()
         .map(|&s| if s > 0.0 { 1.0 / s } else { 0.0 })
         .collect();
-    let laplacian = build_normalized_laplacian(&sub_graph, &inv_sqrt_deg);
-    let ((evals, evecs), _) =
-        solve_eigenproblem(&laplacian, n_embedding_dims, seed, &sqrt_deg, compute_mode);
-    let evals_slice = evals
-        .as_slice_memory_order()
-        .ok_or(SpectralError::ConvergenceFailure)?;
-    let mut coords = select_eigenvectors(evals_slice, &evecs, n_embedding_dims);
+    let laplacian = build_normalized_laplacian(sub_graph.view(), &inv_sqrt_deg);
+    let ((evals, evecs), report) = solve_eigenproblem(
+        &laplacian,
+        n_embedding_dims,
+        seed,
+        &sqrt_deg,
+        compute_mode,
+        params,
+    )?;
+    report.log("component", size);
+    // The solver returns `n_embedding_dims + 1` eigenpairs, as `select_eigenvectors` needs.
+    let mut coords = select_eigenvectors(&evals.to_vec(), &evecs, n_embedding_dims);
     scaling::normalize_signs(&mut coords);
 
     // Scale to data_range
@@ -369,7 +393,7 @@ mod tests {
         let g = make_two_pair_graph();
 
         // Extract component {0, 1}
-        let sub01 = extract_subgraph(&g, &[0, 1]);
+        let sub01 = extract_subgraph(g.view(), &[0, 1]);
         assert_eq!(sub01.rows(), 2);
         assert_eq!(sub01.cols(), 2);
         assert_eq!(sub01.nnz(), 2, "should have edges (0,1) and (1,0)");
@@ -378,7 +402,7 @@ mod tests {
         }
 
         // Extract component {2, 3} – re-indexed to {0, 1}
-        let sub23 = extract_subgraph(&g, &[2, 3]);
+        let sub23 = extract_subgraph(g.view(), &[2, 3]);
         assert_eq!(sub23.rows(), 2);
         assert_eq!(sub23.cols(), 2);
         assert_eq!(sub23.nnz(), 2);
@@ -388,7 +412,7 @@ mod tests {
     fn test_extract_subgraph_single_node() {
         let g = make_two_pair_graph();
         // Node 1 has an edge to node 0, but node 0 is not in this subgraph
-        let sub = extract_subgraph(&g, &[1]);
+        let sub = extract_subgraph(g.view(), &[1]);
         assert_eq!(sub.rows(), 1);
         assert_eq!(sub.cols(), 1);
         assert_eq!(sub.nnz(), 0, "single-node subgraph should have no edges");
@@ -435,7 +459,16 @@ mod tests {
     fn test_embed_disconnected_two_pairs_shape_and_finite() {
         let g = make_two_pair_graph();
         let labels = vec![0usize, 0, 1, 1];
-        let result = embed_disconnected(&g, &labels, 2, 2, 42, None, ComputeMode::PythonCompat);
+        let result = embed_disconnected(
+            g.view(),
+            &labels,
+            2,
+            2,
+            42,
+            None,
+            ComputeMode::PythonCompat,
+            &SolverParams::default(),
+        );
         let arr = result.expect("embed_disconnected should succeed");
         assert_eq!(arr.shape(), &[4, 2]);
         for &v in arr.iter() {
@@ -450,7 +483,16 @@ mod tests {
         // Both size=1 < 2*dim=4 → placed at meta centroid
         let g = make_empty_pair_graph();
         let labels = vec![0usize, 1];
-        let result = embed_disconnected(&g, &labels, 2, 2, 42, None, ComputeMode::PythonCompat);
+        let result = embed_disconnected(
+            g.view(),
+            &labels,
+            2,
+            2,
+            42,
+            None,
+            ComputeMode::PythonCompat,
+            &SolverParams::default(),
+        );
         let arr = result.expect("embed_disconnected should succeed for tiny components");
         assert_eq!(arr.shape(), &[2, 2]);
         let eps = 1e-10;
@@ -485,7 +527,16 @@ mod tests {
         // strictly greater than the max intra-component spread (≤ data_range = sqrt(2)/2).
         let g = make_3_clique_graph();
         let labels: Vec<usize> = (0..12).map(|i| i / 4).collect();
-        let result = embed_disconnected(&g, &labels, 3, 2, 42, None, ComputeMode::PythonCompat);
+        let result = embed_disconnected(
+            g.view(),
+            &labels,
+            3,
+            2,
+            42,
+            None,
+            ComputeMode::PythonCompat,
+            &SolverParams::default(),
+        );
         let arr = result.expect("embed_disconnected on 3-clique graph should succeed");
         assert_eq!(arr.shape(), &[12, 2]);
 

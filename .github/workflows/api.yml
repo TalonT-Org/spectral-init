@@ -1,0 +1,41 @@
+name: Public API
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: ["**"]
+  merge_group:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  public-api:
+    name: public API snapshot
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The listing depends on the nightly toolchain and on the cargo-public-api
+      # version, so both are pinned. cargo-public-api uses the active toolchain when it
+      # is a nightly one.
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: nightly-2026-08-10
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+
+      - name: Install cargo-public-api
+        run: cargo install --locked cargo-public-api --version 0.52.0
+
+      - name: Compare the public API with .github/api-snapshot.txt
+        run: .github/scripts/check-api.sh

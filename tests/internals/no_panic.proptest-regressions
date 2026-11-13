@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 14d88e5a9f3ac93b424b7c7d642786bdc8d228d8c1e0ae6a9bb6a74247a7a8c7 # shrinks to n = 14, n_components = 4; NaN inside linfa LOBPCG on aarch64

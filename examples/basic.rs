@@ -5,12 +5,13 @@
 //!
 //! Run with: cargo run --example basic
 
+use spectral_init::sprs::{CsMatI, TriMatI};
 use spectral_init::{SpectralInitConfig, spectral_init};
-use sprs::{CsMatI, TriMatI};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Build a 10-node ring graph: every node is connected to its two neighbours.
-    // spectral_init expects CsMatI<f32, u32, usize> — the same type as umap_rs::Umap::graph().
+    // spectral_init takes a view of a CsMatI<f32, u32, usize> — the type that
+    // umap_rs::LearnedManifold::graph() returns.
     let n = 10usize;
     let mut tri: TriMatI<f32, u32> = TriMatI::new((n, n));
     for i in 0..n {
@@ -20,10 +21,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let graph: CsMatI<f32, u32, usize> = tri.to_csr();
 
-    // SpectralInitConfig::default() uses ComputeMode::PythonCompat, which matches
-    // Python UMAP's initialization behaviour exactly.
-    let config = SpectralInitConfig::default();
-    let embedding = spectral_init(&graph, 2, 42, None, config)?;
+    // Two embedding dimensions, seed 42. The default compute mode is
+    // ComputeMode::PythonCompat, which follows umap-learn's spectral layout.
+    let config = SpectralInitConfig::new(2).with_seed(42);
+    let embedding = spectral_init(graph.view(), None, &config)?;
 
     println!("Embedding shape: {:?}", embedding.shape());
     println!("First few coordinates:");

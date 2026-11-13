@@ -3,52 +3,73 @@ name = "spectral-init"
 version = "0.1.0"
 edition = "2024"
 description = "Spectral initialization for UMAP embeddings"
-license = "MIT"
+license = "MIT OR Apache-2.0"
 repository = "https://github.com/TalonT-Org/spectral-init"
 readme = "README.md"
-documentation = "https://docs.rs/spectral-init"
-rust-version = "1.85"
-keywords = ["umap", "dimensionality-reduction", "spectral", "eigenvectors", "embeddings"]
+rust-version = "1.88"
+keywords = ["umap", "spectral", "laplacian", "eigenvectors", "embedding"]
 categories = ["science", "mathematics", "algorithms"]
+include = [
+    "/src/**",
+    "/examples/**",
+    "/docs/katex-header.html",
+    "/docs/umap-rs-integration.md",
+    "/docs/user-guide.md",
+    "/README.md",
+    "/CHANGELOG.md",
+    "/LICENSE-APACHE",
+    "/LICENSE-MIT",
+]
 
 [package.metadata.docs.rs]
-all-features = true
 rustdoc-args = ["--html-in-header", "docs/katex-header.html"]
 
+[workspace]
+members = ["trustworthiness", "eval"]
+
 [features]
-# Expose internal solver functions for integration tests.
-# Not part of the stable public API.
-testing = ["dep:serde"]
-profiling = []
-# Enable CLI binary (trustworthiness) and .npy I/O support.
-cli = ["dep:ndarray-npy", "dep:pico-args", "dep:serde_json", "dep:libc"]
+# Exposes `spectral_init::__internal` to this crate's own integration tests and to
+# the `eval` research harness. Exempt from semver; not for downstream use.
+__internal = []
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+missing_docs = "deny"
+
+[lints.clippy]
+undocumented_unsafe_blocks = "deny"
+
+[lints.rustdoc]
+broken_intra_doc_links = "deny"
 
 [dependencies]
-serde = { version = "1", features = ["derive"], optional = true }
-ndarray-npy = { version = "0.10", optional = true }
-pico-args = { version = "0.5", optional = true }
-sprs = "0.11"
+sprs = { version = "0.11", default-features = false }
 ndarray = "0.17"
-faer = "0.24"
+# `rayon` keeps faer's parallel dense solvers; `sparse-linalg` provides the sparse Cholesky.
+faer = { version = "0.24", default-features = false, features = ["std", "rayon", "sparse-linalg"] }
 rand = "0.9"
+rand_chacha = "0.9"       # the named generator behind the reproducibility contract
 rand_distr = "0.5"
-rayon = "1"
 thiserror = "2"
 linfa-linalg = "0.2"        # pure-Rust LOBPCG; no LAPACK backend required
 log = "0.4"                 # logging facade for library diagnostics
 ndarray16 = { package = "ndarray", version = "0.16" }  # linfa-linalg uses ndarray 0.16; alias for bridging
-serde_json = { version = "1", optional = true }
-libc = { version = "0.2", optional = true }
 
 [dev-dependencies]
 ndarray-npy = "0.10"
 approx = "0.5"
 serde_json = "1"
 humantime = "2"
-criterion = { version = "0.5", features = ["html_reports"] }
 proptest = "1"
+umap-rs = "0.4.5"           # the integration the `umap_rs` example and test compile against
 
 [profile.dev.package."*"]
+opt-level = 2
+
+[profile.dev.package.trustworthiness]
+opt-level = 2
+
+[profile.dev.package.spectral-init-eval]
 opt-level = 2
 
 [profile.test.package.spectral-init]
@@ -56,162 +77,11 @@ opt-level = 2
 debug-assertions = true
 overflow-checks = true
 
-[[test]]
-name = "test_comp_e_selection"
-path = "tests/integration/test_comp_e_selection.rs"
+[profile.test.package.trustworthiness]
+opt-level = 2
 
-[[test]]
-name = "test_comp_a_degrees"
-path = "tests/integration/test_comp_a_degrees.rs"
-
-[[test]]
-name = "test_comp_b_laplacian"
-path = "tests/integration/test_comp_b_laplacian.rs"
-
-[[test]]
-name = "test_comp_c_components"
-path = "tests/integration/test_comp_c_components.rs"
-required-features = ["testing"]
-
-[[test]]
-name = "test_comp_d_dense_evd"
-path = "tests/integration/test_comp_d_dense_evd.rs"
-
-[[test]]
-name = "test_comp_f_lobpcg"
-path = "tests/integration/test_comp_f_lobpcg.rs"
-
-[[test]]
-name = "test_comp_d_rsvd"
-path = "tests/integration/test_comp_d_rsvd.rs"
-required-features = ["testing"]
-
-[[test]]
-name = "test_pipeline"
-path = "tests/integration/test_pipeline.rs"
-
-[[test]]
-name = "test_e2e_validation"
-path = "tests/integration/test_e2e_validation.rs"
-
-[[test]]
-name = "test_adversarial_graphs"
-path = "tests/integration/test_adversarial_graphs.rs"
-required-features = ["testing"]
-
-[[test]]
-name = "test_accuracy_report"
-path = "tests/integration/test_accuracy_report.rs"
-required-features = ["testing"]
-
-[[test]]
-name = "test_comp_g_sinv"
-path = "tests/integration/test_comp_g_sinv.rs"
-required-features = ["testing"]
-
-[[test]]
-name = "test_warm_restart_benefit"
-path = "tests/integration/test_warm_restart_benefit.rs"
-required-features = ["testing"]
-
-[[test]]
-name = "test_rq3_threshold"
-path = "tests/integration/test_rq3_threshold.rs"
-required-features = ["testing"]
-
-[[test]]
-name = "test_rq4_property_tests"
-path = "tests/integration/test_rq4_property_tests.rs"
-required-features = ["testing"]
-
-[[test]]
-name = "test_exp_rsvd_sweep"
-path = "tests/integration/test_exp_rsvd_sweep.rs"
-required-features = ["testing"]
-
-[[test]]
-name = "test_exp_rsvd_nbiter_sweep"
-path = "tests/integration/test_exp_rsvd_nbiter_sweep.rs"
-required-features = ["testing"]
-
-[[test]]
-name = "test_solver_invariants"
-path = "tests/integration/test_solver_invariants.rs"
-required-features = ["testing"]
-
-[[test]]
-name = "export_rust_init"
-path = "tests/visual_eval/export_rust_init.rs"
-required-features = ["testing"]
-
-[[test]]
-name = "export_merfish_init"
-path = "tests/visual_eval/export_merfish_init.rs"
-required-features = ["testing"]
-
-[[test]]
-name = "test_simd_parity"
-path = "tests/integration/test_simd_parity.rs"
-required-features = ["testing"]
-
-[[test]]
-name = "test_metrics_assess"
-path = "tests/integration/test_metrics_assess.rs"
-required-features = ["testing"]
-
-[[test]]
-name = "test_psd_contract_enforced"
-path = "tests/integration/test_psd_contract_enforced.rs"
-required-features = ["testing"]
-
-[[test]]
-name = "test_simd_lobpcg_parity"
-path = "tests/integration/test_simd_lobpcg_parity.rs"
-required-features = ["testing"]
-
-[[bin]]
-name = "trustworthiness"
-path = "src/bin/trustworthiness.rs"
-required-features = ["cli"]
-
-[[bin]]
-name = "tw_profiler"
-path = "src/bin/tw_profiler.rs"
-required-features = ["cli"]
-
-[[test]]
-name = "test_trustworthiness"
-path = "tests/integration/test_trustworthiness.rs"
-required-features = ["testing"]
-
-[[test]]
-name = "test_tw_profiler"
-path = "tests/integration/test_tw_profiler.rs"
-required-features = ["cli"]
-
-[[bench]]
-name = "spectral_bench"
-harness = false
-required-features = ["testing"]
-
-[[bench]]
-name = "simd_spmv_exp"
-harness = false
-required-features = ["testing"]
-
-[[bench]]
-name = "lobpcg_bench"
-harness = false
-required-features = ["testing"]
-
-[[bench]]
-name = "trustworthiness_bench"
-harness = false
-required-features = ["testing"]
-
-[[bench]]
-name = "dist_sq_bench"
-harness = false
+[profile.test.package.spectral-init-eval]
+opt-level = 2
 
 [[example]]
 name = "basic"
@@ -224,3 +94,7 @@ path = "examples/compute_modes.rs"
 [[example]]
 name = "from_adjacency_list"
 path = "examples/from_adjacency_list.rs"
+
+[[example]]
+name = "umap_rs"
+path = "examples/umap_rs.rs"

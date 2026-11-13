@@ -1,0 +1,103 @@
+pub mod spectral_init
+pub use spectral_init::ndarray
+pub use spectral_init::sprs
+#[non_exhaustive] pub enum spectral_init::ComputeMode
+pub spectral_init::ComputeMode::PythonCompat
+pub spectral_init::ComputeMode::RustNative
+impl core::clone::Clone for spectral_init::ComputeMode
+pub fn spectral_init::ComputeMode::clone(&self) -> spectral_init::ComputeMode
+impl core::cmp::Eq for spectral_init::ComputeMode
+impl core::cmp::PartialEq for spectral_init::ComputeMode
+pub fn spectral_init::ComputeMode::eq(&self, &spectral_init::ComputeMode) -> bool
+impl core::default::Default for spectral_init::ComputeMode
+pub fn spectral_init::ComputeMode::default() -> spectral_init::ComputeMode
+impl core::fmt::Debug for spectral_init::ComputeMode
+pub fn spectral_init::ComputeMode::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for spectral_init::ComputeMode
+impl core::marker::StructuralPartialEq for spectral_init::ComputeMode
+impl core::marker::Freeze for spectral_init::ComputeMode
+impl core::marker::Send for spectral_init::ComputeMode
+impl core::marker::Sync for spectral_init::ComputeMode
+impl core::marker::Unpin for spectral_init::ComputeMode
+impl core::marker::UnsafeUnpin for spectral_init::ComputeMode
+impl core::panic::unwind_safe::RefUnwindSafe for spectral_init::ComputeMode
+impl core::panic::unwind_safe::UnwindSafe for spectral_init::ComputeMode
+#[non_exhaustive] pub enum spectral_init::SpectralError
+#[non_exhaustive] pub spectral_init::SpectralError::ConvergenceFailure
+pub spectral_init::SpectralError::ConvergenceFailure::n: usize
+#[non_exhaustive] pub spectral_init::SpectralError::DataRequired
+pub spectral_init::SpectralError::DataRequired::connected_components: usize
+pub spectral_init::SpectralError::DataRequired::n_components: usize
+#[non_exhaustive] pub spectral_init::SpectralError::DataShapeMismatch
+pub spectral_init::SpectralError::DataShapeMismatch::actual_rows: usize
+pub spectral_init::SpectralError::DataShapeMismatch::expected_rows: usize
+pub spectral_init::SpectralError::DegenerateEmbedding
+#[non_exhaustive] pub spectral_init::SpectralError::DegreeOverflow
+pub spectral_init::SpectralError::DegreeOverflow::node: usize
+#[non_exhaustive] pub spectral_init::SpectralError::DenseBudgetExceeded
+pub spectral_init::SpectralError::DenseBudgetExceeded::budget_bytes: u64
+pub spectral_init::SpectralError::DenseBudgetExceeded::required_bytes: u64
+#[non_exhaustive] pub spectral_init::SpectralError::InvalidParameter
+pub spectral_init::SpectralError::InvalidParameter::name: &'static str
+pub spectral_init::SpectralError::InvalidParameter::reason: &'static str
+#[non_exhaustive] pub spectral_init::SpectralError::NegativeWeight
+pub spectral_init::SpectralError::NegativeWeight::col: usize
+pub spectral_init::SpectralError::NegativeWeight::row: usize
+#[non_exhaustive] pub spectral_init::SpectralError::NonFiniteData
+pub spectral_init::SpectralError::NonFiniteData::col: usize
+pub spectral_init::SpectralError::NonFiniteData::row: usize
+#[non_exhaustive] pub spectral_init::SpectralError::NonFiniteWeight
+pub spectral_init::SpectralError::NonFiniteWeight::col: usize
+pub spectral_init::SpectralError::NonFiniteWeight::row: usize
+#[non_exhaustive] pub spectral_init::SpectralError::NotSquare
+pub spectral_init::SpectralError::NotSquare::cols: usize
+pub spectral_init::SpectralError::NotSquare::rows: usize
+#[non_exhaustive] pub spectral_init::SpectralError::NotSymmetric
+pub spectral_init::SpectralError::NotSymmetric::col: usize
+pub spectral_init::SpectralError::NotSymmetric::row: usize
+#[non_exhaustive] pub spectral_init::SpectralError::TooFewNodes
+pub spectral_init::SpectralError::TooFewNodes::n: usize
+pub spectral_init::SpectralError::TooFewNodes::n_components: usize
+impl core::clone::Clone for spectral_init::SpectralError
+pub fn spectral_init::SpectralError::clone(&self) -> spectral_init::SpectralError
+impl core::cmp::PartialEq for spectral_init::SpectralError
+pub fn spectral_init::SpectralError::eq(&self, &spectral_init::SpectralError) -> bool
+impl core::error::Error for spectral_init::SpectralError
+impl core::fmt::Debug for spectral_init::SpectralError
+pub fn spectral_init::SpectralError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for spectral_init::SpectralError
+pub fn spectral_init::SpectralError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for spectral_init::SpectralError
+impl core::marker::Freeze for spectral_init::SpectralError
+impl core::marker::Send for spectral_init::SpectralError
+impl core::marker::Sync for spectral_init::SpectralError
+impl core::marker::Unpin for spectral_init::SpectralError
+impl core::marker::UnsafeUnpin for spectral_init::SpectralError
+impl core::panic::unwind_safe::RefUnwindSafe for spectral_init::SpectralError
+impl core::panic::unwind_safe::UnwindSafe for spectral_init::SpectralError
+pub struct spectral_init::SpectralInitConfig
+impl spectral_init::SpectralInitConfig
+pub const spectral_init::SpectralInitConfig::DEFAULT_DENSE_MEMORY_BUDGET: u64
+pub fn spectral_init::SpectralInitConfig::compute_mode(&self) -> spectral_init::ComputeMode
+pub fn spectral_init::SpectralInitConfig::dense_memory_budget(&self) -> u64
+pub fn spectral_init::SpectralInitConfig::n_components(&self) -> usize
+pub fn spectral_init::SpectralInitConfig::new(usize) -> Self
+pub fn spectral_init::SpectralInitConfig::seed(&self) -> u64
+pub fn spectral_init::SpectralInitConfig::with_compute_mode(self, spectral_init::ComputeMode) -> Self
+pub fn spectral_init::SpectralInitConfig::with_dense_memory_budget(self, u64) -> Self
+pub fn spectral_init::SpectralInitConfig::with_seed(self, u64) -> Self
+impl core::clone::Clone for spectral_init::SpectralInitConfig
+pub fn spectral_init::SpectralInitConfig::clone(&self) -> spectral_init::SpectralInitConfig
+impl core::cmp::PartialEq for spectral_init::SpectralInitConfig
+pub fn spectral_init::SpectralInitConfig::eq(&self, &spectral_init::SpectralInitConfig) -> bool
+impl core::fmt::Debug for spectral_init::SpectralInitConfig
+pub fn spectral_init::SpectralInitConfig::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for spectral_init::SpectralInitConfig
+impl core::marker::Freeze for spectral_init::SpectralInitConfig
+impl core::marker::Send for spectral_init::SpectralInitConfig
+impl core::marker::Sync for spectral_init::SpectralInitConfig
+impl core::marker::Unpin for spectral_init::SpectralInitConfig
+impl core::marker::UnsafeUnpin for spectral_init::SpectralInitConfig
+impl core::panic::unwind_safe::RefUnwindSafe for spectral_init::SpectralInitConfig
+impl core::panic::unwind_safe::UnwindSafe for spectral_init::SpectralInitConfig
+pub fn spectral_init::spectral_init(sprs::sparse::CsMatViewI<'_, f32, u32, usize>, core::option::Option<ndarray::aliases::ArrayView2<'_, f32>>, &spectral_init::SpectralInitConfig) -> core::result::Result<ndarray::aliases::Array2<f32>, spectral_init::SpectralError>

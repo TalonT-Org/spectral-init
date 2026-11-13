@@ -415,3 +415,36 @@ def test_suffix_parameter_step5a():
         generate_step5a_prune(symmetric, outdir, n, suffix="_exact")
         assert (outdir / "step5a_pruned_exact.npz").exists()
         assert not (outdir / "step5a_pruned.npz").exists()
+
+
+def test_selfloop_fixture(tmp_path: Path):
+    """The self-loop mini-fixture keeps diagonal weights in degree and Laplacian."""
+    from generate_fixtures import generate_selfloop_fixture
+
+    generate_selfloop_fixture(tmp_path)
+    d = tmp_path / "selfloop"
+
+    graph = scipy.sparse.load_npz(d / "graph.npz")
+    assert graph.dtype == np.float32
+    assert (graph != graph.T).nnz == 0, "graph must be exactly symmetric"
+    diagonal = graph.diagonal().astype(np.float64)
+    assert (diagonal > 0).sum() >= 3, "fixture needs several self-loops"
+
+    degrees = np.load(d / "comp_a_degrees.npz")["degrees"]
+    L = scipy.sparse.load_npz(d / "comp_b_laplacian.npz").toarray()
+    np.testing.assert_allclose(np.diag(L), 1.0 - diagonal / degrees, atol=1e-12)
+    np.testing.assert_allclose(L @ np.sqrt(degrees), 0.0, atol=1e-12)
+
+    eig = np.load(d / "comp_d_eigensolver.npz")
+    assert eig["eigenvalues"].shape == (3,)
+    assert np.load(d / "full_spectral.npz")["embedding"].shape == (graph.shape[0], 2)
+
+
+def test_selfloop_fixture_is_deterministic(tmp_path: Path):
+    from generate_fixtures import generate_selfloop_fixture
+
+    first, second = tmp_path / "a", tmp_path / "b"
+    generate_selfloop_fixture(first)
+    generate_selfloop_fixture(second)
+    for name in ["graph.npz", "comp_a_degrees.npz", "comp_b_laplacian.npz"]:
+        assert (first / "selfloop" / name).read_bytes() == (second / "selfloop" / name).read_bytes()

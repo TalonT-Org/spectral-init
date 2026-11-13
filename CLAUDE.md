@@ -6,9 +6,9 @@ Mandatory instructions for AI-assisted development in this repository.
 
 A standalone Rust crate that implements spectral initialization for UMAP embeddings. It computes Laplacian eigenvectors of the fuzzy k-NN graph to provide globally-aware starting coordinates for SGD optimization — the key factor that makes Python UMAP produce superior embeddings compared to random or PCA initialization.
 
-Designed to integrate with `umap-rs` (wilsonzlin) via its public `graph()` accessor, but usable by any Rust UMAP implementation that provides a sparse adjacency matrix.
+Designed to integrate with `umap-rs` (wilsonzlin) via its public `LearnedManifold::graph()` accessor, but usable by any Rust UMAP implementation that provides a sparse adjacency matrix.
 
-**Core algorithm:** Build the symmetric normalized Laplacian `L = I - D^{-1/2} W D^{-1/2}`, compute the smallest non-trivial eigenvectors via a solver escalation chain (dense EVD → LOBPCG → LOBPCG+regularization → randomized SVD → forced dense EVD), scale and add noise. No random fallback, ever.
+**Core algorithm:** Build the symmetric normalized Laplacian `L = I - D^{-1/2} W D^{-1/2}`, compute the smallest non-trivial eigenvectors via a six-level solver escalation chain (dense EVD → LOBPCG → shift-invert LOBPCG → LOBPCG+regularization → randomized SVD → dense EVD for any size within the dense memory budget), scale and add noise. When no level produces an acceptable result within the budget, return an error. No random fallback, ever.
 
 ## **2. General Principles**
 
@@ -43,7 +43,7 @@ Designed to integrate with `umap-rs` (wilsonzlin) via its public `graph()` acces
 
 ## **4. Testing Guidelines**
 
-  * **Run tests**: `cargo test` from the project root.
+  * **Run tests**: `cargo nextest run --workspace --all-features` from the project root. `cargo test` alone runs only the root package's default-feature tests.
   * **Always run tests at end of task**
   * **Add tests for new features**
   * **Follow existing test patterns** — avoid test code redundancy
@@ -51,36 +51,58 @@ Designed to integrate with `umap-rs` (wilsonzlin) via its public `graph()` acces
 
 ## **5. Architecture**
 
+The repository is a Cargo workspace. The root package is the published `spectral-init` crate; `trustworthiness/` and `eval/` are unpublished members.
+
 ```
-src/
-├── lib.rs               # Public API: spectral_init()
+src/                      # The published crate
+├── lib.rs                # Public API: spectral_init(); hidden `__internal` re-exports
+├── config.rs             # SpectralInitConfig, ComputeMode
+├── error.rs              # SpectralError
+├── validate.rs           # Boundary validation of config, graph and data
 ├── components.rs         # Connected components (BFS on sparse graph)
-├── laplacian.rs          # Symmetric normalized Laplacian construction
+├── laplacian.rs          # Degrees and symmetric normalized Laplacian construction
+├── operator.rs           # LinearOperator; scalar and AVX2 sparse matrix-vector product
+├── selection.rs          # Selection of the non-trivial eigenvectors
 ├── solvers/              # Eigensolver implementations
-│   ├── mod.rs            # Solver escalation chain
-│   ├── dense.rs          # Dense EVD via faer (small n)
-│   ├── lobpcg.rs         # LOBPCG iterative solver
-│   └── rsvd.rs           # Randomized SVD via 2I-L trick
+│   ├── mod.rs            # Solver escalation chain, SolverParams, dense memory budget
+│   ├── quality.rs        # Residual thresholds and checks
+│   ├── dense.rs          # Dense EVD via faer (Levels 0 and 5)
+│   ├── lobpcg.rs         # LOBPCG iterative solver (Levels 1 and 3)
+│   ├── sinv.rs           # Shift-and-invert LOBPCG (Level 2)
+│   ├── rsvd.rs           # Randomized SVD via 2I-L trick (Level 4)
+│   └── nd16_bridge.rs    # The only user of linfa-linalg and ndarray 0.16
 ├── multi_component.rs    # Disconnected graph handling
-└── scaling.rs            # Coordinate scaling and noise
+└── scaling.rs            # Sign normalization, coordinate scaling and noise
+
+examples/                 # Runnable examples, shipped with the crate
+docs/                     # User guide, umap-rs integration guide, KaTeX header
 
 tests/
+├── public_api/           # Tests of the public API (default features)
+├── internals/            # Tests of internals (feature `__internal`)
+├── common/               # Fixture loaders and diagnostics, shared with eval/
+├── determinism_threads.rs  # Thread-configuration test (its own binary)
 ├── fixtures/             # Python-generated .npz reference data
-└── integration/          # End-to-end tests against Python UMAP output
+└── visual_eval/          # Python visual-evaluation tooling
+
+trustworthiness/          # Workspace member: embedding-quality metric and CLI
+eval/                     # Workspace member: research harness (benches, sweeps, exporters)
+research/                 # Experiment artifacts and reports
 
 temp/                     # Temporary/working files (gitignored)
 ```
 
 ## **6. Key Dependencies**
 
-  * `sprs` — Sparse matrices (CSR/CSC/COO), matches `umap-rs` internal format
-  * `ndarray` — Dense array operations
-  * `faer` — Dense linear algebra (eigendecomposition, QR)
-  * `linfa-linalg` — pure-Rust LOBPCG eigensolver (no LAPACK dependency)
-  * `rand` — RNG for reproducible initialization
+  * `sprs` — Sparse matrices (CSR/CSC/COO), matches `umap-rs` internal format; public dependency, re-exported
+  * `ndarray` — Dense array operations; public dependency, re-exported
+  * `faer` — Dense linear algebra (eigendecomposition, QR) and sparse Cholesky
+  * `linfa-linalg` — pure-Rust LOBPCG eigensolver (no LAPACK dependency), reached only through `src/solvers/nd16_bridge.rs`
+  * `rand`, `rand_chacha`, `rand_distr` — ChaCha12 RNG for reproducible initialization
+  * `thiserror`, `log` — error type and logging facade
 
 ## **7. Reference**
 
-  * Implementation report: see `docs/umap-spectral-initialization-rust-implementation-report.md`
+  * Implementation report: see `research/reports/umap-spectral-initialization-rust-implementation-report.md`
   * Python UMAP spectral source: `umap/spectral.py` in `lmcinnes/umap`
-  * Target integration: `umap-rs` by wilsonzlin (`CsMatI<f32, u32, usize>` graph format)
+  * Target integration: `umap-rs` by wilsonzlin (`LearnedManifold::graph()` returns `CsMatI<f32, u32, usize>`)
